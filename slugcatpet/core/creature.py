@@ -529,6 +529,11 @@ class SlugcatBody:
             return 0.0, 0.0
         return dx / d, dy / d
 
+    def _swim_x_arrived(self) -> bool:
+        """目标与头部横向距离在死区内。"""
+        t = self.swim_target
+        return t is not None and abs(t[0] - self.chunk0.x) < tuning.SWIM_ARRIVE_X
+
     def _swim_up_still(self) -> bool:
         t = self.swim_target
         if t is None:
@@ -631,7 +636,7 @@ class SlugcatBody:
             sdx, sdy = self._swim_dir()
             if abs(sdx) > tuning.SWIM_TURN_DOT:
                 self.swim_input_x = 1 if sdx > 0.0 else -1
-            elif sdx == 0.0 and sdy == 0.0:
+            elif (sdx == 0.0 and sdy == 0.0) or self._swim_x_arrived():
                 self.swim_input_x = 0
             if self.swim_mode == "deep":
                 self._deep_swim()
@@ -789,6 +794,8 @@ class SlugcatBody:
         elif iy == 1:
             c0.vy -= 0.5
         ix = 1 if swim_x > 0.0 else (-1 if swim_x < 0.0 else 0)
+        if self._swim_x_arrived():
+            ix = 0
         if ix != 0:
             self._swim_accel_h(c0, ix, s.swim_surface_speed)
             hip_drag_mult = 1.5 if self.aquatic else 1.0

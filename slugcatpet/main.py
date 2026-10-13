@@ -266,12 +266,19 @@ def main():
     player.add_paths([user_music_dir()])
     player.restore_state(params.get("music_last_track"), int(params.get("music_last_ms", 0) or 0))
     director = MusicDirector(player, params)
-    pet.env_listeners.append(lambda kind, on: kind == "zerog" and director.on_zerog(on))
+    pet.env_listeners.append(director.on_env)
+    settings.visible_changed.connect(director.on_settings)
     music = MusicPanel(player, _write_state)
     pet._open_music_cb = music.open
     pet._music_player = player
+    pet._music_director = director
     app._music = (player, director, music)
-    QTimer.singleShot(300, director.play_intro)
+
+    def _start_scene_music():
+        env = next((k for k in ("blizzard", "zerog", "water") if getattr(pet, f"{k}_on", False)), "none")
+        director.start(env)
+
+    QTimer.singleShot(300, _start_scene_music)
 
     def _build_tray_menu():
         tray.setToolTip(t("app_title"))

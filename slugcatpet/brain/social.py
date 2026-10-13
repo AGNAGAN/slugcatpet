@@ -5,7 +5,6 @@ from __future__ import annotations
 import math
 
 STEAL_FRAC = 0.5  # 比占用者近到一半以内才抢目标
-PAIR_YIELD_CD = 600  # 同一对猫让路后，这么久内不再互相让
 
 
 class Claim:
@@ -37,7 +36,6 @@ class Social:
         self._claims = {}  # id(target) → Claim
         self._held = {}  # (owner, slot) → Claim
         self._crowd = {}
-        self._pair_yield = {}
         self._tip = {}  # id(pole) → 站在杆顶的猫们
         self._evicted = set()
 
@@ -114,13 +112,6 @@ class Social:
         if c is None:
             c = self._crowd[me] = Crowd()
         return c
-
-    def may_yield(self, me, other) -> bool:
-        t = self._pair_yield.get(frozenset((id(me), id(other))))
-        return t is None or self.now - t >= PAIR_YIELD_CD
-
-    def note_yield(self, me, other):
-        self._pair_yield[frozenset((id(me), id(other)))] = self.now
 
     def yielding_to(self, me):
         if hasattr(me, "win"):  # 传入的是状态机

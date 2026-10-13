@@ -59,8 +59,6 @@ class MakeWay(State):
                 b.facing = self._face
         cr.shoved = 0
         cr.yield_cd = tuning.MAKEWAY_COOLDOWN
-        if cr.yield_to is not None:
-            fsm.social.note_yield(fsm.win, cr.yield_to)
 
     def tick(self, cursor, disturbed):
         fsm = self.fsm

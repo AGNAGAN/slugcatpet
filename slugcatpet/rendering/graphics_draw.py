@@ -368,12 +368,14 @@ class GraphicsDrawMixin:
         head = self.head
         b = self.body
 
-        if b.animation == "Flip":  # 翻滚转得快，按插值后的体轴画头
+        if b.animation == "Flip":  # 翻滚转得快，按插值后的头骨相对躯干中点画头
             d0x = _lerp(self._last_draw0[0], self.draw0[0], ts)
             d0y = _lerp(self._last_draw0[1], self.draw0[1], ts)
             d1x = _lerp(self._last_draw1[0], self.draw1[0], ts)
             d1y = _lerp(self._last_draw1[1], self.draw1[1], ts)
-            head_ang = _ang_from_up(d0x - d1x, d0y - d1y)
+            hx = _lerp(head.lx, head.x, ts)
+            hy = _lerp(head.ly, head.y, ts)
+            head_ang = _ang_from_up(hx - (d0x + d1x) * 0.5, hy - (d0y + d1y) * 0.5)
         else:
             head_ang = self.head_angle
 

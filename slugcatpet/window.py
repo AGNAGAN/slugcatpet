@@ -14,6 +14,7 @@ from .characters import FALLBACK_VARIANT, REGISTRY
 from .rendering.atlas import AtlasSet
 from .rendering.display_list import FrameRecorder, replay
 from .rendering.layout import Layout
+from .rendering.pacer import FramePacer
 from .rendering.primitives import blit
 from .petunit import PetUnit
 from .brain.social import Social
@@ -122,7 +123,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self._refresh_top_cb = None
         self._set_lang_cb = None
         self._open_music_cb = None
-        self.env_listeners = []  # fn(kind, on)：kind 为 "zerog" / "water"
+        self.env_listeners = []  # fn(kind, on)：kind 为 "blizzard" / "zerog" / "water"
         self._hotkey_filter = None
         self._control_hud = None  # 非 None 即受控中
 
@@ -169,6 +170,8 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self.cfg_max_pets = _clamp_pets(self._params.get("max_pets", DEFAULT_MAX_PETS))
         mode = self._params.get("fullscreen_mode", "hide")
         self.cfg_fullscreen_mode = mode if mode in ("hide", "sink") else "hide"
+        self._pacer = FramePacer(self.display_hz())
+        self._paint_ns = 0  # 上次 paintEvent 耗时，并入下一帧统计
         self._calc_intervals()
         self.pets = []
         self.social = Social(self)
@@ -289,7 +292,6 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
     _MAX_DT = 0.1  # 一帧最多补 4 个 tick，防时间螺旋
     _INT_SLOW = 66  # ms，省电时没动静的帧间隔
     _FPS_FALLBACK = 60.0
-    _FPS_AUTO_CAP = 60.0
     _ACTIVE_HOLD_MS = 300  # 防快慢档来回切
     _MOTION_STILL = 1.2
 
@@ -317,9 +319,11 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             return
         if not self.isVisible():
             return
+        t0 = self._clock.nsecsElapsed()
         self._update_passthrough()
         self._advance(min(dt, self._MAX_DT))
         region = self._update_region()
+        self._pace(dt, t0)
         dragging = self._drag is not None
         grabbing = any(pet.behavior is not None and pet.behavior.grab.active for pet in self.pets)
         active = self._fx_active or dragging or grabbing or self.isActiveWindow() or self._scene_moving()
@@ -338,6 +342,18 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             self.update()
         else:
             self.update(region)
+
+    def _pace(self, dt, t0):
+        """自动帧率下把快档帧的实测数据喂给 pacer，换档时重算间隔。"""
+        busy = (self._clock.nsecsElapsed() - t0 + self._paint_ns) / 1e9
+        self._paint_ns = 0
+        if self.cfg_fps != "auto" or dt > self._MAX_DT or self.anim.interval() != self._iv_fast:
+            return
+        if self._pacer.frame(dt, busy, self._iv_fast / 1000.0):
+            self._calc_intervals()
+            sp = getattr(self, "_settings_panel", None)
+            if sp is not None and hasattr(sp, "refresh_fps"):
+                sp.refresh_fps()
 
     def _update_region(self):
         """本帧范围 ∪ 屏上现有范围（None=整窗）。"""
@@ -390,17 +406,23 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self.hide()
 
     @classmethod
-    def auto_fps(cls):
-        """自动帧率：显示器刷新率，最高 60。"""
+    def display_hz(cls):
         scr = QGuiApplication.primaryScreen()
         hz = scr.refreshRate() if scr is not None else 0.0
-        return min(hz, cls._FPS_AUTO_CAP) if hz > 1.0 else cls._FPS_FALLBACK
+        return hz if hz > 1.0 else cls._FPS_FALLBACK
+
+    def auto_fps(self):
+        """自动帧率当前档：刷新率或其整数分频。"""
+        return self._pacer.rate
 
     def _calc_intervals(self):
         """活跃 / 发呆两档帧间隔（ms）"""
         rate = self.cfg_fps
         if rate == "auto":
-            rate = self.auto_fps()
+            hz = self.display_hz()
+            if hz != self._pacer.hz:
+                self._pacer.reset(hz)
+            rate = self._pacer.rate
         try:
             rate = float(rate)
         except (TypeError, ValueError):
@@ -423,6 +445,8 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
 
     def set_fps(self, mode):
         self.cfg_fps = self._params["fps"] = mode
+        if mode == "auto":
+            self._pacer.reset(self.display_hz())
         self._restart_timer()
 
     def set_power_save(self, on):
@@ -574,6 +598,12 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         for o in self._items():
             o.room_gravity = rg
 
+    def set_blizzard(self, on):
+        if bool(on) != self.blizzard_on:
+            self._env_changed("blizzard", bool(on))
+        self.blizzard_on = bool(on)
+        self.blizzard_timer = 0
+
     def set_water(self, on):
         if bool(on) != self.water_on:
             self._env_changed("water", bool(on))
@@ -661,8 +691,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         if self.blizzard_on:
             self.blizzard_timer += 1
             if self.blizzard_timer >= tuning.COLD_BLIZZARD_TOTAL:
-                self.blizzard_on = False
-                self.blizzard_timer = 0
+                self.set_blizzard(False)
                 if self.env_target == "blizzard":  # 自停后目标回落，防被重新点燃
                     self.env_target = "none"
                 sp = getattr(self, "_settings_panel", None)
@@ -1016,6 +1045,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
     def paintEvent(self, _):
         if self._shutting_down:
             return
+        t0 = self._clock.nsecsElapsed()
         if self._ops_key != (self._frame_no, self._ts):
             self._record()  # 非 tick 触发（render()/expose/状态直改）
         p = QPainter(self)
@@ -1028,6 +1058,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         finally:
             p.end()
         self._shown = self._painted
+        self._paint_ns += self._clock.nsecsElapsed() - t0
 
     def mousePressEvent(self, e):
         if self._place_mode:

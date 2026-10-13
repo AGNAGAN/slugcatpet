@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSlider,
 )
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, Signal
 
 from ...characters import REGISTRY, all_variants
 from ... import i18n
@@ -84,6 +84,8 @@ class _NameEdit(QLineEdit):
 
 
 class SettingsWindow(QWidget):
+    visible_changed = Signal(bool)
+
     def __init__(self, window, hud, write_state):
         super().__init__()
         self._window = window
@@ -116,6 +118,14 @@ class SettingsWindow(QWidget):
     def closeEvent(self, ev):
         self._write_state()
         super().closeEvent(ev)
+
+    def showEvent(self, ev):
+        super().showEvent(ev)
+        self.visible_changed.emit(True)
+
+    def hideEvent(self, ev):
+        super().hideEvent(ev)
+        self.visible_changed.emit(False)
 
     def _rebuild(self):
         cats_pos = self._cats_area.verticalScrollBar().value() if self._cats_area else 0
@@ -369,15 +379,13 @@ class SettingsWindow(QWidget):
         """选中 key 对应环境，互斥关其余（none=全关）。"""
         w = self._window
         if key != "blizzard" and getattr(w, "blizzard_on", False):
-            w.blizzard_on = False
-            w.blizzard_timer = 0
+            w.set_blizzard(False)
         if key != "zerog" and getattr(w, "zerog_on", False):
             w.set_zerog(False)
         if key != "water" and getattr(w, "water_on", False):
             w.set_water(False)
         if key == "blizzard" and not w.blizzard_on:
-            w.blizzard_on = True
-            w.blizzard_timer = 0
+            w.set_blizzard(True)
         elif key == "zerog" and not w.zerog_on:
             w.set_zerog(True)
         elif key == "water" and not w.water_on:
@@ -415,8 +423,11 @@ class SettingsWindow(QWidget):
         for fps in (30, 60, 90, 120, 144, 165, 240):
             combo.addItem(f"{fps} FPS", fps)
         combo.setCurrentIndex(max(0, combo.findData(w.cfg_fps)))
-        combo.currentIndexChanged.connect(lambda _i: (w.set_fps(combo.currentData()), self._write_state()))
+        combo.currentIndexChanged.connect(
+            lambda _i: (w.set_fps(combo.currentData()), self.refresh_fps(), self._write_state())
+        )
         self._row(v, "settings_fps", combo)
+        self._fps_combo = combo
         self._check(
             v, "settings_power_save", w.cfg_power_save, lambda on: (w.set_power_save(on), self._write_state())
         )
@@ -448,15 +459,23 @@ class SettingsWindow(QWidget):
         if player is None:
             return
         v.addWidget(self._header(t("settings_sound_section")))
-        prm = w._params
-
-        def flag(key):
-            return lambda on: (prm.__setitem__(key, bool(on)), self._write_state())
-
         self._check(v, "settings_mute_all", player.muted, player.set_mute)
-        self._check(
-            v, "settings_zerog_music", prm.get("music_zerog_enabled", True), flag("music_zerog_enabled")
-        )
+        director = getattr(w, "_music_director", None)
+        if director is not None:
+            btn = QPushButton(t("settings_scene_music_btn"))
+            btn.clicked.connect(lambda: self._on_scene_music(director))
+            self._row(v, "settings_scene_music", btn)
+
+    def _on_scene_music(self, director):
+        if self._dlg is not None:
+            return
+        from .scenemusic import SceneMusicDialog
+
+        dlg = SceneMusicDialog(director, self._window._music_player, self._write_state, parent=self)
+        dlg.finished.connect(lambda _r: self._look_finished(dlg))
+        self._dlg = dlg
+        dlg.place_center(self)
+        dlg.open()
 
     # 增删走卡片弹窗（open()=WindowModal，不 exec）
     def _on_look(self, pet):
@@ -530,6 +549,12 @@ class SettingsWindow(QWidget):
     def _on_hud_toggled(self, checked):
         if checked != self._hud.isVisible():
             self._hud.toggle_visible()
+
+    def refresh_fps(self):
+        """自动项显示当前实际档位。"""
+        combo = getattr(self, "_fps_combo", None)
+        if combo is not None and self.isVisible():
+            combo.setItemText(0, t("settings_fps_auto", hz=round(self._window.auto_fps())))
 
     def refresh_env(self):
         if not self.isVisible():

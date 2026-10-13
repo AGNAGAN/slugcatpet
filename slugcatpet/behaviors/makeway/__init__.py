@@ -54,7 +54,6 @@ class MakeWayBehavior(Behavior):
             if (
                 cr.shoved >= tuning.SHOVE_YIELD_TICKS
                 and cr.yield_cd <= 0
-                and social.may_yield(me, cr.yield_to)
                 and not fsm.blocked(CROWD)
                 and not fsm.grab.active
                 and not fsm._zerog()

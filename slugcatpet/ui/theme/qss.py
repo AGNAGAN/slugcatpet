@@ -157,6 +157,40 @@ LOOK_DIALOG = (
     + f"QCheckBox::indicator:checked{{background:{ACCENT_BTN_HOVER};border-color:{ACCENT_BTN_HOVER};}}"
 )
 
+SCENE_MUSIC = (
+    FORM
+    + f"#sceneHead{{color:{TEXT_DIM};font-size:11px;background:transparent;}}"
+    + f"#sceneName{{color:{TEXT};font-size:12px;background:transparent;}}"
+    + f"QComboBox:disabled{{color:{TEXT_DISABLED};}}"
+    + f"#scenePreview{{background:transparent;border:1px solid {BORDER};border-radius:11px;padding:0;}}"
+    + f"#scenePreview:hover{{background:{HOVER_TINT};}}"
+    + f"#scenePreview:checked{{background:{ACCENT_BTN};border-color:{ACCENT_BTN};}}"
+    + f"#scenePreview:checked:hover{{background:{ACCENT_BTN_HOVER};}}"
+    + f"#scenePreview:disabled{{border-color:{TRACK_BG};}}"
+    + f"#segLeft,#segRight{{background:{INPUT_BG};color:{TEXT_DIM};border:1px solid {BORDER};"
+    "padding:3px 10px;font-size:12px;border-radius:0;}"
+    "#segLeft{border-top-left-radius:6px;border-bottom-left-radius:6px;}"
+    "#segRight{border-left:none;border-top-right-radius:6px;border-bottom-right-radius:6px;}"
+    + f"#segLeft:hover,#segRight:hover{{background:{HOVER_TINT};}}"
+    + f"#segLeft:checked,#segRight:checked{{background:{ACCENT_BTN};color:{TEXT_ON_ACCENT};font-weight:600;}}"
+    + f"#segLeft:disabled,#segRight:disabled{{background:transparent;color:{TEXT_DISABLED};}}"
+    + f"#segLeft:checked:disabled,#segRight:checked:disabled{{background:{TRACK_BG};}}"
+    + f"#sceneVol{{background:{INPUT_BG};color:{ACCENT};border:1px solid {BORDER};"
+    "border-radius:6px;padding:3px 0;font-size:12px;}"
+    + f"#sceneVol:hover{{border-color:{RADIO_BORDER_HOVER};}}"
+    + f"#sceneVol:disabled{{color:{TEXT_DISABLED};border-color:{TRACK_BG};}}"
+)
+
+VOLUME_POP = (
+    f"#volPop{{background:{BG_CARD};border:1px solid {BORDER};border-radius:8px;}}"
+    f"#volPopVal{{color:{ACCENT};font-size:11px;background:transparent;}}"
+    "QSlider{background:transparent;}"
+    f"QSlider::groove:vertical{{width:6px;background:{TRACK_BG};border-radius:3px;}}"
+    f"QSlider::add-page:vertical{{background:{ACCENT_BTN};border-radius:3px;}}"
+    "QSlider::handle:vertical{width:12px;height:12px;margin:0 -4px;border-radius:6px;"
+    f"background:{ACCENT};}}"
+)
+
 HUD_PANEL = (
     f"#hudPanel{{background:{BG_PANEL};border-radius:10px;border:1px solid {BORDER};}}"
     f"QLabel{{color:{TEXT};font-size:12px;}}"

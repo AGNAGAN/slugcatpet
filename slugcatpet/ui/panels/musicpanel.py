@@ -32,7 +32,7 @@ _ROLE = Qt.ItemDataRole.UserRole  # 行数据：("user", 列表索引) 或 ("gam
 _ICON_PX = 18
 
 
-def _transport_icon(kind: str, color: str) -> QIcon:
+def transport_icon(kind: str, color: str) -> QIcon:
     dpr = 3
     pm = QPixmap(_ICON_PX * dpr, _ICON_PX * dpr)
     pm.setDevicePixelRatio(dpr)
@@ -189,8 +189,8 @@ class MusicPanel(QWidget):
 
         row2 = QHBoxLayout()
         row2.setSpacing(6)
-        self._icons = {k: _transport_icon(k, TEXT) for k in ("prev", "next")}
-        self._icons.update({k: _transport_icon(k, TEXT_ON_ACCENT) for k in ("play", "pause")})
+        self._icons = {k: transport_icon(k, TEXT) for k in ("prev", "next")}
+        self._icons.update({k: transport_icon(k, TEXT_ON_ACCENT) for k in ("play", "pause")})
         self._prev_btn = self._transport("prev", "music_prev", lambda: self._player.prev())
         row2.addWidget(self._prev_btn)
         self._play_btn = self._transport("play", "music_play", self._on_play_clicked, main=True)
