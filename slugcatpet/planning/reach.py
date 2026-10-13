@@ -1,4 +1,5 @@
 """能力三问接口：can_touch / can_stay / make_controller。"""
+
 from __future__ import annotations
 import math
 
@@ -9,7 +10,7 @@ from .. import tuning
 RUNNING = "running"
 DONE = "done"
 GIVEUP = "giveup"
-HOLD = "hold"          # 到位持续维持驻留：不重规划/不计超时/不计失败
+HOLD = "hold"  # 到位持续维持驻留：不重规划/不计超时/不计失败
 
 HOLDING = "holding"
 
@@ -20,6 +21,7 @@ MODE_STAY = "stay"
 @dataclass(frozen=True)
 class Estimate:
     """粗线性代价：预估耗时 tick / 预估体力开销。"""
+
     time_est: float
     energy_est: float
 
@@ -37,6 +39,7 @@ class Candidate:
 
 class Reach:
     """够取方式基类；控制器协议：update() -> running|done|giveup，cancel() 清理。"""
+
     key = ""
 
     def __init__(self, pet):
@@ -64,8 +67,7 @@ def walk_band(pet):
     body = pet.body
     xmin = getattr(body, "walk_min", None)
     xmax = getattr(body, "walk_max", None)
-    return (0.0 if xmin is None else xmin,
-            pet._WL if xmax is None else xmax)
+    return (0.0 if xmin is None else xmin, pet._WL if xmax is None else xmax)
 
 
 def reach_assist(pet, goal, gx, gy):

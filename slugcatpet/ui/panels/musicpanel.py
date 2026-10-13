@@ -27,7 +27,7 @@ from ..widgets.tips import install as install_tip
 
 _QSS = qss.settings_window("") + qss.MUSIC_EXTRA
 
-_ROLE = Qt.ItemDataRole.UserRole   # 行数据：("user", 列表索引) 或 ("game", Track)
+_ROLE = Qt.ItemDataRole.UserRole  # 行数据：("user", 列表索引) 或 ("game", Track)
 
 _ICON_PX = 18
 
@@ -408,9 +408,7 @@ class MusicPanel(QWidget):
 
     def _import_files(self):
         exts = " ".join(f"*{e}" for e in AUDIO_EXTS)
-        files, _ = QFileDialog.getOpenFileNames(
-            self, t("music_pick_files"), "", f"Audio ({exts})"
-        )
+        files, _ = QFileDialog.getOpenFileNames(self, t("music_pick_files"), "", f"Audio ({exts})")
         if files:
             n = self._player.add_paths(files)
             self._notify(n)
@@ -445,4 +443,3 @@ class MusicPanel(QWidget):
         """外部状态变化时同步选中行（未开窗跳过）。"""
         if self.isVisible():
             self._refresh_selection()
-

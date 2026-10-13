@@ -1,4 +1,5 @@
 """爆跳撒欢。"""
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -13,9 +14,9 @@ from ...planning.backflip_reach import SETTLE_MAX, SETTLE_VX
 from ...planning.jump_arc import PYRO_INPUTS
 from ..base import Behavior, mood_candidate, mood_params
 
-ARRIVE_X = 8.0           # px
-LAUNCH_TIMEOUT = 80      # 起跳未腾空兜底 tick（被顶/卡住）
-ROMP_TIMEOUT = 1200      # tick
+ARRIVE_X = 8.0  # px
+LAUNCH_TIMEOUT = 80  # 起跳未腾空兜底 tick（被顶/卡住）
+ROMP_TIMEOUT = 1200  # tick
 
 
 class PyroRomp(Behavior):
@@ -24,8 +25,7 @@ class PyroRomp(Behavior):
     title = {"zh": "爆跳撒欢", "en": "Pyro romp"}
     doc = "无聊时找块空地连续爆跳几下；燃料不够一整轮就不玩。"
     requires = ("pyro",)
-    params = mood_params(1.00, 0.72, 0.30, 0.30, 0.0040, 0.00055,
-                         jumps=Param(2, 1, 5, "一轮连跳次数"))
+    params = mood_params(1.00, 0.72, 0.30, 0.30, 0.0040, 0.00055, jumps=Param(2, 1, 5, "一轮连跳次数"))
 
     def mount(self, fsm):
         _mount(fsm, self.p)
@@ -71,8 +71,7 @@ def _mount(fsm, p):
             return
         ph = romp.phase
         if ph == "walk":
-            if b.on_floor() and (not b.is_moving()
-                                 or abs(b.chunk1.x - romp.x) < ARRIVE_X):
+            if b.on_floor() and (not b.is_moving() or abs(b.chunk1.x - romp.x) < ARRIVE_X):
                 b.stop_walk()
                 romp.phase = "settle"
             return
@@ -117,16 +116,26 @@ def _mount(fsm, p):
         maneuver.stand_facing(fsm.body, d)
 
     fsm.register_ticker(maneuver.leak_watch(fsm, "PyroRomp", romp))
-    fsm.register_state("PyroRomp", enter=enter, tick=st_pyroromp,
-                       brk=brk, kill_break=brk, mood="pyro_romp", tier=T_ACTIVITY,
-                       energy=VIGOROUS)
+    fsm.register_state(
+        "PyroRomp",
+        enter=enter,
+        tick=st_pyroromp,
+        brk=brk,
+        kill_break=brk,
+        mood="pyro_romp",
+        tier=T_ACTIVITY,
+        energy=VIGOROUS,
+    )
 
     energy_gate = fsm.traits.play_gate
 
     def gate(ctx):
         # 燃料够一整轮；泳/零重力退避；体力过门
-        return (not ctx.submerged and not getattr(fsm.body, "zerog", False)
-                and ctx.energy >= energy_gate
-                and pyro_ab.fuel_ok(fsm.body, p.jumps))
+        return (
+            not ctx.submerged
+            and not getattr(fsm.body, "zerog", False)
+            and ctx.energy >= energy_gate
+            and pyro_ab.fuel_ok(fsm.body, p.jumps)
+        )
 
     mood_candidate(fsm, "pyro_romp", p, gate)

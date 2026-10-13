@@ -1,4 +1,5 @@
 """Runtime visual effects and cursor hijack helpers for ``PetWindow``."""
+
 from __future__ import annotations
 
 from PySide6.QtCore import QPointF, Qt
@@ -15,8 +16,10 @@ class EffectsMixin:
 
     def _cursor_to_device(self, logical_x, logical_y):
         dpr = self.devicePixelRatioF()
-        return ((self._area.x() + logical_x * self._scale) * dpr,
-                (self._area.y() + logical_y * self._scale) * dpr)
+        return (
+            (self._area.x() + logical_x * self._scale) * dpr,
+            (self._area.y() + logical_y * self._scale) * dpr,
+        )
 
     def start_cursor_hijack(self, logical_x, logical_y, lock_ticks=None, knock_v=(0.0, 0.0)):
         """劫持光标；设置里关了抢光标则返回 None。knock_v 为逻辑 px/tick 的弹开初速。"""
@@ -29,9 +32,16 @@ class EffectsMixin:
         k = self._scale * dpr
         kw = {} if lock_ticks is None else {"lock_ticks": lock_ticks}
         self.cursor_hijack = CursorHijack(
-            dev_x, dev_y, self._area.width() * dpr, self._area.height() * dpr,
-            self._area.x() * dpr, self._area.y() * dpr,
-            replace_cursor=self.cfg_cursor_shape, knock_v=(knock_v[0] * k, knock_v[1] * k), **kw)
+            dev_x,
+            dev_y,
+            self._area.width() * dpr,
+            self._area.height() * dpr,
+            self._area.x() * dpr,
+            self._area.y() * dpr,
+            replace_cursor=self.cfg_cursor_shape,
+            knock_v=(knock_v[0] * k, knock_v[1] * k),
+            **kw,
+        )
         return self.cursor_hijack
 
     def start_cursor_hold(self, logical_x, logical_y, max_ticks):
@@ -42,9 +52,16 @@ class EffectsMixin:
         dpr = self.devicePixelRatioF()
         dev_x, dev_y = self._cursor_to_device(logical_x, logical_y)
         self.cursor_hijack = CursorHijack(
-            dev_x, dev_y, self._area.width() * dpr, self._area.height() * dpr,
-            self._area.x() * dpr, self._area.y() * dpr,
-            mode="hold", watchdog_max=max_ticks, replace_cursor=self.cfg_cursor_shape)
+            dev_x,
+            dev_y,
+            self._area.width() * dpr,
+            self._area.height() * dpr,
+            self._area.x() * dpr,
+            self._area.y() * dpr,
+            mode="hold",
+            watchdog_max=max_ticks,
+            replace_cursor=self.cfg_cursor_shape,
+        )
         return self.cursor_hijack
 
     def move_cursor_hold(self, logical_x, logical_y):
@@ -74,7 +91,7 @@ class EffectsMixin:
         for w in self.shockwaves:
             w[4] -= 1.0
             t = 1.0 - w[4] / w[5]
-            w[2] = w[3] * (t ** 0.5)
+            w[2] = w[3] * (t**0.5)
             if w[4] > 0:
                 sw.append(w)
         self.shockwaves = sw
@@ -87,8 +104,7 @@ class EffectsMixin:
             if surf is None:
                 self.bubbles = []
             else:
-                self.bubbles = [b for b in self.bubbles
-                                if b.update(surf.level_at(b.x), self._bubble_rng)]
+                self.bubbles = [b for b in self.bubbles if b.update(surf.level_at(b.x), self._bubble_rng)]
 
         if self.cursor_hijack is not None and not self.cursor_hijack.update():
             self.cursor_hijack = None
@@ -97,21 +113,25 @@ class EffectsMixin:
         if not self.fx:
             return
         from .explosionfx_draw import draw_fx_under
+
         p.save()
         p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         draw_fx_under(p, self.fx)
         p.restore()
 
     def _draw_fx(self, p):
-        pet_fx = [fx for fx in (pet.behavior.exclusive_fx()
-                                for pet in self.pets if pet.behavior is not None)
-                  if fx is not None]
+        pet_fx = [
+            fx
+            for fx in (pet.behavior.exclusive_fx() for pet in self.pets if pet.behavior is not None)
+            if fx is not None
+        ]
         if not (self.shockwaves or self.sparks or self.fx or pet_fx):
             return
         p.save()
         p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         p.setCompositionMode(QPainter.CompositionMode.CompositionMode_Plus)
         from PySide6.QtGui import QPen
+
         for w in self.shockwaves:
             a = int(200 * (w[4] / w[5]))
             p.setBrush(Qt.BrushStyle.NoBrush)
@@ -124,6 +144,7 @@ class EffectsMixin:
             p.drawEllipse(QPointF(s[0], s[1]), 0.9, 0.9)
         if self.fx:
             from .explosionfx_draw import draw_fx_over
+
             draw_fx_over(p, self.fx)
         p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
         for fx in pet_fx:

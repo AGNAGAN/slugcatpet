@@ -1,4 +1,5 @@
 """挂黏菌本体物理：单点质点 + 粘边弹簧 + 触须丛；y↓ 坐标。"""
+
 from __future__ import annotations
 import math
 import random as _random
@@ -10,7 +11,7 @@ from ...core.vecmath import _ang_from_up, _dirvec, _dist, _span
 
 RAD = 5.0
 MASS = 0.12
-GRAVITY = 0.9            # y↓
+GRAVITY = 0.9  # y↓
 AIR_FRICTION = 0.999
 BOUNCE = 0.2
 SURFACE_FRICTION = 0.7
@@ -22,16 +23,16 @@ STUCK_GAP = 7.0
 STUCK_STIFFNESS = 0.2
 
 TENDRIL_MIN = 8
-TENDRIL_MAX = 14            # 参考区间 8..15 截断
+TENDRIL_MAX = 14  # 参考区间 8..15 截断
 TENDRIL_REST_MIN = 3.0
 TENDRIL_REST_MAX = 8.0
 TENDRIL_DAMP = 0.98
-TENDRIL_GRAVITY = 0.9       # y↓
-ROOT_SPRING = 0.9           # 断口挂本体
+TENDRIL_GRAVITY = 0.9  # y↓
+ROOT_SPRING = 0.9  # 断口挂本体
 LINK_SPRING = 0.5
 TENDRIL_RAD = 3.0
-TENDRIL_NEAR = 100.0        # 距本体<此才与墙碰
-TENDRIL_JAG_K = 20          # 锯齿顶点数
+TENDRIL_NEAR = 100.0  # 距本体<此才与墙碰
+TENDRIL_JAG_K = 20  # 锯齿顶点数
 
 
 def _lerp_map(v, in_a, in_b, out_a, out_b):
@@ -39,15 +40,43 @@ def _lerp_map(v, in_a, in_b, out_a, out_b):
 
 
 class SlimeMold:
-    collision_layer = 1              # 与 Saint/果同层互推
+    collision_layer = 1  # 与 Saint/果同层互推
 
-    __slots__ = ("x", "y", "vx", "vy", "last_x", "last_y",
-                 "rad", "mass", "gravity", "air_friction", "bounce", "surface_friction",
-                 "buoyancy", "water_friction", "water_y", "room_gravity",
-                 "bites", "state", "rotation", "last_rotation", "stalk", "held_by_hand",
-                 "stuck_pos", "stuck_pos_slime", "tendrils", "tendril_jag",
-                 "_tendril_polys", "collide_with_objects",
-                 "_id", "_rng", "_contact_floor", "_contact_x", "_impact_cb")
+    __slots__ = (
+        "x",
+        "y",
+        "vx",
+        "vy",
+        "last_x",
+        "last_y",
+        "rad",
+        "mass",
+        "gravity",
+        "air_friction",
+        "bounce",
+        "surface_friction",
+        "buoyancy",
+        "water_friction",
+        "water_y",
+        "room_gravity",
+        "bites",
+        "state",
+        "rotation",
+        "last_rotation",
+        "stalk",
+        "held_by_hand",
+        "stuck_pos",
+        "stuck_pos_slime",
+        "tendrils",
+        "tendril_jag",
+        "_tendril_polys",
+        "collide_with_objects",
+        "_id",
+        "_rng",
+        "_contact_floor",
+        "_contact_x",
+        "_impact_cb",
+    )
 
     def __init__(self, x: float, y: float, seed: int = 0):
         self.x = self.last_x = float(x)
@@ -62,20 +91,20 @@ class SlimeMold:
         self.surface_friction = SURFACE_FRICTION
         self.buoyancy = BUOYANCY
         self.water_friction = WATER_FRICTION
-        self.water_y = None            # 外部每 tick 注入水面高；None=无水
+        self.water_y = None  # 外部每 tick 注入水面高；None=无水
         self.room_gravity = 1.0
         self.bites = BITES
         self.state = ItemState.FREE
         self.rotation = (0.0, 1.0)
         self.last_rotation = self.rotation
-        self.stalk = None                 # 接口占位，fetcher/carry 读，恒 None
+        self.stalk = None  # 接口占位，fetcher/carry 读，恒 None
         self.held_by_hand: "str | None" = None
         self.stuck_pos: "tuple[float, float] | None" = None
         self.collide_with_objects = True
         self._id = int(seed)
         self._contact_floor = False
-        self._contact_x = 0           # batfly 用，本体不读
-        self._impact_cb = None        # 窗口抖动回调；None=不触发
+        self._contact_x = 0  # batfly 用，本体不读
+        self._impact_cb = None  # 窗口抖动回调；None=不触发
         # 触须格式：[px,py,lpx,lpy,vx,vy,link,rest,perturb_x,perturb_y,alpha]；link<0 挂本体
         rng = _random.Random(seed)
         count = rng.randint(TENDRIL_MIN, TENDRIL_MAX)
@@ -87,15 +116,15 @@ class SlimeMold:
                 link = (i - 1) if rng.random() < 0.2 else rng.randrange(0, i)
             rest = lerp(TENDRIL_REST_MIN, TENDRIL_REST_MAX, rng.random())
             a = rng.uniform(0.0, math.tau)
-            self.tendrils.append([self.x, self.y, self.x, self.y, 0.0, 0.0,
-                                  link, rest, math.cos(a), math.sin(a), rng.random()])
+            self.tendrils.append(
+                [self.x, self.y, self.x, self.y, 0.0, 0.0, link, rest, math.cos(a), math.sin(a), rng.random()]
+            )
         self._rng = rng
         self.tendril_jag = []
         for t in self.tendrils:
             jr = _random.Random((int(t[10] * 1_000_003) ^ 0x5A5A5A) & 0xFFFFFFFF)
-            self.tendril_jag.append(tuple(0.7 + 0.3 * jr.random()
-                                          for _ in range(TENDRIL_JAG_K)))
-        self._tendril_polys = None    # 渲染层懒建缓存，形状不变
+            self.tendril_jag.append(tuple(0.7 + 0.3 * jr.random() for _ in range(TENDRIL_JAG_K)))
+        self._tendril_polys = None  # 渲染层懒建缓存，形状不变
 
     @property
     def pos(self):
@@ -104,7 +133,8 @@ class SlimeMold:
     def collision_chunks(self):
         self.collide_with_objects = not (
             self.state in (ItemState.CARRIED, ItemState.MOUSE, ItemState.EATEN, ItemState.GONE)
-            or self.held_by_hand is not None)
+            or self.held_by_hand is not None
+        )
         return (self,)
 
     def set_rotation_to_grabber(self, gx: float, gy: float) -> None:
@@ -143,8 +173,9 @@ class SlimeMold:
         self.last_rotation = self.rotation
 
         self.vy += self.gravity * self.room_gravity
-        apply_water(self, self.water_y, self.buoyancy, self.water_friction,
-                    self.room_gravity, self.air_friction)
+        apply_water(
+            self, self.water_y, self.buoyancy, self.water_friction, self.room_gravity, self.air_friction
+        )
         self.x += self.vx
         self.y += self.vy
         aabb_wall_collide(self, WL, HL, impact=self._impact_cb)
@@ -153,7 +184,7 @@ class SlimeMold:
 
         if self._contact_floor:
             rx, ry = self.rotation
-            px, py = ry, -rx           # y↓ 垂向量（perp 镜像）
+            px, py = ry, -rx  # y↓ 垂向量（perp 镜像）
             k = 0.1 * self.vx
             nx, ny = rx - px * k, ry - py * k
             d = math.hypot(nx, ny)
@@ -191,7 +222,7 @@ class SlimeMold:
         rest_k = _lerp_map(self.bites, 3.0, 1.0, 1.0, 0.1)
         rx, ry = self.rotation
         rot = math.radians(_ang_from_up(rx, ry))
-        rc, rs = math.cos(rot), math.sin(rot)       # 扰动力偶旋转，循环外算一次
+        rc, rs = math.cos(rot), math.sin(rot)  # 扰动力偶旋转，循环外算一次
         free = self.stuck_pos is None
         near2 = TENDRIL_NEAR * TENDRIL_NEAR
         r = TENDRIL_RAD
@@ -201,8 +232,10 @@ class SlimeMold:
         for i in range(n):
             t = T[i]
             t[2], t[3] = t[0], t[1]
-            t[0] += t[4]; t[1] += t[5]
-            t[4] *= TENDRIL_DAMP; t[5] *= TENDRIL_DAMP
+            t[0] += t[4]
+            t[1] += t[5]
+            t[4] *= TENDRIL_DAMP
+            t[5] *= TENDRIL_DAMP
             t[5] += TENDRIL_GRAVITY
             link = t[6]
             if link < 0 or link >= n:
@@ -210,32 +243,46 @@ class SlimeMold:
                 rest = t[7] * rest_k
                 f = (rest - _dist(t[0], t[1], bx, by)) * ROOT_SPRING
                 vx, vy = ux * f, uy * f
-                t[0] -= vx; t[1] -= vy
-                t[4] -= vx; t[5] -= vy
+                t[0] -= vx
+                t[1] -= vy
+                t[4] -= vx
+                t[5] -= vy
                 if free:
-                    t[4] -= rx * 2.0; t[5] -= ry * 2.0
+                    t[4] -= rx * 2.0
+                    t[5] -= ry * 2.0
             else:
                 p = T[link]
                 d, ux, uy = _span(t[0], t[1], p[0], p[1])
                 rest = t[7] * rest_k
                 f = (rest - d) * LINK_SPRING
                 vx, vy = ux * f, uy * f
-                t[0] -= vx; t[1] -= vy
-                t[4] -= vx; t[5] -= vy
-                p[0] += vx; p[1] += vy
-                p[4] += vx; p[5] += vy
+                t[0] -= vx
+                t[1] -= vy
+                t[4] -= vx
+                t[5] -= vy
+                p[0] += vx
+                p[1] += vy
+                p[4] += vx
+                p[5] += vy
                 px_f, py_f = t[8] * rc - t[9] * rs, t[8] * rs + t[9] * rc
-                t[4] += px_f; t[5] += py_f
-                p[4] -= px_f; p[5] -= py_f
+                t[4] += px_f
+                t[5] += py_f
+                p[4] -= px_f
+                p[5] -= py_f
                 if free:
                     sway = _lerp_map(_dist(t[0], t[1], bx, by), 4.0, 12.0, 2.0, 0.0)
-                    t[4] -= rx * sway; t[5] -= ry * sway
+                    t[4] -= rx * sway
+                    t[5] -= ry * sway
             if (t[0] - bx) ** 2 + (t[1] - by) ** 2 < near2:
                 if t[1] + r > HL and t[5] > 0:
-                    t[1] = HL - r; t[5] = -abs(t[5]) * bnc
+                    t[1] = HL - r
+                    t[5] = -abs(t[5]) * bnc
                 elif t[1] - r < 0 and t[5] < 0:
-                    t[1] = r; t[5] = abs(t[5]) * bnc
+                    t[1] = r
+                    t[5] = abs(t[5]) * bnc
                 if t[0] + r > WL and t[4] > 0:
-                    t[0] = WL - r; t[4] = -abs(t[4]) * bnc
+                    t[0] = WL - r
+                    t[4] = -abs(t[4]) * bnc
                 elif t[0] - r < 0 and t[4] < 0:
-                    t[0] = r; t[4] = abs(t[4]) * bnc
+                    t[0] = r
+                    t[4] = abs(t[4]) * bnc

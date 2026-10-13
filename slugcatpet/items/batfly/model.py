@@ -1,4 +1,5 @@
 """蝙蝠 batfly 物理核心；y↓。"""
+
 from __future__ import annotations
 import math
 import random as _random
@@ -23,7 +24,7 @@ FLAP_THRUST_LO, FLAP_THRUST_HI, FLAP_THRUST_POW = 1.1, 1.7, 1.5
 FLAPSPEED_DOWN_A, FLAPSPEED_DOWN_B = -0.04, 0.15
 FLAPSPEED_UP_A, FLAPSPEED_UP_B = 0.2, 0.8
 WALL_REFLECT_X = -6.0
-WATER_JUMP = 7.0                                   # y↓ 取负
+WATER_JUMP = 7.0  # y↓ 取负
 EATEN_COUNTDOWN = 3
 
 WANDER_REPICK_TICKS, WANDER_REACH, WANDER_MARGIN = 180, 30.0, 24.0
@@ -39,20 +40,67 @@ def _deg_to_vec(deg):
 
 class BatFly:
     """单 chunk 小飞虫：游走扑翅+力竭挂+手动塞食；接口对齐 Fruit。"""
-    collision_layer = 0               # 层0 不参与 collide_objects
 
-    __slots__ = ("x", "y", "vx", "vy", "last_x", "last_y",
-                 "rad", "mass", "gravity", "air_friction", "bounce", "surface_friction",
-                 "buoyancy", "water_friction", "water_y", "room_gravity", "drown",
-                 "_contact_floor", "_contact_x", "_impact_cb",
-                 "state", "held_by_hand", "stalk", "bites", "dead", "eaten",
-                 "is_meat", "_id", "collide_with_objects",
-                 "flap", "flap_speed", "flap_depth", "last_flap_depth", "dir_x", "dir_y",
-                 "lower_x", "lower_y", "last_lower_x", "last_lower_y", "lower_vx", "lower_vy",
-                 "wings", "_death_wing", "steer", "last_steer", "facing",
-                 "rotation", "last_rotation",
-                 "goal", "_grounded", "_flaps_since_rest", "_exhausted",
-                 "_goal_timer", "_stuck_ref", "_stuck_timer", "_rng")
+    collision_layer = 0  # 层0 不参与 collide_objects
+
+    __slots__ = (
+        "x",
+        "y",
+        "vx",
+        "vy",
+        "last_x",
+        "last_y",
+        "rad",
+        "mass",
+        "gravity",
+        "air_friction",
+        "bounce",
+        "surface_friction",
+        "buoyancy",
+        "water_friction",
+        "water_y",
+        "room_gravity",
+        "drown",
+        "_contact_floor",
+        "_contact_x",
+        "_impact_cb",
+        "state",
+        "held_by_hand",
+        "stalk",
+        "bites",
+        "dead",
+        "eaten",
+        "is_meat",
+        "_id",
+        "collide_with_objects",
+        "flap",
+        "flap_speed",
+        "flap_depth",
+        "last_flap_depth",
+        "dir_x",
+        "dir_y",
+        "lower_x",
+        "lower_y",
+        "last_lower_x",
+        "last_lower_y",
+        "lower_vx",
+        "lower_vy",
+        "wings",
+        "_death_wing",
+        "steer",
+        "last_steer",
+        "facing",
+        "rotation",
+        "last_rotation",
+        "goal",
+        "_grounded",
+        "_flaps_since_rest",
+        "_exhausted",
+        "_goal_timer",
+        "_stuck_ref",
+        "_stuck_timer",
+        "_rng",
+    )
 
     def __init__(self, x: float, y: float, seed: int = 0):
         self.x = self.last_x = self.lower_x = self.last_lower_x = float(x)
@@ -61,12 +109,12 @@ class BatFly:
         self.rad, self.mass, self.gravity = RAD, MASS, GRAVITY
         self.air_friction, self.bounce = AIR_FRICTION, BOUNCE
         self.surface_friction, self.buoyancy, self.water_friction = SURFACE_FRICTION, BUOYANCY, WATER_FRICTION
-        self.water_y = None                # 外部每 tick 注入水面高；None=无水
+        self.water_y = None  # 外部每 tick 注入水面高；None=无水
         self.room_gravity, self.drown = 1.0, 0.0
         self._contact_floor, self._contact_x, self._impact_cb = False, 0, None
         self.state = ItemState.FREE
         self.held_by_hand = None
-        self.stalk = None                  # 接口占位，fetcher/carry 读，恒 None
+        self.stalk = None  # 接口占位，fetcher/carry 读，恒 None
         self.bites, self.dead, self.eaten = BITES, False, 0
         self.is_meat = True
         self._id, self.collide_with_objects = int(seed), True
@@ -76,11 +124,11 @@ class BatFly:
         self.flap_depth = self.last_flap_depth = 0.0
         self.dir_x, self.dir_y = 0.0, -1.0
         f = self.flap
-        self.wings = [[f, f], [f, f]]               # [i][0]=今 [i][1]=昨；i=0 左 1 右
+        self.wings = [[f, f], [f, f]]  # [i][0]=今 [i][1]=昨；i=0 左 1 右
         self._death_wing = (rng.random(), rng.random())
         self.steer = self.last_steer = 0.0
         self.facing = "right"
-        self.rotation = self.last_rotation = (0.0, -1.0)   # 被叼/死态朝向（尖朝上）
+        self.rotation = self.last_rotation = (0.0, -1.0)  # 被叼/死态朝向（尖朝上）
         self.goal = (self.x + rng.uniform(-50.0, 50.0), self.y + rng.uniform(-50.0, 50.0))
         self._grounded, self._flaps_since_rest, self._exhausted = False, 0, False
         self._goal_timer, self._stuck_ref, self._stuck_timer = 0, (self.x, self.y), 0
@@ -92,14 +140,14 @@ class BatFly:
     @property
     def fetch_ready(self):
         # 飞行中够不到，落地/力竭/死亡才可抓
-        return (self.state == ItemState.FREE and self.held_by_hand is None
-                and (self.dead or self._grounded))
+        return self.state == ItemState.FREE and self.held_by_hand is None and (self.dead or self._grounded)
 
     def collision_chunks(self):
         # 层0 不自碰；被抓/拖/吃/消失本 tick 豁免
         self.collide_with_objects = not (
             self.state in (ItemState.CARRIED, ItemState.MOUSE, ItemState.EATEN, ItemState.GONE)
-            or self.held_by_hand is not None)
+            or self.held_by_hand is not None
+        )
         return (self,)
 
     def set_rotation_to_grabber(self, gx: float, gy: float) -> None:
@@ -132,9 +180,10 @@ class BatFly:
         else:
             if not self.dead and sub > 0.0:
                 self._water_behavior(sub)
-            self.vy += self.gravity * self.room_gravity   # 水中/死体全重力，浮力另计
-        apply_water(self, self.water_y, self.buoyancy, self.water_friction,
-                    self.room_gravity, self.air_friction)
+            self.vy += self.gravity * self.room_gravity  # 水中/死体全重力，浮力另计
+        apply_water(
+            self, self.water_y, self.buoyancy, self.water_friction, self.room_gravity, self.air_friction
+        )
         self.x += self.vx
         self.y += self.vy
         aabb_wall_collide(self, WL, HL, impact=self._impact_cb)
@@ -169,16 +218,17 @@ class BatFly:
             self.facing = "right"
         elif dx < -0.1:
             self.facing = "left"
-        self.flap_depth = inv_lerp(1.0, -1.0, dy)          # y↓：goal 在上→1
+        self.flap_depth = inv_lerp(1.0, -1.0, dy)  # y↓：goal 在上→1
         self.vx *= VEL_DAMP
         self.vy *= VEL_DAMP
-        self.vy += self.gravity * self.room_gravity * GRAV_FLY_FAC   # 下坠 +；零重力=0
+        self.vy += self.gravity * self.room_gravity * GRAV_FLY_FAC  # 下坠 +；零重力=0
         self.vx += dx * DIR_ACCEL_X
         self.flap += self.flap_speed
         if self.flap_speed > 0.0:
             if not self._exhausted:
-                self.vy -= (1.0 + self.flap_speed) ** FLAP_THRUST_POW \
-                    * lerp(FLAP_THRUST_LO, FLAP_THRUST_HI, self.flap_depth)
+                self.vy -= (1.0 + self.flap_speed) ** FLAP_THRUST_POW * lerp(
+                    FLAP_THRUST_LO, FLAP_THRUST_HI, self.flap_depth
+                )
             if self.flap > 1.0:
                 self.flap = 1.0
                 self.flap_speed = FLAPSPEED_DOWN_A - self.flap_depth * FLAPSPEED_DOWN_B
@@ -209,8 +259,10 @@ class BatFly:
 
     def _wander(self, WL: float, HL: float) -> None:
         self._goal_timer += 1
-        if (_dist(self.x, self.y, self.goal[0], self.goal[1]) < WANDER_REACH
-                or self._goal_timer >= WANDER_REPICK_TICKS):
+        if (
+            _dist(self.x, self.y, self.goal[0], self.goal[1]) < WANDER_REACH
+            or self._goal_timer >= WANDER_REPICK_TICKS
+        ):
             self._pick_goal(WL, HL)
         self._stuck_timer += 1
         if self._stuck_timer >= STUCK_TICKS:
@@ -223,8 +275,7 @@ class BatFly:
 
     def _pick_goal(self, WL: float, HL: float) -> None:
         m = WANDER_MARGIN
-        self.goal = (self._rng.uniform(m, max(m, WL - m)),
-                     self._rng.uniform(m, max(m, HL - m)))
+        self.goal = (self._rng.uniform(m, max(m, WL - m)), self._rng.uniform(m, max(m, HL - m)))
         self._goal_timer = 0
 
     def _eaten_countdown(self) -> None:

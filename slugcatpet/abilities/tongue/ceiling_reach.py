@@ -1,4 +1,5 @@
 """吊顶落体够取：吊顶横移到目标上方→松舌落体；代价最贵，作兜底。"""
+
 from __future__ import annotations
 
 from ... import tuning
@@ -46,8 +47,7 @@ class CeilingDropReach(Reach):
         traverse_t = abs(gx - side_x) / tuning.PLAN_WALK_SPEED
         drop_t = _drop_ticks(get_drop_arc(stats, 0), gy - CEIL_RELEASE_Y)
         t = climb_t + traverse_t + drop_t + 2.0 * tuning.PLAN_STARTUP_TICKS
-        e = ((climb_t + traverse_t) * tuning.PLAN_EN_RATE_VIGOROUS
-             + drop_t * tuning.PLAN_EN_RATE_LIGHT)
+        e = (climb_t + traverse_t) * tuning.PLAN_EN_RATE_VIGOROUS + drop_t * tuning.PLAN_EN_RATE_LIGHT
         return Estimate(t, e)
 
     def make_controller(self, goal):
@@ -55,7 +55,6 @@ class CeilingDropReach(Reach):
 
 
 class CeilingDropController:
-
     def __init__(self, pet, goal):
         self.pet = pet
         self.goal = goal
@@ -83,10 +82,12 @@ class CeilingDropController:
         if self.phase == "hang":
             if self.climber is None:
                 from .climb import TongueClimber
+
                 self.climber = TongueClimber(pet, self._side, target=(gx, 0.0))
             self.climber.target = (gx, 0.0)
-            if self.climber.update():                 # True=已吊顶且锚点对准
+            if self.climber.update():  # True=已吊顶且锚点对准
                 from .reach import reset_tongue
+
                 reset_tongue(pet)
                 body.release_to_air(move_dir=0)
                 self.phase = "air"
@@ -106,6 +107,7 @@ class CeilingDropController:
     def cancel(self):
         if self.climber is not None:
             from .reach import reset_tongue
+
             reset_tongue(self.pet)
             self.climber = None
         self.pet.body.stop_walk()

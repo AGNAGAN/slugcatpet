@@ -1,4 +1,5 @@
 """重力域规划内核：枚举够取方式，按体力过滤、耗时排序。"""
+
 from __future__ import annotations
 import time
 
@@ -15,13 +16,12 @@ class Planner:
     def __init__(self, pet, clock=time.monotonic):
         self.pet = pet
         self._cooldown = CooldownRegistry(clock)
-        self._ability_cache = None    # 能力实例无状态，懒建后复用
+        self._ability_cache = None  # 能力实例无状态，懒建后复用
 
     def _abilities(self):
         if self._ability_cache is not None:
             return self._ability_cache
-        out = [WalkReach(self.pet), JumpReach(self.pet),
-               PoleJumpReach(self.pet), PoleDropReach(self.pet)]
+        out = [WalkReach(self.pet), JumpReach(self.pet), PoleJumpReach(self.pet), PoleDropReach(self.pet)]
         for ab in getattr(self.pet, "abilities", {}).values():
             out += ab.reaches(self.pet)
         self._ability_cache = out
@@ -34,8 +34,9 @@ class Planner:
             est = getattr(ab, question)(goal)
             if est is None or est.energy_est > energy:
                 continue
-            out.append(Candidate(ab.key, est.time_est, est.energy_est,
-                                 lambda ab=ab, g=goal: ab.make_controller(g)))
+            out.append(
+                Candidate(ab.key, est.time_est, est.energy_est, lambda ab=ab, g=goal: ab.make_controller(g))
+            )
         out.sort(key=lambda c: c.time_est)
         return out
 

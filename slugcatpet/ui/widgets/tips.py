@@ -1,4 +1,5 @@
 """自绘 hover 提示（原生 QToolTip 在此类窗口不弹）。"""
+
 from __future__ import annotations
 from typing import Callable
 from PySide6.QtWidgets import QLabel, QWidget
@@ -16,9 +17,9 @@ class HoverTip(QObject):
         self._texts: dict[QWidget, str | Callable[[], str]] = {}
         self._pending: QWidget | None = None
         self._lbl = QLabel("", None)
-        self._lbl.setWindowFlags(Qt.WindowType.FramelessWindowHint
-                                 | Qt.WindowType.WindowStaysOnTopHint
-                                 | Qt.WindowType.ToolTip)
+        self._lbl.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.ToolTip
+        )
         self._lbl.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self._lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self._lbl.setStyleSheet(qss.TOAST)
@@ -37,7 +38,7 @@ class HoverTip(QObject):
         try:
             et = ev.type()
         except Exception:
-            return False                       # 关停期对象半拆卸，异常一律放行
+            return False  # 关停期对象半拆卸，异常一律放行
 
         if et == QEvent.Type.Enter and obj in self._texts:
             self._pending = obj

@@ -1,9 +1,17 @@
 """首次启动素材初始化面板：run() 阻塞至成功或放弃。"""
+
 from __future__ import annotations
 from pathlib import Path
 
-from PySide6.QtWidgets import (QWidget, QLabel, QVBoxLayout, QHBoxLayout,
-                               QPushButton, QProgressBar, QFileDialog)
+from PySide6.QtWidgets import (
+    QWidget,
+    QLabel,
+    QVBoxLayout,
+    QHBoxLayout,
+    QPushButton,
+    QProgressBar,
+    QFileDialog,
+)
 from PySide6.QtCore import Qt, QObject, QThread, QEventLoop, Signal
 from PySide6.QtGui import QGuiApplication
 
@@ -14,6 +22,7 @@ from ..theme import qss
 
 class _ImportWorker(QObject):
     """后台导入：install 为 None 走自动定位，否则从指定目录提取。"""
+
     done = Signal()
     failed = Signal(str)
 
@@ -37,6 +46,7 @@ class _ImportWorker(QObject):
     def _music(self):
         """游戏配乐顺带提取，失败不算导入失败。"""
         from ...audio.director import GAME_TRACKS
+
         try:
             install = self._install or detect_install()
             if install is not None:
@@ -53,9 +63,9 @@ class SetupPanel(QWidget):
         self._thread: QThread | None = None
         self._worker: _ImportWorker | None = None
 
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint
-                            | Qt.WindowType.WindowStaysOnTopHint
-                            | Qt.WindowType.Dialog)
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Dialog
+        )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self._build()
 
@@ -113,8 +123,7 @@ class SetupPanel(QWidget):
         self.resize(size)
         self._card.setGeometry(0, 0, size.width(), size.height())
         scr = QGuiApplication.primaryScreen().availableGeometry()
-        self.move(scr.x() + (scr.width() - size.width()) // 2,
-                  scr.y() + (scr.height() - size.height()) // 3)
+        self.move(scr.x() + (scr.width() - size.width()) // 2, scr.y() + (scr.height() - size.height()) // 3)
 
     def _set_busy(self):
         self._status.setText(t("setup_importing"))

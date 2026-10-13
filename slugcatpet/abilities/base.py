@@ -1,4 +1,5 @@
 """能力（Ability）基类与参数表。"""
+
 from __future__ import annotations
 
 from types import SimpleNamespace

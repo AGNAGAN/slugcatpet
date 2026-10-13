@@ -1,4 +1,5 @@
 """取果：选果和够取交给规划层，接触抓取、叼回、啃食在这里。"""
+
 from __future__ import annotations
 import math
 
@@ -7,9 +8,16 @@ from ...planning import GIVEUP, PlanExecutor, obj_goal
 from ...characters.personality import NEUTRAL
 from ...core.vecmath import _dist
 from ...items.base import EDIBLE
-from ...brain.skills.motor import (BITE_HEAD_NUDGE, EAT_APPROACH, EAT_CHOMP_POSE,
-                                   EAT_HOLD_POSE, EAT_INTERVAL, EAT_PEAK_PHASE, EAT_STRIKE_POW,
-                                   eat_chomp_pulse)
+from ...brain.skills.motor import (
+    BITE_HEAD_NUDGE,
+    EAT_APPROACH,
+    EAT_CHOMP_POSE,
+    EAT_HOLD_POSE,
+    EAT_INTERVAL,
+    EAT_PEAK_PHASE,
+    EAT_STRIKE_POW,
+    eat_chomp_pulse,
+)
 
 CARRY_FALL_TIMEOUT = 200
 
@@ -37,7 +45,7 @@ def fetch_candidates(planner, edibles, traits=NEUTRAL):
         if f.state not in _EDIBLE_STATES:
             continue
         if not getattr(f, "fetch_ready", True):
-            continue    # 飞行中蝙蝠够不到
+            continue  # 飞行中蝙蝠够不到
         if not traits.eats(f):
             continue
         g = _edible_goal(f)
@@ -68,9 +76,7 @@ def fetch_ready(planner, edibles, traits=NEUTRAL):
     return out
 
 
-
 class _NoAssist:
-
     def update(self, goal):
         pass
 
@@ -90,6 +96,7 @@ def _fetch_assist(pet):
         if a is not None:
             return a
     return _NoAssist()
+
 
 class FruitFetcher:
     def __init__(self, win, planner, traits=NEUTRAL):
@@ -129,7 +136,7 @@ class FruitFetcher:
         if self._grab_dist() < tuning.GRAB_REACH:
             self._reset_tongue()
             if getattr(self.target, "stuck_pos", None) is not None:
-                self.target.stuck_pos = None    # 抓取瞬间剥离黏菌
+                self.target.stuck_pos = None  # 抓取瞬间剥离黏菌
             self.body.grab_fruit(self.target, self.grab_side)
             self.social.release(self.win, "food")
             self.phase = "grabbed"

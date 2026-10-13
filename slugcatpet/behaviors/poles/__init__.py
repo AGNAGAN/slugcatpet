@@ -1,4 +1,5 @@
 """爬杆。"""
+
 from __future__ import annotations
 
 from ... import tuning
@@ -22,14 +23,21 @@ class Poles(Behavior):
         def vertical_pole():
             return any(p.kind == "vertical" and pole_free(fsm, p) for p in fsm.items(CLIMBABLE))
 
-        fsm.mood.add(Candidate(
-            "pole_climb", base=tuning.POLE_BASE * fsm.traits.mood_weight("pole_climb"),
-            start=tuning.POLE_START, quit=tuning.POLE_QUIT,
-            decay=tuning.POLE_DECAY, recover=tuning.POLE_RECOVER,
-            gate=lambda ctx: vertical_pole() and ctx.energy >= gate_e and not ctx.submerged,
-            energy_factor=lambda e: _lerp(e, 0.0, 1.0, tuning.POLE_SF_TIRED, tuning.POLE_SF_FRESH),
-            temper_factor=lambda t: 1.0,
-            one_shot=True, init=tuning.POLE_INIT))
+        fsm.mood.add(
+            Candidate(
+                "pole_climb",
+                base=tuning.POLE_BASE * fsm.traits.mood_weight("pole_climb"),
+                start=tuning.POLE_START,
+                quit=tuning.POLE_QUIT,
+                decay=tuning.POLE_DECAY,
+                recover=tuning.POLE_RECOVER,
+                gate=lambda ctx: vertical_pole() and ctx.energy >= gate_e and not ctx.submerged,
+                energy_factor=lambda e: _lerp(e, 0.0, 1.0, tuning.POLE_SF_TIRED, tuning.POLE_SF_FRESH),
+                temper_factor=lambda t: 1.0,
+                one_shot=True,
+                init=tuning.POLE_INIT,
+            )
+        )
         fsm.register_mood_entry("pole_climb", "PoleClimb")
 
         def on_stun():

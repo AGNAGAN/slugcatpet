@@ -1,4 +1,5 @@
 """皮肤尾巴：游戏的尾巴三角网格，按 DMS 方式贴图。"""
+
 from __future__ import annotations
 
 import math
@@ -8,8 +9,9 @@ import numpy as np
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QBrush, QImage, QPixmap, QPolygonF, QTransform
 
-_PADDED = OrderedDict()      # cacheKey -> 四周外扩 1px（复制边缘）的画刷图
+_PADDED = OrderedDict()  # cacheKey -> 四周外扩 1px（复制边缘）的画刷图
 _PADDED_CAP = 32
+
 
 def _tris(n_verts):
     """游戏 / DMS 的尾巴三角：每段两个，段间两个，尾尖一个（N 段共 4N-3 个）。"""
@@ -50,8 +52,9 @@ def _padded(pm):
     w, h = img.width(), img.height()
     a = np.frombuffer(img.constBits(), np.uint32).reshape(h, img.bytesPerLine() // 4)[:, :w]
     a = np.ascontiguousarray(np.pad(a, 1, mode="edge"))
-    out = QPixmap.fromImage(QImage(a.data, w + 2, h + 2, (w + 2) * 4,
-                                   QImage.Format.Format_ARGB32_Premultiplied).copy())
+    out = QPixmap.fromImage(
+        QImage(a.data, w + 2, h + 2, (w + 2) * 4, QImage.Format.Format_ARGB32_Premultiplied).copy()
+    )
     _PADDED[key] = out
     if len(_PADDED) > _PADDED_CAP:
         _PADDED.popitem(last=False)

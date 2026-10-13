@@ -1,4 +1,5 @@
 """果子：高处放挂在果柄上，低处放散落；能吃、能叼。"""
+
 from __future__ import annotations
 
 from PySide6.QtCore import QPointF, QRectF, Qt
@@ -66,8 +67,7 @@ class FruitKind(ItemKind):
             if n < 2:
                 continue
             pts[-1] = (f.last_x + (f.x - f.last_x) * ts, f.last_y + (f.y - f.last_y) * ts)
-            widths = [STALK_ROOT_W + (STALK_TIP_W - STALK_ROOT_W) * (i / (n - 1))
-                      for i in range(n)]
+            widths = [STALK_ROOT_W + (STALK_TIP_W - STALK_ROOT_W) * (i / (n - 1)) for i in range(n)]
             draw_rope(p, pts, widths, color=STALK_COLOR)
 
     def draw(self, win, p):
@@ -76,11 +76,19 @@ class FruitKind(ItemKind):
             x = f.last_x + (f.x - f.last_x) * ts
             y = f.last_y + (f.y - f.last_y) * ts
             rx, ry = f.rotation
-            draw_fruit(p, win.atlas, x, y, _ang_from_up(rx, ry), f.bites,
-                       flesh_color=FRUIT_FLESH, outline_color=FRUIT_OUTLINE)
+            draw_fruit(
+                p,
+                win.atlas,
+                x,
+                y,
+                _ang_from_up(rx, ry),
+                f.bites,
+                flesh_color=FRUIT_FLESH,
+                outline_color=FRUIT_OUTLINE,
+            )
 
     def draw_guide(self, win, p):
-        if not win.zerog_on:              # 这条线以上放的会挂起来
+        if not win.zerog_on:  # 这条线以上放的会挂起来
             p.save()
             p.setPen(QPen(QColor(255, 255, 255, 110), 1.0, Qt.PenStyle.DashLine))
             yline = win._HL * PLACE_HANGING_FRAC
@@ -90,8 +98,7 @@ class FruitKind(ItemKind):
     def draw_hint(self, win, p, cx, cy):
         p.save()
         p.setOpacity(0.5)
-        draw_fruit(p, win.atlas, cx, cy, 0.0, 3,
-                   flesh_color=FRUIT_FLESH, outline_color=FRUIT_OUTLINE)
+        draw_fruit(p, win.atlas, cx, cy, 0.0, 3, flesh_color=FRUIT_FLESH, outline_color=FRUIT_OUTLINE)
         p.restore()
 
     def paint_icon(self, p, r, atlas):
@@ -103,7 +110,7 @@ class FruitKind(ItemKind):
         dw, dh = sw * s, sh * s
         dst = QRectF(r.center().x() - dw / 2, r.center().y() - dh / 2, dw, dh)
         outline = atlas.sprite("base", "DangleFruit0A", _ICON_OUTLINE)
-        flesh = atlas.sprite("base", "DangleFruit0B")                  # 白模，下面渐变上色
+        flesh = atlas.sprite("base", "DangleFruit0B")  # 白模，下面渐变上色
         ss = 4
         lw, lh = max(1, int(dw * ss)), max(1, int(dh * ss))
         layer = QPixmap(lw, lh)
@@ -125,10 +132,12 @@ def _icon_fallback(p, r):
     w, h = r.width(), r.height()
     path = QPainterPath()
     path.moveTo(QPointF(cx, r.top()))
-    path.cubicTo(QPointF(cx + w * 0.50, cy - h * 0.10),
-                 QPointF(cx + w * 0.42, r.bottom()), QPointF(cx, r.bottom()))
-    path.cubicTo(QPointF(cx - w * 0.42, r.bottom()),
-                 QPointF(cx - w * 0.50, cy - h * 0.10), QPointF(cx, r.top()))
+    path.cubicTo(
+        QPointF(cx + w * 0.50, cy - h * 0.10), QPointF(cx + w * 0.42, r.bottom()), QPointF(cx, r.bottom())
+    )
+    path.cubicTo(
+        QPointF(cx - w * 0.42, r.bottom()), QPointF(cx - w * 0.50, cy - h * 0.10), QPointF(cx, r.top())
+    )
     g = QLinearGradient(QPointF(0, r.top()), QPointF(0, r.bottom()))
     g.setColorAt(0.0, _ICON_TOP)
     g.setColorAt(1.0, _ICON_BOT)

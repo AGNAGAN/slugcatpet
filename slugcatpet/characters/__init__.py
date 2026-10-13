@@ -1,4 +1,5 @@
 """角色注册表：variant key → CatDef。"""
+
 from __future__ import annotations
 
 from .base import CatDef

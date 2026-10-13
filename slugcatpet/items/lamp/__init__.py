@@ -1,4 +1,5 @@
 """暖灯：从最近的屏幕边伸出一根杆挂着灯泡；只有一盏，能取暖。"""
+
 from __future__ import annotations
 
 import math
@@ -21,8 +22,8 @@ LAMP_GLOW_COLOR = (255, 51, 0)
 LAMP_GLOW_ALPHA = 130
 LAMP_TILT_MAX_DEG = 25.0
 LAMP_STICK_OUTSET = 40.0
-LAMP_HIT_STICK = 3.0       # 灯杆命中半宽
-LAMP_HIT_BULB = 8.0        # 灯泡命中半径
+LAMP_HIT_STICK = 3.0  # 灯杆命中半宽
+LAMP_HIT_BULB = 8.0  # 灯泡命中半径
 
 _ICON_OUTLINE = QColor(255, 70, 20)
 _ICON_FLESH = QColor(255, 248, 230)
@@ -65,8 +66,18 @@ def _shape(p, atlas, ax, ay, bx, by, opacity, glow_radius=None):
         widths = [2.0 * (root_w + (0.5 - root_w) * (i / (n - 1))) for i in range(n)]
         draw_rope(p, pts, widths, color=LAMP_STICK_COLOR)
         bulb_rot = math.degrees(math.atan2(ax - bx, by - ay))
-    draw_fruit(p, atlas, bx, by, bulb_rot, 3, flesh_color=LAMP_BULB_FLESH,
-               outline_color=LAMP_BULB_OUTLINE, scalex=0.8, scaley=0.9)
+    draw_fruit(
+        p,
+        atlas,
+        bx,
+        by,
+        bulb_rot,
+        3,
+        flesh_color=LAMP_BULB_FLESH,
+        outline_color=LAMP_BULB_OUTLINE,
+        scalex=0.8,
+        scaley=0.9,
+    )
     if glow_radius and glow_radius > 1.0:
         grad = QRadialGradient(QPointF(bx, by), glow_radius)
         grad.setColorAt(0.0, QColor(*LAMP_GLOW_COLOR, LAMP_GLOW_ALPHA))
@@ -102,9 +113,13 @@ class LampKind(ItemKind):
             win.lamp.step()
 
     def hit(self, lamp, cx, cy):
-        return min(max(0.0, _seg_dist(cx, cy, lamp.anchor_x, lamp.anchor_y,
-                                      lamp.bulb_x, lamp.bulb_y) - LAMP_HIT_STICK),
-                   math.hypot(cx - lamp.bulb_x, cy - lamp.bulb_y) - LAMP_HIT_BULB)
+        return min(
+            max(
+                0.0,
+                _seg_dist(cx, cy, lamp.anchor_x, lamp.anchor_y, lamp.bulb_x, lamp.bulb_y) - LAMP_HIT_STICK,
+            ),
+            math.hypot(cx - lamp.bulb_x, cy - lamp.bulb_y) - LAMP_HIT_BULB,
+        )
 
     def draw_mark(self, p, lamp, rad):
         band = QPainterPath()
@@ -124,8 +139,16 @@ class LampKind(ItemKind):
 
     def draw(self, win, p):
         lamp = win.lamp
-        _shape(p, win.atlas, lamp.anchor_x, lamp.anchor_y, lamp.bulb_x, lamp.bulb_y,
-               1.0, glow_radius=lamp.glow_radius())
+        _shape(
+            p,
+            win.atlas,
+            lamp.anchor_x,
+            lamp.anchor_y,
+            lamp.bulb_x,
+            lamp.bulb_y,
+            1.0,
+            glow_radius=lamp.glow_radius(),
+        )
 
     def draw_hint(self, win, p, cx, cy):
         ax, ay, bx, by, _ = _geom(win, cx, cy)
@@ -136,6 +159,7 @@ class LampKind(ItemKind):
         w, h = r.width(), r.height()
         if atlas is None or not atlas.get("base").has("DangleFruit0A"):
             from ...ui.widgets.iconkit import pen
+
             d = w * 0.42
             bulb = QRectF(0, 0, d, d)
             bulb.moveCenter(QPointF(cx, cy))
@@ -147,10 +171,10 @@ class LampKind(ItemKind):
             bc, rad = bulb.center(), d / 2
             for k in range(8):
                 a = math.radians(22.5 + 45 * k)
-                p.drawLine(QPointF(bc.x() + math.cos(a) * (rad + w * 0.05),
-                                   bc.y() - math.sin(a) * (rad + w * 0.05)),
-                           QPointF(bc.x() + math.cos(a) * (rad + w * 0.18),
-                                   bc.y() - math.sin(a) * (rad + w * 0.18)))
+                p.drawLine(
+                    QPointF(bc.x() + math.cos(a) * (rad + w * 0.05), bc.y() - math.sin(a) * (rad + w * 0.05)),
+                    QPointF(bc.x() + math.cos(a) * (rad + w * 0.18), bc.y() - math.sin(a) * (rad + w * 0.18)),
+                )
             return
         glow_r = min(w, h) * 0.52
         grad = QRadialGradient(QPointF(cx, cy), glow_r)
@@ -165,7 +189,7 @@ class LampKind(ItemKind):
         dw, dh = sw * s, sh * s
         outline = atlas.sprite("base", "DangleFruit0A", _ICON_OUTLINE)
         flesh = atlas.sprite("base", "DangleFruit0B", _ICON_FLESH)
-        p.save()                                                      # 镜像：粗头朝上
+        p.save()  # 镜像：粗头朝上
         p.translate(cx, cy)
         p.scale(1.0, -1.0)
         local = QRectF(-dw / 2, -dh / 2, dw, dh)

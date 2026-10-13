@@ -1,4 +1,5 @@
 """躲杀控制器：舌头点掉「杀死」确认弹窗的"取消"按钮。"""
+
 from __future__ import annotations
 import math
 
@@ -88,6 +89,7 @@ class KillDodger:
                     return False
                 b.stop_walk()
                 from ...abilities.tongue.climb import TongueClimber
+
                 self._climber = TongueClimber(self.win, self._climb_side, target=(tx, ty))
                 return False
             self._climber.target = (tx, ty)

@@ -1,4 +1,5 @@
 """取果。"""
+
 from __future__ import annotations
 
 
@@ -8,7 +9,7 @@ from ..base import Behavior
 from .fetcher import fetch_ready
 from .state import FetchFruit
 
-T_FETCH_CHECK = 8   # 取果闸重算间隔
+T_FETCH_CHECK = 8  # 取果闸重算间隔
 
 
 class Fetch(Behavior):
@@ -26,12 +27,16 @@ class Fetch(Behavior):
             if st.cooldown > 0:
                 st.cooldown -= 1
             self.check = (self.check + 1) % T_FETCH_CHECK
-            if (self.check == 0
-                    and b.food < b.food_max
-                    and not fsm.grab.active and not fsm._exhausted
-                    and not fsm.ask("cold_urgent") and not fsm._zerog()
-                    and st.cooldown <= 0
-                    and not fsm.blocked(FETCH)):
+            if (
+                self.check == 0
+                and b.food < b.food_max
+                and not fsm.grab.active
+                and not fsm._exhausted
+                and not fsm.ask("cold_urgent")
+                and not fsm._zerog()
+                and st.cooldown <= 0
+                and not fsm.blocked(FETCH)
+            ):
                 me = fsm.win
                 free = [f for f in fsm.items(EDIBLE) if fsm.social.free_for(me, f)]
                 cands = fetch_ready(fsm.planner, free, fsm.traits)

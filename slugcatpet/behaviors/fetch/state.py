@@ -1,21 +1,23 @@
 """内置行为状态：取果。"""
+
 from __future__ import annotations
 
 from ...brain.state import T_NEED, State, LIGHT
 
-T_FETCH_COOLDOWN = 200           # 取果失败后的冷却（tick）
+T_FETCH_COOLDOWN = 200  # 取果失败后的冷却（tick）
 
 
 class FetchFruit(State):
     name = "FetchFruit"
     tier = T_NEED
     energy = LIGHT
-    fetcher = None               # 当前取果器
-    cooldown = 0                 # 放弃后的冷却
+    fetcher = None  # 当前取果器
+    cooldown = 0  # 放弃后的冷却
 
     def enter(self):
         fsm = self.fsm
         from .fetcher import FruitFetcher
+
         fsm.gfx.hand_aim["l"] = None
         fsm.gfx.hand_aim["r"] = None
         self.fetcher = FruitFetcher(fsm.win, fsm.planner, fsm.traits)

@@ -1,4 +1,5 @@
 """光标劫持：落体或被弹开→锁定，可替换系统光标为"忙"样式。"""
+
 from __future__ import annotations
 import sys
 import math
@@ -10,9 +11,9 @@ _IS_WIN = sys.platform == "win32"
 T_FALL_GRAV = 1.6
 T_CURSOR_LOCK = 200
 WATCHDOG_MAX = 400
-K_KNOCK = 0.88           # 被弹开：每 tick 速度衰减
+K_KNOCK = 0.88  # 被弹开：每 tick 速度衰减
 K_KNOCK_GRAV = 0.5
-K_KNOCK_LAND = 6         # 速度低于此即停下锁定
+K_KNOCK_LAND = 6  # 速度低于此即停下锁定
 
 _ACTIVE = []
 
@@ -23,8 +24,12 @@ if _IS_WIN:
     _user32 = ctypes.windll.user32
 
     class _RECT(ctypes.Structure):
-        _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long),
-                    ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
+        _fields_ = [
+            ("left", ctypes.c_long),
+            ("top", ctypes.c_long),
+            ("right", ctypes.c_long),
+            ("bottom", ctypes.c_long),
+        ]
 
     def _clip(x, y):
         r = _RECT(int(x), int(y), int(x) + 1, int(y) + 1)
@@ -36,7 +41,7 @@ if _IS_WIN:
     def _setpos(x, y):
         _user32.SetCursorPos(int(x), int(y))
 
-    _OCR_IDS = (32512, 32513, 32649)   # OCR_NORMAL/IBEAM/HAND
+    _OCR_IDS = (32512, 32513, 32649)  # OCR_NORMAL/IBEAM/HAND
     _IDC_APPSTARTING = 32650
     _SPI_SETCURSORS = 0x0057
 
@@ -47,8 +52,7 @@ if _IS_WIN:
     _user32.SetSystemCursor.restype = wintypes.BOOL
     _user32.SetSystemCursor.argtypes = (ctypes.c_void_p, wintypes.DWORD)
     _user32.SystemParametersInfoW.restype = wintypes.BOOL
-    _user32.SystemParametersInfoW.argtypes = (wintypes.UINT, wintypes.UINT,
-                                              ctypes.c_void_p, wintypes.UINT)
+    _user32.SystemParametersInfoW.argtypes = (wintypes.UINT, wintypes.UINT, ctypes.c_void_p, wintypes.UINT)
 
     def _set_busy_cursor():
         """替换系统箭头/文本/链接光标为"忙"样式；需 CopyIcon 因 SetSystemCursor 取走所有权。"""
@@ -65,6 +69,7 @@ if _IS_WIN:
     def _restore_cursors():
         _user32.SystemParametersInfoW(_SPI_SETCURSORS, 0, None, 0)
 else:
+
     def _clip(x, y):
         return False
 
@@ -91,9 +96,21 @@ def restore_cursors():
 class CursorHijack:
     """光标劫持。坐标 = Win32 物理像素（屏幕全局，已由 window 按 dpr 换算）。"""
 
-    def __init__(self, dev_x, dev_y, screen_w, screen_h, screen_x=0, screen_y=0, mock=False,
-                 lock_ticks=T_CURSOR_LOCK, mode="fall", watchdog_max=WATCHDOG_MAX,
-                 replace_cursor=True, knock_v=(0.0, 0.0)):
+    def __init__(
+        self,
+        dev_x,
+        dev_y,
+        screen_w,
+        screen_h,
+        screen_x=0,
+        screen_y=0,
+        mock=False,
+        lock_ticks=T_CURSOR_LOCK,
+        mode="fall",
+        watchdog_max=WATCHDOG_MAX,
+        replace_cursor=True,
+        knock_v=(0.0, 0.0),
+    ):
         self.mock = mock or not _IS_WIN
         self.x = float(dev_x)
         self.y = float(dev_y)
@@ -106,16 +123,16 @@ class CursorHijack:
         self.bottom = screen_y + screen_h - 2
         self.mode = mode
         if mode == "hold":
-            self.phase = "hold"                     # hold → done
+            self.phase = "hold"  # hold → done
         elif self.vx or self.vy:
-            self.phase = "knock"                    # knock → lock → done
+            self.phase = "knock"  # knock → lock → done
         else:
-            self.phase = "fall"                     # fall → lock → done
+            self.phase = "fall"  # fall → lock → done
         self.lock_ticks = int(lock_ticks)
         self.lock_t = 0
         self.watchdog = 0
         self.watchdog_max = int(watchdog_max)
-        self.use_setpos = False     # ClipCursor 失败降级标志
+        self.use_setpos = False  # ClipCursor 失败降级标志
         self.replace_cursor = bool(replace_cursor)
         self.active = True
         _ACTIVE.append(self)
@@ -139,7 +156,7 @@ class CursorHijack:
             self.vy = self.vy * K_KNOCK + K_KNOCK_GRAV
             self.x += self.vx
             self.y += self.vy
-            self.use_setpos = True                  # ClipCursor 看不出位移，主动推光标
+            self.use_setpos = True  # ClipCursor 看不出位移，主动推光标
             if math.hypot(self.vx, self.vy) < K_KNOCK_LAND:
                 self.phase = "lock"
                 self.lock_t = 0
@@ -168,12 +185,12 @@ class CursorHijack:
         if not self.use_setpos:
             ok = False
             try:
-                ok = _clip(x, y)           # 失败则降级 SetCursorPos
+                ok = _clip(x, y)  # 失败则降级 SetCursorPos
             except Exception:
                 ok = False
             if not ok:
                 try:
-                    _unclip()                      # 先释放旧 clip
+                    _unclip()  # 先释放旧 clip
                 except Exception:
                     pass
                 self.use_setpos = True

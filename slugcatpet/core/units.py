@@ -1,4 +1,5 @@
 """单位换算：40Hz 物理，系数恒等。"""
+
 from __future__ import annotations
 
 TICK_RATE: float = 40.0
@@ -10,7 +11,7 @@ K_IMP: float = _R * _R
 
 
 def damp60(k_tick: float) -> float:
-    return k_tick ** _R
+    return k_tick**_R
 
 
 def clampf(v: float, lo: float, hi: float) -> float:

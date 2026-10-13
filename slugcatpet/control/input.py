@@ -1,4 +1,5 @@
 """操控输入层：InputPackage（一帧操控输入）+ InputBuffer（10 帧历史环）。"""
+
 from __future__ import annotations
 from dataclasses import dataclass
 
@@ -7,15 +8,15 @@ BUFFER_LEN = 10
 
 @dataclass
 class InputPackage:
-    x: int = 0                    # ∈{-1,0,1}
+    x: int = 0  # ∈{-1,0,1}
     y: int = 0
     jmp: bool = False
     thrw: bool = False
     pckp: bool = False
-    mp: bool = False              # 占位
-    spec: bool = False            # 占位
-    crouchToggle: bool = False    # 占位
-    downDiagonal: int = 0         # 下斜横向符号，派生自 x,y
+    mp: bool = False  # 占位
+    spec: bool = False  # 占位
+    crouchToggle: bool = False  # 占位
+    downDiagonal: int = 0  # 下斜横向符号，派生自 x,y
 
     def __post_init__(self):
         self.downDiagonal = self.x if (self.y < 0 and self.x != 0) else 0
@@ -35,7 +36,7 @@ class InputBuffer:
     def __getitem__(self, i: int) -> InputPackage:
         if 0 <= i < len(self._frames):
             return self._frames[i]
-        return InputPackage()          # 越界返回全零，不抛
+        return InputPackage()  # 越界返回全零，不抛
 
     def __len__(self) -> int:
         return self._len

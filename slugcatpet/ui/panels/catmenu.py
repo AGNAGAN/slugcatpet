@@ -1,4 +1,5 @@
 """共享猫菜单构造器（右键猫身/左键 HUD 行共用）。"""
+
 from __future__ import annotations
 from PySide6.QtWidgets import QMenu
 
@@ -44,12 +45,13 @@ def build_cat_menu(pet, pets=None, open_settings=None, parent=None) -> QMenu:
     beh = pet.behavior
     reinc = beh is not None and beh.is_reincarnating()
     dead = beh is not None and beh.is_truly_dead()
-    blocked = beh is not None and beh.blocks_interaction()   # 独占特效期禁杀
+    blocked = beh is not None and beh.blocks_interaction()  # 独占特效期禁杀
     if getattr(pet, "controlled", False):
         # 受控猫仅退出控制；闭包现查防重入
         exit_act = menu.addAction(t("menu_exit_control"))
         exit_act.triggered.connect(
-            lambda: pet.window.stop_control() if getattr(pet, "controlled", False) else None)
+            lambda: pet.window.stop_control() if getattr(pet, "controlled", False) else None
+        )
     elif reinc:
         menu.addAction(t("menu_reincarnating")).setEnabled(False)
     elif dead:
@@ -63,7 +65,6 @@ def build_cat_menu(pet, pets=None, open_settings=None, parent=None) -> QMenu:
         ctl.setEnabled(not blocked and pet._kill_dialog is None)
         ctl.triggered.connect(lambda: pet.window.start_control(pet))
 
-
     w = pet.window
     if not getattr(pet, "controlled", False):
         hide = menu.addAction(t("menu_hide_pet"))
@@ -76,4 +77,3 @@ def build_cat_menu(pet, pets=None, open_settings=None, parent=None) -> QMenu:
     if open_settings is not None:
         s.triggered.connect(lambda: open_settings())
     return menu
-

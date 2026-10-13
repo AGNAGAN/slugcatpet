@@ -1,4 +1,5 @@
 """键位表：动作 ↔ Qt Key 映射，缺文件/坏 JSON 回落默认。"""
+
 from __future__ import annotations
 import json
 from pathlib import Path
@@ -9,8 +10,13 @@ from .._paths import user_dir
 
 # 动作→Qt Key 名，去 Key_ 前缀；grab/throw 预留
 DEFAULT_KEYBINDS = {
-    "left": "A", "right": "D", "up": "W", "down": "S",
-    "jump": "Space", "grab": "K", "throw": "J",
+    "left": "A",
+    "right": "D",
+    "up": "W",
+    "down": "S",
+    "jump": "Space",
+    "grab": "K",
+    "throw": "J",
 }
 ACTIONS = tuple(DEFAULT_KEYBINDS)
 

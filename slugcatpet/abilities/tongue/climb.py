@@ -1,4 +1,5 @@
 """舌头爬墙 + 吊顶：TongueClimber 攀墙到顶，CeilingHanger 吊顶摆晃，均基于舌头弹簧锚点。"""
+
 from __future__ import annotations
 import math
 
@@ -12,8 +13,8 @@ CLIMB_IDEAL_MIN = 25.0
 CLIMB_RELEASE_DIST = 55.0
 HANG_IDEAL = 50.0
 
-HANG_BODY_BELOW = 32.0       # 吊着时臀底在锚点下 ideal + 此值（胸口下垂 + 躯干 + 臀半径）
-HANG_CLEAR_MARGIN = 6.0      # 吊顶时臀底离水面至少留这么多
+HANG_BODY_BELOW = 32.0  # 吊着时臀底在锚点下 ideal + 此值（胸口下垂 + 躯干 + 臀半径）
+HANG_CLEAR_MARGIN = 6.0  # 吊顶时臀底离水面至少留这么多
 
 
 def hang_water_level(pet):
@@ -37,7 +38,7 @@ def hang_above_water(pet) -> bool:
 CEIL_CENTER_LO = 0.25
 CEIL_CENTER_HI = 0.75
 TRAVERSE_MAX_HOPS = 12
-CEIL_EDGE_MARGIN = 150.0     # 自由玩耍时吊顶落点离屏幕两端至少这么远
+CEIL_EDGE_MARGIN = 150.0  # 自由玩耍时吊顶落点离屏幕两端至少这么远
 
 
 def _roam_x(win, rng):
@@ -53,18 +54,17 @@ class TongueClimber:
         self.win = win
         self.body = win.body
         self.tongue = win.tongue
-        self.side = 1 if side > 0 else -1     # 1=右墙 / -1=左墙
+        self.side = 1 if side > 0 else -1  # 1=右墙 / -1=左墙
         self.target = target
         self.stop_dist = stop_dist
         self._free_x = _roam_x(win, rng) if target is None and rng is not None else None
-        self.phase = "shoot"                  # shoot → reel → settle → (ceiling)
+        self.phase = "shoot"  # shoot → reel → settle → (ceiling)
         self.fails = 0
         self.timer = 0
         self.giveup = False
         self.jitter = 0
         self.tv_hops = 0
-        self.tongue.set_targets(shoot_v=CLIMB_SHOOT_V, ideal=CLIMB_IDEAL,
-                                total=200.0, reel_rate=3.0)
+        self.tongue.set_targets(shoot_v=CLIMB_SHOOT_V, ideal=CLIMB_IDEAL, total=200.0, reel_rate=3.0)
 
     def _wall_x(self):
         return (self.win._WL) if self.side > 0 else 0.0
@@ -86,9 +86,10 @@ class TongueClimber:
 
         # 触发吊顶阈值取 _HL*0.5 与射程 85% 的较小值
         ceil_trigger = min(self.win._HL * 0.5, self.tongue.total * 0.85)
-        if (self.phase not in ("ceiling", "ceil_wait",
-                               "tv_settle", "tv_drop", "tv_shoot")
-                and c0.y < ceil_trigger):
+        if (
+            self.phase not in ("ceiling", "ceil_wait", "tv_settle", "tv_drop", "tv_shoot")
+            and c0.y < ceil_trigger
+        ):
             self.phase = "ceiling"
 
         if self.phase == "shoot":
@@ -109,8 +110,7 @@ class TongueClimber:
                     self.timer = 0
                     self.fails = 0
                 else:
-                    self.tongue.set_targets(
-                        ideal=max(CLIMB_IDEAL_MIN, self.tongue.ideal - 0.5))
+                    self.tongue.set_targets(ideal=max(CLIMB_IDEAL_MIN, self.tongue.ideal - 0.5))
             elif tg.is_idle():
                 self.fails += 1
                 if self.fails >= 3:
@@ -204,7 +204,7 @@ class TongueClimber:
             center = self._free_x
         else:
             center = WL * 0.5
-        reach = math.sqrt(max(1.0, self.tongue.total ** 2 - (c0.y + 5.0) ** 2)) * 0.85
+        reach = math.sqrt(max(1.0, self.tongue.total**2 - (c0.y + 5.0) ** 2)) * 0.85
         direction = 1.0 if center >= c0.x else -1.0
         step = min(reach, abs(center - c0.x))
         return clampf(c0.x + direction * step, 20.0, WL - 20.0)
@@ -246,8 +246,9 @@ class CeilingHanger:
                 self._sway_dir = 1 if self.rng.random() < 0.5 else -1
             elif r < 0.8:
                 self.sub, self.sub_t = "vmove", self.rng.randint(27, 60)
-                self._vtarget = HANG_IDEAL + self.rng.uniform(-consts.CEIL_VMOVE_RANGE,
-                                                              consts.CEIL_VMOVE_RANGE)
+                self._vtarget = HANG_IDEAL + self.rng.uniform(
+                    -consts.CEIL_VMOVE_RANGE, consts.CEIL_VMOVE_RANGE
+                )
                 room = hang_ideal_max(self.win)
                 if room is not None:
                     self._vtarget = min(self._vtarget, max(CLIMB_IDEAL_MIN, room))

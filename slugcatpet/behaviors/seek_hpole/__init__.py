@@ -1,4 +1,5 @@
 """找横杆：低杆直接舌钩，高杆先到墙脚舌爬再钩，钩住后交 HPole。"""
+
 from __future__ import annotations
 
 import math
@@ -108,8 +109,7 @@ class SeekHPole(State):
                 return
             wall_x = 0.0 if self._hp_side < 0 else fsm.WL
             if fsm.climb is None:
-                fsm.climb = TongueClimber(fsm.win, self._hp_side,
-                                           target=(wall_x, p.ay), stop_dist=40.0)
+                fsm.climb = TongueClimber(fsm.win, self._hp_side, target=(wall_x, p.ay), stop_dist=40.0)
             done = fsm.climb.update()
             if getattr(fsm.climb, "giveup", False):
                 self._hp_reclimb(b)
@@ -209,7 +209,12 @@ class SeekHPoleBehavior(Behavior):
     doc = "场上有横杆时，想玩就用舌头钩上去（高杆先爬墙再钩），之后横杆玩耍。"
     requires = ("tongue",)
     params = mood_params(
-        1.00, 0.72, 0.30, 0.30, 0.0035, 0.00060,
+        1.00,
+        0.72,
+        0.30,
+        0.30,
+        0.0035,
+        0.00060,
         energy_fac_fresh=Param(1.30, 0.0, 10.0, "体力满时的权重系数"),
         energy_fac_tired=Param(0.10, 0.0, 10.0, "体力空时的权重系数"),
     )
@@ -221,10 +226,17 @@ class SeekHPoleBehavior(Behavior):
         gate = fsm.traits.play_gate
 
         def has_hpole(ctx):
-            return (any(pl.kind == "horizontal" for pl in fsm.items(CLIMBABLE))
-                    and ctx.energy >= gate and not ctx.submerged)
+            return (
+                any(pl.kind == "horizontal" for pl in fsm.items(CLIMBABLE))
+                and ctx.energy >= gate
+                and not ctx.submerged
+            )
 
         mood_candidate(
-            fsm, "hpole", p, gate=has_hpole,
+            fsm,
+            "hpole",
+            p,
+            gate=has_hpole,
             energy_factor=lambda e: _lerp(e, 0.0, 1.0, p.energy_fac_tired, p.energy_fac_fresh),
-            before="idle")
+            before="idle",
+        )

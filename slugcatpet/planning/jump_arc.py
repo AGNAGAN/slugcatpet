@@ -1,4 +1,5 @@
 """弧线模板：按 stats×档×横向输入离线空跑物理，缓存 chunk0 相对轨迹。"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -6,7 +7,7 @@ from dataclasses import dataclass
 from .. import tuning
 from ..core.creature import SlugcatBody
 
-_SIM_W = 4000.0                 # 宽 sim 世界：横向漂移不撞墙
+_SIM_W = 4000.0  # 宽 sim 世界：横向漂移不撞墙
 _SIM_H = 1000.0
 _SETTLE_TICKS = 120
 _MAX_ARC_TICKS = 400
@@ -14,7 +15,7 @@ _MAX_ARC_TICKS = 400
 _DROP_H = 1600.0
 _DROP_START_Y = 40.0
 _MAX_DROP_TICKS = 400
-_PJUMP_START_Y = 500.0          # 竖杆跳 sim 起跳高：留足头顶空间容上冲，不撞 sim 顶
+_PJUMP_START_Y = 500.0  # 竖杆跳 sim 起跳高：留足头顶空间容上冲，不撞 sim 顶
 
 _cache: dict[tuple, object] = {}
 
@@ -22,6 +23,7 @@ _cache: dict[tuple, object] = {}
 @dataclass(frozen=True)
 class JumpArc:
     """起跳弧：points=逐 tick chunk0 相对起跳点位移（y↓），takeoff_h=起跳时 chunk0 距地高。"""
+
     hold_ticks: int
     move_dir: int
     takeoff_h: float
@@ -31,6 +33,7 @@ class JumpArc:
 @dataclass(frozen=True)
 class DropArc:
     """落体弧：points 同上，相对松手点。"""
+
     move_dir: int
     points: tuple[tuple[float, float], ...]
 
@@ -38,6 +41,7 @@ class DropArc:
 @dataclass(frozen=True)
 class PoleJumpArc:
     """竖杆跳弧：points 相对松杆点（y↓）。"""
+
     direction: int
     points: tuple[tuple[float, float], ...]
 
@@ -45,6 +49,7 @@ class PoleJumpArc:
 @dataclass(frozen=True)
 class BackflipArc:
     """站立后空翻弧：points 相对起跳点。"""
+
     direction: int
     points: tuple[tuple[float, float], ...]
 
@@ -57,6 +62,7 @@ class BackflipArc:
 @dataclass(frozen=True)
 class PyroArc:
     """工匠爆跳弧：腾空第 PYRO_BOOST_AIR_TICKS tick 施 pyro_boost。"""
+
     variant: str
     points: tuple[tuple[float, float], ...]
 

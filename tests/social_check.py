@@ -1,4 +1,5 @@
 """多猫互动压力测试：长时间离屏运行，自动统计几类互动异常。"""
+
 from __future__ import annotations
 
 import argparse
@@ -23,12 +24,20 @@ ROSTERS = {
 }
 
 CURSOR_STATES = {"CursorLick", "RivSnatch", "PyroMaul"}
-STAND_STATES = {"IdleStand", "FetchFruit", "AngryStone", "PostThrowWander", "PostThrowStand",
-                "SeekWarmth"}
+STAND_STATES = {"IdleStand", "FetchFruit", "AngryStone", "PostThrowWander", "PostThrowStand", "SeekWarmth"}
 IGNORE_FLIP = {"Airborne", "Dragged", "Stunned", "Dead"}
 
-KINDS = ("same_target", "makeway_pingpong", "makeway_repeat", "stuck", "flipflop",
-         "tip_evict", "tip_pingpong", "cursor_fight", "stacked")
+KINDS = (
+    "same_target",
+    "makeway_pingpong",
+    "makeway_repeat",
+    "stuck",
+    "flipflop",
+    "tip_evict",
+    "tip_pingpong",
+    "cursor_fight",
+    "stacked",
+)
 DOC = {
     "same_target": "两只以上同时奔向同一物品（持续 ≥20 tick 的次数）",
     "makeway_pingpong": "A 给 B 让路后 400 tick 内 B 又给 A 让路",
@@ -90,13 +99,13 @@ class Meter:
         self.count = {k: 0 for k in KINDS}
         self.activity = defaultdict(int)
         self.detail = defaultdict(int)
-        self._pursuit = {}                 # (target id, frozenset pair) → 连续 tick
-        self._approach = [None] * n        # (start tick, minx, maxx, target)
+        self._pursuit = {}  # (target id, frozenset pair) → 连续 tick
+        self._approach = [None] * n  # (start tick, minx, maxx, target)
         self._seq = [[] for _ in range(n)]  # [(state, start)]
-        self._yields = []                  # (t, yielder, shover)
-        self._tip = {}                     # pole id → (occupant, since)
-        self._tip_left = {}                # pole id → (pet, t)
-        self._evicts = []                  # (t, pole id, loser, winner)
+        self._yields = []  # (t, yielder, shover)
+        self._tip = {}  # pole id → (occupant, since)
+        self._tip_left = {}  # pole id → (pet, t)
+        self._evicts = []  # (t, pole id, loser, winner)
         self._stack = {}
         self._prev_state = [None] * n
 
@@ -184,8 +193,7 @@ class Meter:
                 del seq[0]
             if len(seq) == 3:
                 (x0, t0), (y, t1), (x1, t2) = seq
-                if (x0 == x1 and x0 != y and t2 - t1 < 30 and t1 - t0 < 30
-                        and not ({x0, y} & IGNORE_FLIP)):
+                if x0 == x1 and x0 != y and t2 - t1 < 30 and t1 - t0 < 30 and not ({x0, y} & IGNORE_FLIP):
                     self.count["flipflop"] += 1
                     self.detail[f"{x0}>{y}>{x1}"] += 1
 
@@ -193,7 +201,7 @@ class Meter:
         shover = self._shover_of(i)
         if shover is None:
             return
-        for (t0, y, s) in self._yields:
+        for t0, y, s in self._yields:
             if t - t0 > 400:
                 continue
             if y == shover and s == i:
@@ -226,7 +234,7 @@ class Meter:
                 left = self._tip_left.get(pid)
                 if left is not None and left[0] != cur and t - left[1] <= 60:
                     self.count["tip_evict"] += 1
-                    for (t0, p0, lo, wi) in self._evicts:
+                    for t0, p0, lo, wi in self._evicts:
                         if p0 == pid and lo == cur and wi == left[0] and t - t0 <= 1200:
                             self.count["tip_pingpong"] += 1
                             break
@@ -263,19 +271,27 @@ class Meter:
 def run_seed(seed, ticks, home):
     sys.path.insert(0, str(ROOT / "tests"))
     import behavior_check as G
+
     G._setup_env(home)
     random.seed(seed)
     app = G._make_app(home)
     from slugcatpet.platform import cursorfx
+
     cursorfx._IS_WIN = False
     from slugcatpet import skins
+
     skins.configure(False)
     skins.reload()
     from slugcatpet.window import PetWindow
+
     roster = ROSTERS[seed]
-    win = PetWindow(params={"seed": seed, "max_pets": 6,
-                            "pets": [{"id": f"pet-{i}", "variant": v}
-                                     for i, v in enumerate(roster)]})
+    win = PetWindow(
+        params={
+            "seed": seed,
+            "max_pets": 6,
+            "pets": [{"id": f"pet-{i}", "variant": v} for i, v in enumerate(roster)],
+        }
+    )
     win.anim.stop()
     cur = [None]
     win.cursor_logical = lambda: cur[0]
@@ -309,11 +325,28 @@ def run_seed(seed, ticks, home):
         pet.dismiss_kill_dialog()
     win.close()
     app.processEvents()
-    return {"seed": seed, "ticks": ticks, "count": m.count, "eaten": eaten,
-            "detail": dict(m.detail), "time": dict(occ),
-            "entries": {k: act.get(k, 0) for k in ("FetchFruit", "PoleClimb", "HPole",
-                                                     "MakeWay", "AngryStone", "CursorLick",
-                                                     "RivSnatch", "PyroMaul", "IdleStand")}}
+    return {
+        "seed": seed,
+        "ticks": ticks,
+        "count": m.count,
+        "eaten": eaten,
+        "detail": dict(m.detail),
+        "time": dict(occ),
+        "entries": {
+            k: act.get(k, 0)
+            for k in (
+                "FetchFruit",
+                "PoleClimb",
+                "HPole",
+                "MakeWay",
+                "AngryStone",
+                "CursorLick",
+                "RivSnatch",
+                "PyroMaul",
+                "IdleStand",
+            )
+        },
+    }
 
 
 def _child(args):
@@ -326,17 +359,20 @@ def _run(args):
     results = []
     env = dict(os.environ, PYTHONHASHSEED="0", PYTHONIOENCODING="utf-8")
     for s in args.seeds:
-        p = subprocess.run([sys.executable, __file__, "_child", "--seed", str(s),
-                            "--ticks", str(args.ticks)], env=env, capture_output=True,
-                           text=True, encoding="utf-8")
+        p = subprocess.run(
+            [sys.executable, __file__, "_child", "--seed", str(s), "--ticks", str(args.ticks)],
+            env=env,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
         line = next((ln for ln in p.stdout.splitlines() if ln.startswith("RESULT ")), None)
         if line is None:
             print(p.stdout[-2000:], p.stderr[-4000:])
             raise SystemExit(f"seed {s} failed")
         r = json.loads(line[7:])
         results.append(r)
-        print(f"seed {s}: " + "  ".join(f"{k}={r['count'][k]}" for k in KINDS)
-              + f"  eaten={r['eaten']}")
+        print(f"seed {s}: " + "  ".join(f"{k}={r['count'][k]}" for k in KINDS) + f"  eaten={r['eaten']}")
     if args.out:
         Path(args.out).write_text(json.dumps(results, indent=1), encoding="utf-8")
     _table(results)
@@ -357,11 +393,12 @@ def _compare(args):
     a = json.loads(Path(args.before).read_text(encoding="utf-8"))
     b = json.loads(Path(args.after).read_text(encoding="utf-8"))
     for ra, rb in zip(a, b):
-        print(f"seed {ra['seed']}: " + "  ".join(
-            f"{k}={ra['count'][k]}→{rb['count'][k]}" for k in KINDS))
-        print("   entries: " + "  ".join(
-            f"{k}={ra['entries'][k]}→{rb['entries'][k]}" for k in ra["entries"])
-              + f"  eaten={ra['eaten']}→{rb['eaten']}")
+        print(f"seed {ra['seed']}: " + "  ".join(f"{k}={ra['count'][k]}→{rb['count'][k]}" for k in KINDS))
+        print(
+            "   entries: "
+            + "  ".join(f"{k}={ra['entries'][k]}→{rb['entries'][k]}" for k in ra["entries"])
+            + f"  eaten={ra['eaten']}→{rb['eaten']}"
+        )
     _table(b, a)
 
 

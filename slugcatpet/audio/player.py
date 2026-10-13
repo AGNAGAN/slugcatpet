@@ -89,9 +89,10 @@ def _quiet_ffmpeg():
     """媒体后端自带的 FFmpeg 不往控制台打日志。"""
     import ctypes
     import PySide6
+
     for f in Path(PySide6.__file__).parent.glob("avutil-*.dll"):
         try:
-            ctypes.CDLL(str(f)).av_log_set_level(8)       # AV_LOG_FATAL
+            ctypes.CDLL(str(f)).av_log_set_level(8)  # AV_LOG_FATAL
         except (OSError, AttributeError):
             pass
 
@@ -116,14 +117,10 @@ class MusicPlayer(QObject):
         self._on_change = on_change
         self._tracks: list[Track] = []
         # 被用户移除的曲目归一化键：扫描跳过，不再自动加回
-        self._hidden: set[str] = {
-            p for p in (self._params.get("music_hidden") or []) if isinstance(p, str)
-        }
+        self._hidden: set[str] = {p for p in (self._params.get("music_hidden") or []) if isinstance(p, str)}
         # 用户显式导入的路径：重扫据此还原
         self._sources: list[Path] = [
-            Path(p)
-            for p in (self._params.get("music_sources") or [])
-            if isinstance(p, str)
+            Path(p) for p in (self._params.get("music_sources") or []) if isinstance(p, str)
         ]
         self._index = -1
         self._mode = self._params.get("music_mode", MODE_ORDER)
@@ -199,15 +196,10 @@ class MusicPlayer(QObject):
     def looping(self) -> bool:
         return self._loop_current
 
-
     @property
     def is_special_active(self) -> bool:
         """当前是否有特供/主题曲处于激活态（含播完即停尚未收尾）。"""
-        return (
-            self._special_track is not None
-            or self._loop_current
-            or self._stop_after_end
-        )
+        return self._special_track is not None or self._loop_current or self._stop_after_end
 
     @property
     def manual(self) -> bool:
@@ -351,9 +343,7 @@ class MusicPlayer(QObject):
                 self._tracks.append(Track(f))
                 added += 1
         if added:
-            self._tracks.sort(
-                key=lambda t: (str(t.path.parent).lower(), t.path.name.lower())
-            )
+            self._tracks.sort(key=lambda t: (str(t.path.parent).lower(), t.path.name.lower()))
             self._index = self._reindex_after_sort()
             self._rebuild_order()
             self.list_changed.emit()
@@ -586,7 +576,6 @@ class MusicPlayer(QObject):
             track = Track(Path(track))
         self._start_track(track, gain, loop, stop_after_end)
         return track
-
 
     def stop_ambient(self):
         self._clear_special()

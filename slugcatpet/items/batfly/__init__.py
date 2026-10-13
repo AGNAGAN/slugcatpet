@@ -1,4 +1,5 @@
 """蝙蝠：乱飞、被叼挣扎、可被吃。"""
+
 from __future__ import annotations
 
 import math
@@ -104,10 +105,16 @@ class BatFlyKind(ItemKind):
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(_ICON_BODY)
         for sgn in (-1, 1):
-            p.drawPolygon(QPolygonF([QPointF(bx + sgn * w * 0.02, by - h * 0.16),
-                                     QPointF(bx + sgn * w * 0.46, by - h * 0.34),
-                                     QPointF(bx + sgn * w * 0.30, by + h * 0.06),
-                                     QPointF(bx + sgn * w * 0.02, by + h * 0.10)]))
+            p.drawPolygon(
+                QPolygonF(
+                    [
+                        QPointF(bx + sgn * w * 0.02, by - h * 0.16),
+                        QPointF(bx + sgn * w * 0.46, by - h * 0.34),
+                        QPointF(bx + sgn * w * 0.30, by + h * 0.06),
+                        QPointF(bx + sgn * w * 0.02, by + h * 0.10),
+                    ]
+                )
+            )
         body = QRectF(0, 0, w * 0.26, h * 0.40)
         body.moveCenter(QPointF(bx, by))
         p.drawEllipse(body)
@@ -126,7 +133,7 @@ def _shove(win):
     for b in win.batflies:
         key = id(b)
         if b.state != ItemState.MOUSE or b.eaten > 0:
-            cd.pop(key, None)             # __slots__ 无法挂属性，用 id 字典
+            cd.pop(key, None)  # __slots__ 无法挂属性，用 id 字典
             continue
         if key in cd:
             continue
@@ -151,7 +158,10 @@ def _draw_one(win, p, bat, ts):
     if bat.eaten > 0:
         vf = win._batfly_vibe + (id(bat) & 0x3F)
         ox, oy = (vf % 3) - 1.0, ((vf // 2) % 3) - 1.0
-        x += ox; y += oy; lx += ox; ly += oy
+        x += ox
+        y += oy
+        lx += ox
+        ly += oy
     body_ang = _ang_from_up(x - lx, y - ly)
     abdomen = clampf(math.hypot(x - lx, y - ly), BATFLY_ABDOMEN_MIN, BATFLY_ABDOMEN_MAX)
     flap_depth = bat.last_flap_depth + (bat.flap_depth - bat.last_flap_depth) * ts
@@ -161,18 +171,16 @@ def _draw_one(win, p, bat, ts):
     p.setPen(Qt.PenStyle.NoPen)
     for i in range(2):
         if (i == 0 and bat.bites != 3) or (i == 1 and bat.bites <= 1):
-            continue                              # bites: 3 两翅 2 一翅 1 无翅
+            continue  # bites: 3 两翅 2 一翅 1 无翅
         wcur = lerp(bat.wings[i][1], bat.wings[i][0], ts)
         a = lerp(wcur, 0.5, lerp(0.3, 0.0, flap_depth))
-        steer_fold = (0.0 if (steer < 0.0) == (i == 0)
-                      else clampf(abs(steer * 0.85) - 0.1, 0.0, 1.0))
+        steer_fold = 0.0 if (steer < 0.0) == (i == 0) else clampf(abs(steer * 0.85) - 0.1, 0.0, 1.0)
         a = lerp(a, 0.5, steer_fold)
         a = inv_lerp(0.01, 0.99, a * a)
         # 折角压缩到 40~145°，防读作垂臂
         wing_ang = (-1.0 if i == 0 else 1.0) * (40.0 + 105.0 * a) + body_ang
-        sx = (1.0 if bat.flap_speed < 0.0
-              else 1.0 - 0.6 * math.sin(wcur * math.pi) * (1.0 - steer_fold))
-        sx *= (-1.0 if i == 0 else 1.0)
+        sx = 1.0 if bat.flap_speed < 0.0 else 1.0 - 0.6 * math.sin(wcur * math.pi) * (1.0 - steer_fold)
+        sx *= -1.0 if i == 0 else 1.0
         _wing(p, x, y, wing_ang, sx)
     _body(p, x, y, body_ang, abdomen)
     _eyes(p, x, y, body_ang)
@@ -180,7 +188,7 @@ def _draw_one(win, p, bat, ts):
 
 
 def _body(p, x, y, ang, abdomen):
-    q = int(round(abdomen * 8.0))         # 1/8px 量化，路径按档缓存
+    q = int(round(abdomen * 8.0))  # 1/8px 量化，路径按档缓存
     path = _BODY_PATHS.get(q)
     if path is None:
         hw = BATFLY_BODY_HALF_W

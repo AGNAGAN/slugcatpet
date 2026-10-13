@@ -1,4 +1,5 @@
 """竖/横杆几何实体；攀爬逻辑见 pole_climb.py。"""
+
 from __future__ import annotations
 
 from ..state import ItemState

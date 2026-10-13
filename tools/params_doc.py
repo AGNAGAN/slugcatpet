@@ -1,4 +1,5 @@
 """从能力 / 行为模块的 params 表生成 ai-docs/PARAMS.md。"""
+
 from __future__ import annotations
 
 import argparse
@@ -38,23 +39,33 @@ def render() -> str:
     from slugcatpet.behaviors import BUILTIN as BEHAVIORS
     from slugcatpet.characters import REGISTRY
 
-    users = {cls.key: [k for k, d in REGISTRY.items() if cls.key in d.abilities]
-             for cls in ABILITIES}
-    out = ["# 能力与行为参数", "",
-           "> 本文件由 `python tools/params_doc.py` 从代码生成，请勿手改。",
-           "> 角色怎么写见 [CHARACTERS.md](CHARACTERS.md)，整体结构见 [ARCHITECTURE.md](ARCHITECTURE.md)。", "",
-           "角色定义（`slugcatpet/resources/characters/<key>.json`）里这样覆盖参数：", "",
-           "```json",
-           '"abilities": {"tongue": {"ceiling_drop": false}, "ascension": {}},',
-           '"behaviors": {"cursor_lick": {"dwell_ticks": 120}, "dodge_kill": false}',
-           "```", "",
-           "- `abilities`：这只猫有哪些能力（键）以及参数覆盖（值，`{}` = 全用默认）。",
-           "- `behaviors`：行为按能力自动挂载，这里只写例外：`false` 关掉，对象 = 覆盖参数。",
-           "- 带心情候选的行为，权重还会乘以性格权重（好动度 × `toy_pref[心情名]`）。", "",
-           "## 性格", "",
-           "角色 JSON 的 `personality` 各轴作用如下，换算都在 `characters/personality.py` 的 `Traits` 里。", "",
-           "| 轴 | 作用 |", "|---|---|"]
+    users = {cls.key: [k for k, d in REGISTRY.items() if cls.key in d.abilities] for cls in ABILITIES}
+    out = [
+        "# 能力与行为参数",
+        "",
+        "> 本文件由 `python tools/params_doc.py` 从代码生成，请勿手改。",
+        "> 角色怎么写见 [CHARACTERS.md](CHARACTERS.md)，整体结构见 [ARCHITECTURE.md](ARCHITECTURE.md)。",
+        "",
+        "角色定义（`slugcatpet/resources/characters/<key>.json`）里这样覆盖参数：",
+        "",
+        "```json",
+        '"abilities": {"tongue": {"ceiling_drop": false}, "ascension": {}},',
+        '"behaviors": {"cursor_lick": {"dwell_ticks": 120}, "dodge_kill": false}',
+        "```",
+        "",
+        "- `abilities`：这只猫有哪些能力（键）以及参数覆盖（值，`{}` = 全用默认）。",
+        "- `behaviors`：行为按能力自动挂载，这里只写例外：`false` 关掉，对象 = 覆盖参数。",
+        "- 带心情候选的行为，权重还会乘以性格权重（好动度 × `toy_pref[心情名]`）。",
+        "",
+        "## 性格",
+        "",
+        "角色 JSON 的 `personality` 各轴作用如下，换算都在 `characters/personality.py` 的 `Traits` 里。",
+        "",
+        "| 轴 | 作用 |",
+        "|---|---|",
+    ]
     from slugcatpet.characters.personality import EFFECTS
+
     out += [f"| `{k}` | {v} |" for k, v in EFFECTS]
     out += ["", "## 能力", ""]
     for cls in ABILITIES:
@@ -71,6 +82,7 @@ def render() -> str:
     for cls in BEHAVIORS:
         out += [f"### {cls.title['zh']} `{cls.key}`", "", cls.doc, ""]
         from slugcatpet.items.base import USES
+
         abil = [r for r in cls.requires if r not in USES]
         uses = [r for r in cls.requires if r in USES]
         meta = ["需要能力：" + ("、".join(f"`{r}`" for r in abil) or "无（所有猫）")]

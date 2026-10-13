@@ -1,4 +1,5 @@
 """DMS 兼容部件组、物种帧名映射、锚点与约束上限。"""
+
 from __future__ import annotations
 
 import re
@@ -15,9 +16,14 @@ GROUPS: dict[str, list[str]] = {
     "BODY": ["BodyA"],
     "ARMS": _seq("PlayerArm", 13) + ["OnTopOfTerrainHand", "OnTopOfTerrainHand2"],
     "HIPS": ["HipsA"],
-    "LEGS": (_seq("LegsA", 7) + ["LegsAAir0", "LegsAAir1"] + _seq("LegsAClimbing", 7)
-             + _seq("LegsACrawling", 6) + _seq("LegsAOnPole", 7)
-             + ["LegsAPole", "LegsAVerticalPole", "LegsAWall"]),
+    "LEGS": (
+        _seq("LegsA", 7)
+        + ["LegsAAir0", "LegsAAir1"]
+        + _seq("LegsAClimbing", 7)
+        + _seq("LegsACrawling", 6)
+        + _seq("LegsAOnPole", 7)
+        + ["LegsAPole", "LegsAVerticalPole", "LegsAWall"]
+    ),
     "TAIL": ["TailTexture"],
     "FACESCAR": ["MushroomA"],
     "GILLS": ["LizardScaleA3", "LizardScaleB3"],
@@ -52,8 +58,7 @@ def generic_frame(frame: str, species: str | None) -> str:
 
 
 # 归一化锚点（y↓），同原版 FSprite.anchor
-_GROUP_ANCHOR = {"ARMS": (0.9, 0.5), "LEGS": (0.5, 0.75), "BODY": (0.5, 0.2105263),
-                 "GILLS": (0.5, 0.9)}
+_GROUP_ANCHOR = {"ARMS": (0.9, 0.5), "LEGS": (0.5, 0.75), "BODY": (0.5, 0.2105263), "GILLS": (0.5, 0.9)}
 _FRAME_ANCHOR = {"OnTopOfTerrainHand": (0.5, 0.5), "OnTopOfTerrainHand2": (0.5, 0.5)}
 
 
@@ -68,9 +73,9 @@ def frame_anchor(frame: str) -> tuple[float, float]:
 LEFT_PREFIX = "Left"
 RIGHT_PREFIX = "Right"
 
-MAX_ATLAS_SIDE = 4096              # 单张图集宽/高 px
+MAX_ATLAS_SIDE = 4096  # 单张图集宽/高 px
 MAX_PACK_BYTES = 32 * 1024 * 1024  # 单个皮肤目录全部 png 总大小
-MAX_FRAMES = 1024                  # 单个皮肤总帧数
-MAX_EXTENT = 256.0                 # 不透明像素离锚点最远距离（逻辑 px），超出则该组拒绝
+MAX_FRAMES = 1024  # 单个皮肤总帧数
+MAX_EXTENT = 256.0  # 不透明像素离锚点最远距离（逻辑 px），超出则该组拒绝
 MAX_ID_LEN = 100
 MAX_NAME_LEN = 60

@@ -1,4 +1,5 @@
 """图集加载与裁切，支持 tint 着色。"""
+
 from __future__ import annotations
 import json
 import re
@@ -43,8 +44,7 @@ def load_json_lenient(path: Path):
 class Atlas:
     _CACHE_CAP = 512
 
-    def __init__(self, name: str, base: Path, image_path: Path | None = None,
-                 data_path: Path | None = None):
+    def __init__(self, name: str, base: Path, image_path: Path | None = None, data_path: Path | None = None):
         """name 不带扩展名，如 'rainWorld'；给出 image_path/data_path 时忽略 name/base。"""
         image_path = image_path or (base / f"{name}.png")
         data_path = data_path or (base / name)
@@ -61,8 +61,7 @@ class Atlas:
     def _key(frame_name: str) -> str:
         return frame_name if frame_name.endswith(".png") else frame_name + ".png"
 
-    def sprite(self, frame_name: str, tint: QColor | None = None,
-               padded: bool = True) -> QPixmap:
+    def sprite(self, frame_name: str, tint: QColor | None = None, padded: bool = True) -> QPixmap:
         ck = (frame_name, tint.rgba() if tint else None, padded)
         if ck in self._cache:
             self._cache.move_to_end(ck)
@@ -72,6 +71,7 @@ class Atlas:
         sub = self.image.copy(fr["x"], fr["y"], fr["w"], fr["h"])
         if e.get("rotated"):
             from PySide6.QtGui import QTransform
+
             sub = sub.transformed(QTransform().rotate(-90))
         if tint is not None:
             sub = self._apply_tint(sub, tint)
@@ -116,9 +116,7 @@ class Atlas:
 
 
 class AtlasSet:
-
-    KEYS = {"base": "rainWorld", "msc": "rainworldmsc",
-            "ui": "uiSprites", "uimsc": "uispritesmsc"}
+    KEYS = {"base": "rainWorld", "msc": "rainworldmsc", "ui": "uiSprites", "uimsc": "uispritesmsc"}
 
     def __init__(self, base: Path | None = None):
         base = base or resolve_assets_dir()
@@ -129,8 +127,7 @@ class AtlasSet:
     def get(self, key: str) -> Atlas:
         return self.atlases[key]
 
-    def sprite(self, key: str, frame: str, tint: QColor | None = None,
-               padded: bool = True) -> QPixmap:
+    def sprite(self, key: str, frame: str, tint: QColor | None = None, padded: bool = True) -> QPixmap:
         return self.atlases[key].sprite(frame, tint, padded)
 
     def source_size(self, key: str, frame: str) -> tuple[int, int]:

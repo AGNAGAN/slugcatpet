@@ -1,4 +1,5 @@
 """Saint 舌头：弹道舌尖 + 单向弹簧拉上身 chunk。"""
+
 from __future__ import annotations
 import math
 
@@ -10,7 +11,7 @@ SHOOTING = "shooting"
 ATTACHED = "attached"
 RETRACTING = "retracting"
 
-ZEROG_THRESH = 0.5        # 判零重力
+ZEROG_THRESH = 0.5  # 判零重力
 ZEROG_VEL_CLAMP = 4.0 * K_VEL
 
 
@@ -37,7 +38,7 @@ class Tongue:
         self.requested = 0.0
         self.anchor = None
         self.attached_obj = None
-        self._target_obj = None           # 飞行中待粘目标，命中转 attached_obj
+        self._target_obj = None  # 飞行中待粘目标，命中转 attached_obj
         self.attached_time = 0
         self.room_gravity = 1.0
         self.body = None
@@ -47,7 +48,7 @@ class Tongue:
         self.base_ideal = 150.0
         self.ideal = self.base_ideal
         self.total = 200.0
-        self.reel_rate = 0.0              # 0=纯弹性门控，非0=手动收绳速率
+        self.reel_rate = 0.0  # 0=纯弹性门控，非0=手动收绳速率
 
     def reset_config(self) -> None:
         self.shoot_v = 70.0 * K_VEL
@@ -166,7 +167,7 @@ class Tongue:
         elif self.mode == ATTACHED:
             self.attached_time += 1
             if self.room_gravity < ZEROG_THRESH and self.attached_time < 3:
-                self.mode = RETRACTING          # 零重力附着不稳定
+                self.mode = RETRACTING  # 零重力附着不稳定
                 return
             o = self.attached_obj
             if o is not None and getattr(o, "state", None) not in (ItemState.HANGING, ItemState.FREE):
@@ -177,14 +178,14 @@ class Tongue:
                 self.x, self.y = self.anchor
                 self.travel = math.hypot(self.x - mx, self.y - my)
                 self.elastic = max(0.0, self.elastic - 0.05 * K_VEL)
-                gated = (1.0 - self.elastic) * 2.0 * K_VEL              # 门控速率，命中瞬间≈0
+                gated = (1.0 - self.elastic) * 2.0 * K_VEL  # 门控速率，命中瞬间≈0
                 if self.requested < self.ideal:
                     self.requested = min(self.requested + gated, self.ideal)
                 elif self.requested > self.ideal:
                     reel = max(gated, self.reel_rate * K_VEL)
                     self.requested = max(self.requested - reel, self.ideal)
                 self._elasticity(head)
-                if self.travel > self.total * 2.5:                      # 超长保险丝
+                if self.travel > self.total * 2.5:  # 超长保险丝
                     self.mode = RETRACTING
 
         elif self.mode == RETRACTING:
@@ -195,7 +196,7 @@ class Tongue:
             self.y = my + uy * self.travel
             if self.travel <= 1.0:
                 self.mode = IDLE
-                self.owner = None                # 释权防死锁
+                self.owner = None  # 释权防死锁
                 self.anchor = None
                 self.attached_obj = None
                 self._target_obj = None
@@ -205,7 +206,7 @@ class Tongue:
             self.y = self.floor_y
 
     def _elasticity(self, head) -> None:
-        if getattr(head, "pinned", False):               # 拖拽中由光标驱动，不受舌头弹力
+        if getattr(head, "pinned", False):  # 拖拽中由光标驱动，不受舌头弹力
             return
         hx0, hy0 = head.x, head.y
         obj = self.attached_obj if self.mode == ATTACHED else None
@@ -231,7 +232,7 @@ class Tongue:
             head.y += uy * pt
             head.vx += ux * vt
             head.vy += uy * vt
-        else:                                            # Verlet Point：经 ox 注入冲量
+        else:  # Verlet Point：经 ox 注入冲量
             head.x += ux * pt
             head.y += uy * pt
             head.ox += ux * (pt - vt)
@@ -248,5 +249,7 @@ class Tongue:
         mx, my = self.mouth
         if self.mode == IDLE:
             return [(mx, my)] * self.n
-        return [(mx + (self.x - mx) * (i / (self.n - 1)),
-                 my + (self.y - my) * (i / (self.n - 1))) for i in range(self.n)]
+        return [
+            (mx + (self.x - mx) * (i / (self.n - 1)), my + (self.y - my) * (i / (self.n - 1)))
+            for i in range(self.n)
+        ]

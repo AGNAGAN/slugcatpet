@@ -1,4 +1,5 @@
 """物品类型 ItemKind：一种可放进世界的东西的放置、移除、拖拽、推进、绘制与用法。"""
+
 from __future__ import annotations
 
 import math
@@ -14,21 +15,20 @@ USES = frozenset((EDIBLE, THROWABLE, CLIMBABLE, WARM, CARRYABLE))
 
 
 class ItemKind:
-
     key = ""
     store = ""
     single = False
-    cap = 12                   # 上限；None 不限
+    cap = 12  # 上限；None 不限
     affords = frozenset()
     seed_key = None
-    layer = "front"            # 绘制层：mid（猫身后、手前）/ front / top（水之上）
-    mobile = True              # 会动：运动检测、出界夹回、重力、水位
+    layer = "front"  # 绘制层：mid（猫身后、手前）/ front / top（水之上）
+    mobile = True  # 会动：运动检测、出界夹回、重力、水位
     collides = False
     late_tick = False
-    geometry = False           # 增删会改变路径前提
+    geometry = False  # 增删会改变路径前提
     grab_pad = None
     grab_states = (ItemState.FREE,)
-    grab_rank = 0              # 重叠时大者先被拖
+    grab_rank = 0  # 重叠时大者先被拖
     fling_cap = 14.0
     splash_states = (ItemState.FREE,)
     dead_state = ItemState.EATEN
@@ -118,4 +118,5 @@ class ItemKind:
 
 def _pt(x, y):
     from PySide6.QtCore import QPointF
+
     return QPointF(x, y)

@@ -1,4 +1,5 @@
 """溪流招牌鳃：6 片鳞锚头 chunk，随视线/体轴扇形摆动。内部 y↑，入口/渲染各转一次 y。"""
+
 from __future__ import annotations
 import math
 
@@ -18,7 +19,7 @@ def _dir_vec(ax, ay, bx, by):
 
 
 def _vec_to_deg(vx, vy):
-    return math.degrees(math.atan2(vx, vy))     # atan2(x,y)，正上=0°
+    return math.degrees(math.atan2(vx, vy))  # atan2(x,y)，正上=0°
 
 
 def _clamp_mag(vx, vy, m):
@@ -45,17 +46,18 @@ def _inv_lerp(a, b, v):
     return 0.0 if t < 0.0 else (1.0 if t > 1.0 else t)
 
 
-_GILL_RIGOR = 0.5873646        # 拉拽响应/阻尼插值 t
-_GILL_SIZE_FAC = 1.310689      # 长/宽插值共乘
+_GILL_RIGOR = 0.5873646  # 拉拽响应/阻尼插值 t
+_GILL_SIZE_FAC = 1.310689  # 长/宽插值共乘
 _GILL_WIDTH_FAC = 0.1542603
-_GILL_BACK_FAC = 0.1759363     # ×每排后倾率=该排后倾度
-_GILL_ROW_ANCHOR_Y = (0.03570603, 0.02899241, 0.02639332)   # 每排锚高（占身高比例）
+_GILL_BACK_FAC = 0.1759363  # ×每排后倾率=该排后倾度
+_GILL_ROW_ANCHOR_Y = (0.03570603, 0.02899241, 0.02639332)  # 每排锚高（占身高比例）
 _GILL_ROW_LEN_FAC = (0.9722961, 0.6056554, 0.7223744)
 _GILL_ROW_BACK_FAC = (0.3644831, 0.9129724, 0.4567381)
 
 
 class _Scale:
     """单片鳃鳞：显式速度质点 + 定长点约束（内部 y↑）。"""
+
     __slots__ = ("x", "y", "lx", "ly", "vx", "vy", "length", "width")
 
     def __init__(self, x, y, length, width):
@@ -84,15 +86,14 @@ class _Scale:
 
 
 class Gills:
-
     def __init__(self, head_x, head_y, hip_x, hip_y, graphic_height):
-        self.flat = 0.0                 # 1=鳃锚退回世界水平（趴/睡）
+        self.flat = 0.0  # 1=鳃锚退回世界水平（趴/睡）
         self.rigor = _GILL_RIGOR
         self.graphic_height = graphic_height
         self.scales: list[_Scale] = []
         self.scales_y: list[float] = []
         self.backwards: list[float] = []
-        hx, hy = head_x, -head_y                     # y↓→y↑；初值锚头避免出生闪跳
+        hx, hy = head_x, -head_y  # y↓→y↑；初值锚头避免出生闪跳
         for row in range(len(_GILL_ROW_ANCHOR_Y)):
             length = _lerp(2.5, 15.0, _GILL_SIZE_FAC * _GILL_ROW_LEN_FAC[row])
             width = _lerp(0.65, 1.2, _GILL_WIDTH_FAC * _GILL_SIZE_FAC)
@@ -102,8 +103,7 @@ class Gills:
                 self.scales_y.append(_GILL_ROW_ANCHOR_Y[row])
                 self.backwards.append(back)
 
-    def update(self, head_x, head_y, hip_x, hip_y, look_x, look_y, submerged=False,
-               flat_anchor=0.0):
+    def update(self, head_x, head_y, hip_x, hip_y, look_x, look_y, submerged=False, flat_anchor=0.0):
         hx0, hy0 = head_x, -head_y
         hipx, hipy = hip_x, -hip_y
         look_deg = _vec_to_deg(look_x, -look_y)
@@ -132,7 +132,7 @@ class Gills:
             fanx, fany = _rotate_vec_deg(bux, buy, base)
             dvx, dvy = _dir_vec(hipx, hipy, posx, posy)
             ax, ay = _lerp_vec(fanx, fany, dvx, dvy, look_amt)
-            if self.scales_y[i] < 0.2:                # 恒真：低位鳞外推
+            if self.scales_y[i] < 0.2:  # 恒真：低位鳞外推
                 factor = (_inv_lerp(0.2, 0.0, self.scales_y[i]) ** 2) * 2.0
                 ax -= outx * factor
                 ay -= outy * factor

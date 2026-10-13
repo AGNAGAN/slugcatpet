@@ -1,4 +1,5 @@
 """SlugStats：每种族的移动因子/体重/饱食/动作冲量数值；DEFAULT_STATS=现值基线。"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
@@ -64,7 +65,7 @@ class SlugStats:
     drown_threshold: float = 1.0 / 3.0  # 缺氧挣扎/自救阈
     swim_force_fac: float = 1.0
     bubble_fac: float = 1.0
-    swim_leap_fac: float = 1.0        # 水里错开时上跳的力度
+    swim_leap_fac: float = 1.0  # 水里错开时上跳的力度
 
     # 0-based，HUD 显示 +1；None=用全局 KARMA_MAX
     karma_cap: int | None = None

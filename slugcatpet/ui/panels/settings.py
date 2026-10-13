@@ -1,8 +1,23 @@
 """设置窗：两栏分组（猫、外观、交互、环境 | 性能、声音、系统），关窗即写盘。"""
+
 from __future__ import annotations
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel,
-                               QPushButton, QCheckBox, QRadioButton, QButtonGroup, QFrame,
-                               QDialog, QComboBox, QLineEdit, QScrollArea, QSlider)
+from PySide6.QtWidgets import (
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QGridLayout,
+    QLabel,
+    QPushButton,
+    QCheckBox,
+    QRadioButton,
+    QButtonGroup,
+    QFrame,
+    QDialog,
+    QComboBox,
+    QLineEdit,
+    QScrollArea,
+    QSlider,
+)
 from PySide6.QtCore import Qt, QTimer
 
 from ...characters import REGISTRY, all_variants
@@ -16,10 +31,10 @@ from ..theme import qss
 from ...platform import autostart
 
 
-_CHECK = (resource_dir() / "icons" / "check.svg").as_posix()   # 缺 QtSvg 时退化为高亮块
+_CHECK = (resource_dir() / "icons" / "check.svg").as_posix()  # 缺 QtSvg 时退化为高亮块
 
 _QSS = qss.settings_window(_CHECK)
-CAT_ROWS_SHOWN = 6           # 猫列表超过这么多行就在自身区域里滚动
+CAT_ROWS_SHOWN = 6  # 猫列表超过这么多行就在自身区域里滚动
 
 
 class _Combo(QComboBox):
@@ -74,7 +89,7 @@ class SettingsWindow(QWidget):
         self._window = window
         self._hud = hud
         self._write_state = write_state
-        window._settings_panel = self    # 供 window 反向同步世界态
+        window._settings_panel = self  # 供 window 反向同步世界态
         self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowStaysOnTopHint)
         self.setWindowTitle(t("settings_title"))
         self.setStyleSheet(_QSS)
@@ -86,8 +101,8 @@ class SettingsWindow(QWidget):
         self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._outer.addWidget(self._scroll)
         self._body = None
-        self._dlg = None                 # 弹窗单例守卫
-        self._roster = None              # 当前显示的 (猫, 是否收起)
+        self._dlg = None  # 弹窗单例守卫
+        self._roster = None  # 当前显示的 (猫, 是否收起)
         self._cats_area = None
         self._rebuild()
 
@@ -116,10 +131,16 @@ class SettingsWindow(QWidget):
         cols.addWidget(self._vdivider())
         right = self._column(cols)
         from .appearance import build_skin_section
-        for v, build in ((left, self._section_cats), (left, lambda v: build_skin_section(self, v)),
-                         (left, self._section_interact), (left, self._section_env),
-                         (right, self._section_perf), (right, self._section_sound),
-                         (right, self._section_system)):
+
+        for v, build in (
+            (left, self._section_cats),
+            (left, lambda v: build_skin_section(self, v)),
+            (left, self._section_interact),
+            (left, self._section_env),
+            (right, self._section_perf),
+            (right, self._section_sound),
+            (right, self._section_system),
+        ):
             if v.count():
                 v.addSpacing(8)
             build(v)
@@ -161,9 +182,9 @@ class SettingsWindow(QWidget):
 
     @staticmethod
     def _header(text):
-        l = QLabel(text)
-        l.setObjectName("secHeader")
-        return l
+        lbl = QLabel(text)
+        lbl.setObjectName("secHeader")
+        return lbl
 
     @staticmethod
     def _vdivider():
@@ -200,6 +221,7 @@ class SettingsWindow(QWidget):
             apply(n)
             if not sl.isSliderDown():
                 self._write_state()
+
         sl.valueChanged.connect(changed)
         sl.sliderReleased.connect(self._write_state)
         return sl
@@ -232,8 +254,9 @@ class SettingsWindow(QWidget):
                 vis = QPushButton(t("settings_hide_pet"))
                 vis.clicked.connect(lambda _c, p=pet: w.hide_pet(p) and self._rebuild())
             fm = vis.fontMetrics()
-            vis.setMinimumWidth(max(fm.horizontalAdvance(t(k)) for k in
-                                    ("settings_hide_pet", "settings_show_pet")) + 28)
+            vis.setMinimumWidth(
+                max(fm.horizontalAdvance(t(k)) for k in ("settings_hide_pet", "settings_show_pet")) + 28
+            )
             row.addWidget(vis)
             rm = QPushButton(t("settings_remove"))
             rm.clicked.connect(lambda _c, p=pet: self._on_remove(p))
@@ -249,8 +272,7 @@ class SettingsWindow(QWidget):
             gap = rows_v.spacing()
             row_h = (rows.sizeHint().height() - gap * (len(pets) - 1)) / len(pets)
             area.setFixedHeight(round(row_h * CAT_ROWS_SHOWN + gap * (CAT_ROWS_SHOWN - 1)))
-            area.setMinimumWidth(rows.sizeHint().width()
-                                 + area.verticalScrollBar().sizeHint().width())
+            area.setMinimumWidth(rows.sizeHint().width() + area.verticalScrollBar().sizeHint().width())
             self._cats_area = area
             v.addWidget(area)
         else:
@@ -280,7 +302,7 @@ class SettingsWindow(QWidget):
     def _on_rename(self, pet, edit):
         edit.committed = edit.text()
         if edit.text().strip() != pet.name:
-            self._window.rename_pet(pet, edit.text())     # 内部写盘
+            self._window.rename_pet(pet, edit.text())  # 内部写盘
 
     def _on_max_pets(self, n):
         self._window.set_max_pets(n)
@@ -294,10 +316,14 @@ class SettingsWindow(QWidget):
         current = self._current_env()
         grid = QGridLayout()
         grid.setSpacing(6)
-        for i, (key, label_key) in enumerate((("none", "settings_env_none"),
-                                              ("blizzard", "settings_snow"),
-                                              ("zerog", "settings_zerog"),
-                                              ("water", "settings_water"))):
+        for i, (key, label_key) in enumerate(
+            (
+                ("none", "settings_env_none"),
+                ("blizzard", "settings_snow"),
+                ("zerog", "settings_zerog"),
+                ("water", "settings_water"),
+            )
+        ):
             rb = QRadioButton(t(label_key))
             rb.setChecked(key == current)
             rb.toggled.connect(lambda checked, k=key: checked and self._on_env_selected(k))
@@ -308,8 +334,14 @@ class SettingsWindow(QWidget):
         row = QHBoxLayout()
         row.addWidget(QLabel(t("settings_water_depth")))
         row.addStretch(1)
-        depth = self._range(row, 5, 95, round(self._window.cfg_water_depth * 100),
-                            lambda n: f"{n}%", lambda n: self._window.set_water_depth(n / 100.0))
+        depth = self._range(
+            row,
+            5,
+            95,
+            round(self._window.cfg_water_depth * 100),
+            lambda n: f"{n}%",
+            lambda n: self._window.set_water_depth(n / 100.0),
+        )
         depth.setSingleStep(5)
         depth.setPageStep(10)
         v.addLayout(row)
@@ -319,7 +351,8 @@ class SettingsWindow(QWidget):
         fs.addItem(t("settings_fs_sink"), "sink")
         fs.setCurrentIndex(max(0, fs.findData(w.cfg_fullscreen_mode)))
         fs.currentIndexChanged.connect(
-            lambda _i: (w.set_fullscreen_mode(fs.currentData()), self._write_state()))
+            lambda _i: (w.set_fullscreen_mode(fs.currentData()), self._write_state())
+        )
         self._row(v, "settings_fullscreen", fs)
 
     def _current_env(self):
@@ -361,10 +394,18 @@ class SettingsWindow(QWidget):
     def _section_interact(self, v):
         v.addWidget(self._header(t("settings_interact_section")))
         w = self._window
-        self._check(v, "settings_cursor_hijack", w.cfg_cursor_hijack,
-                    lambda on: (w.set_cursor_hijack(on), self._write_state()))
-        self._check(v, "settings_cursor_shape", w.cfg_cursor_shape,
-                    lambda on: (w.set_cursor_shape(on), self._write_state()))
+        self._check(
+            v,
+            "settings_cursor_hijack",
+            w.cfg_cursor_hijack,
+            lambda on: (w.set_cursor_hijack(on), self._write_state()),
+        )
+        self._check(
+            v,
+            "settings_cursor_shape",
+            w.cfg_cursor_shape,
+            lambda on: (w.set_cursor_shape(on), self._write_state()),
+        )
 
     def _section_perf(self, v):
         v.addWidget(self._header(t("settings_perf_section")))
@@ -374,11 +415,11 @@ class SettingsWindow(QWidget):
         for fps in (30, 60, 90, 120, 144, 165, 240):
             combo.addItem(f"{fps} FPS", fps)
         combo.setCurrentIndex(max(0, combo.findData(w.cfg_fps)))
-        combo.currentIndexChanged.connect(
-            lambda _i: (w.set_fps(combo.currentData()), self._write_state()))
+        combo.currentIndexChanged.connect(lambda _i: (w.set_fps(combo.currentData()), self._write_state()))
         self._row(v, "settings_fps", combo)
-        self._check(v, "settings_power_save", w.cfg_power_save,
-                    lambda on: (w.set_power_save(on), self._write_state()))
+        self._check(
+            v, "settings_power_save", w.cfg_power_save, lambda on: (w.set_power_save(on), self._write_state())
+        )
 
     def _section_system(self, v):
         v.addWidget(self._header(t("settings_sys_section")))
@@ -396,7 +437,7 @@ class SettingsWindow(QWidget):
     @staticmethod
     def _on_autostart(chk, on):
         autostart.set_enabled(on)
-        if autostart.is_enabled() != on:      # 写注册表失败就回到真实状态
+        if autostart.is_enabled() != on:  # 写注册表失败就回到真实状态
             chk.blockSignals(True)
             chk.setChecked(not on)
             chk.blockSignals(False)
@@ -411,15 +452,18 @@ class SettingsWindow(QWidget):
 
         def flag(key):
             return lambda on: (prm.__setitem__(key, bool(on)), self._write_state())
+
         self._check(v, "settings_mute_all", player.muted, player.set_mute)
-        self._check(v, "settings_zerog_music", prm.get("music_zerog_enabled", True),
-                    flag("music_zerog_enabled"))
+        self._check(
+            v, "settings_zerog_music", prm.get("music_zerog_enabled", True), flag("music_zerog_enabled")
+        )
 
     # 增删走卡片弹窗（open()=WindowModal，不 exec）
     def _on_look(self, pet):
         if self._dlg is not None:
             return
         from .appearance import AppearanceDialog
+
         dlg = AppearanceDialog(pet, parent=self)
         dlg.finished.connect(lambda _r: self._look_finished(dlg))
         self._dlg = dlg
@@ -441,8 +485,14 @@ class SettingsWindow(QWidget):
             if variant in REGISTRY and REGISTRY[variant].wip:
                 lbl += t("variant_wip_note")
             labels.append(lbl)
-        dlg = PickDialog(t("settings_pick_title"), t("settings_pick_cat"), labels,
-                         t("settings_ok"), t("settings_cancel"), parent=self)
+        dlg = PickDialog(
+            t("settings_pick_title"),
+            t("settings_pick_cat"),
+            labels,
+            t("settings_ok"),
+            t("settings_cancel"),
+            parent=self,
+        )
         dlg.finished.connect(lambda r, d=dlg: self._add_finished(d, r))
         self._dlg = dlg
         dlg.place_center(self)
@@ -452,15 +502,20 @@ class SettingsWindow(QWidget):
         self._dlg = None
         dlg.deleteLater()
         if result == QDialog.DialogCode.Accepted:
-            self._window.add_pet(self._pick_variants[dlg.selected_index()])   # 内部刷 HUD+写盘
+            self._window.add_pet(self._pick_variants[dlg.selected_index()])  # 内部刷 HUD+写盘
             self._rebuild()
 
     def _on_remove(self, pet):
         if self._dlg is not None:
             return
         name = pet_label(pet, self._window.all_pets())
-        dlg = ConfirmDialog(t("settings_remove"), t("settings_remove_confirm", name=name),
-                            t("settings_remove"), t("settings_cancel"), parent=self)
+        dlg = ConfirmDialog(
+            t("settings_remove"),
+            t("settings_remove_confirm", name=name),
+            t("settings_remove"),
+            t("settings_cancel"),
+            parent=self,
+        )
         dlg.finished.connect(lambda r, p=pet, d=dlg: self._remove_finished(p, d, r))
         self._dlg = dlg
         dlg.place_center(self)
@@ -484,4 +539,4 @@ class SettingsWindow(QWidget):
             return
         rb = radios.get(self._current_env())
         if rb is not None and not rb.isChecked():
-            rb.setChecked(True)   # 互斥自动清其余，幂等
+            rb.setChecked(True)  # 互斥自动清其余，幂等

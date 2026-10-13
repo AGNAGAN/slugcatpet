@@ -1,4 +1,5 @@
 """爆跳扑咬。"""
+
 from __future__ import annotations
 
 import math
@@ -13,7 +14,7 @@ from ...abilities.pyro import mechanics as pyro
 from ...brain.state import T_ACTIVITY, VIGOROUS
 from ..base import Behavior
 
-BODY_LEN = 34.0          # 一个身位：chunk 间距 17 + 两端半径
+BODY_LEN = 34.0  # 一个身位：chunk 间距 17 + 两端半径
 OVER_PAD = 6.0
 NEAR_DIST = BODY_LEN
 NEAR_GIVEUP = BODY_LEN * 2.5
@@ -26,9 +27,9 @@ HOLD_MAX = 400
 LAUNCH_TIMEOUT = 80
 APPROACH_TIMEOUT = 200
 MAUL_TIMEOUT = 600
-CHEW_TICKS = 60          # ~1.5s
-BITE_PERIOD = 8          # 原版 maul：每 8 tick 一口
-JITTER_PERIOD = 3        # 原版 maul：每 3 tick 身体微抖
+CHEW_TICKS = 60  # ~1.5s
+BITE_PERIOD = 8  # 原版 maul：每 8 tick 一口
+JITTER_PERIOD = 3  # 原版 maul：每 3 tick 身体微抖
 JITTER_AMP = 1.2
 
 
@@ -88,19 +89,27 @@ def _mount(fsm, p):
 
     def body_dist(cursor):
         c0, c1 = fsm.body.chunk0, fsm.body.chunk1
-        return min(math.hypot(cursor[0] - c0.x, cursor[1] - c0.y),
-                   math.hypot(cursor[0] - c1.x, cursor[1] - c1.y))
+        return min(
+            math.hypot(cursor[0] - c0.x, cursor[1] - c0.y), math.hypot(cursor[0] - c1.x, cursor[1] - c1.y)
+        )
 
     def gates_ok():
         b = fsm.body
-        if fsm.cursor is not None and fsm.cursor[1] > fsm.HL - 8.0:   # 光标贴着地面咬不到
+        if fsm.cursor is not None and fsm.cursor[1] > fsm.HL - 8.0:  # 光标贴着地面咬不到
             return False
-        return (fsm.state == "IdleStand" and b.on_floor()
-                and not fsm.grab.active and not fsm._exhausted
-                and not fsm._zerog() and not b.swimming
-                and fsm.win.cursor_hijack is None
-                and b.carried_fruit is None and b.carried_stone is None
-                and b.temper <= temper_gate and maul.cooldown <= 0)
+        return (
+            fsm.state == "IdleStand"
+            and b.on_floor()
+            and not fsm.grab.active
+            and not fsm._exhausted
+            and not fsm._zerog()
+            and not b.swimming
+            and fsm.win.cursor_hijack is None
+            and b.carried_fruit is None
+            and b.carried_stone is None
+            and b.temper <= temper_gate
+            and maul.cooldown <= 0
+        )
 
     def reset_track():
         maul.pass_ = False
@@ -132,7 +141,7 @@ def _mount(fsm, p):
             if not maul.over:
                 maul.pass_ = True
                 maul.rolled = False
-            maul.near_t += 1      # 悬在身上也算 1 身位内
+            maul.near_t += 1  # 悬在身上也算 1 身位内
             if maul.near_t >= p.near_ticks:
                 trigger("walkup")
         elif cursor is None:
@@ -148,8 +157,12 @@ def _mount(fsm, p):
                 if d >= POUNCE_MIN and not maul.rolled:
                     maul.rolled = True
                     rise = fsm.body.chunk0.y - cursor[1]
-                    if (fsm.rng.random() < p.pounce_prob and fuel_ok()
-                            and d <= POUNCE_MAX and rise <= POUNCE_MAX_RISE):
+                    if (
+                        fsm.rng.random() < p.pounce_prob
+                        and fuel_ok()
+                        and d <= POUNCE_MAX
+                        and rise <= POUNCE_MAX_RISE
+                    ):
                         trigger("pounce")
                     else:
                         maul.pass_ = False
@@ -200,20 +213,18 @@ def _mount(fsm, p):
             return
         ph = maul.phase
         if ph == "approach":
-            if (cursor is None or body_dist(cursor) > NEAR_GIVEUP
-                    or fsm.timer > APPROACH_TIMEOUT):
+            if cursor is None or body_dist(cursor) > NEAR_GIVEUP or fsm.timer > APPROACH_TIMEOUT:
                 finish(b)
                 return
             fsm.gfx.look_at = cursor
             mox, moy = fsm.gfx.mouth_world()
-            if (math.hypot(cursor[0] - mox, cursor[1] - moy) <= NEAR_CATCH_R
-                    and fsm.win.cursor_hijack is None):
+            if math.hypot(cursor[0] - mox, cursor[1] - moy) <= NEAR_CATCH_R and fsm.win.cursor_hijack is None:
                 maul.hj = fsm.win.start_cursor_hold(mox, moy, HOLD_MAX)
-                if maul.hj is not None:                 # 设置里关了抢光标时咬不住
+                if maul.hj is not None:  # 设置里关了抢光标时咬不住
                     enter_chew(b)
                     return
             dx = abs(cursor[0] - b.chunk1.x)
-            if dx < 14.0:                   # 到了光标正下方还咬不到就放弃，别原地来回蹭
+            if dx < 14.0:  # 到了光标正下方还咬不到就放弃，别原地来回蹭
                 b.stop_walk()
                 b.walk_speed_target = None
                 if abs(cursor[1] - moy) > NEAR_CATCH_R * 1.3 or cursor[1] > fsm.HL - 8.0:
@@ -233,8 +244,7 @@ def _mount(fsm, p):
                     return
                 d = body_dist(cursor)
                 rise = b.chunk0.y - cursor[1]
-                if (d < POUNCE_MIN * 0.7 or d > POUNCE_MAX
-                        or rise > POUNCE_MAX_RISE):
+                if d < POUNCE_MIN * 0.7 or d > POUNCE_MAX or rise > POUNCE_MAX_RISE:
                     finish(b)
                     return
                 maul.ft = _fire_tick_for(d)
@@ -274,7 +284,7 @@ def _mount(fsm, p):
                 if maul.launch_t > LAUNCH_TIMEOUT:
                     finish(b)
             return
-        
+
         maul.chew_t += 1
         mox, moy = pin_to_mouth()
         fsm.gfx.look_at = (mox, moy)
@@ -300,5 +310,6 @@ def _mount(fsm, p):
         maul.cooldown = p.cooldown
 
     fsm.register_ticker(watch)
-    fsm.register_state("PyroMaul", enter=enter, tick=st_pyromaul,
-                       brk=brk, kill_break=brk, tier=T_ACTIVITY, energy=VIGOROUS)
+    fsm.register_state(
+        "PyroMaul", enter=enter, tick=st_pyromaul, brk=brk, kill_break=brk, tier=T_ACTIVITY, energy=VIGOROUS
+    )

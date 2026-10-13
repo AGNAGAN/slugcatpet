@@ -1,4 +1,5 @@
 """超度：业力满且好感疏远时触发。"""
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -12,7 +13,9 @@ from ..base import Behavior
 class Ascend(Behavior):
     key = "ascend"
     title = {"zh": "超度", "en": "Ascend"}
-    doc = "业力满且好感 ≤ temper_gate 时：杀死弹窗出现、被拎住 grab_ticks、被砸晕醒来，都会超度（比躲杀优先）。"
+    doc = (
+        "业力满且好感 ≤ temper_gate 时：杀死弹窗出现、被拎住 grab_ticks、被砸晕醒来，都会超度（比躲杀优先）。"
+    )
     requires = ("ascension",)
     params = {
         "temper_gate": Param(-0.20, -1.0, 1.0, "好感 ≤ 此值（且业力满）才会超度"),
@@ -27,8 +30,7 @@ def _mount(fsm, p):
     asc = SimpleNamespace(effect=None)
 
     def ready():
-        return (fsm.body.karma >= fsm.body.karma_max
-                and fsm.body.temper <= p.temper_gate)
+        return fsm.body.karma >= fsm.body.karma_max and fsm.body.temper <= p.temper_gate
 
     def enter():
         fsm.grab.force_release()
@@ -69,9 +71,9 @@ def _mount(fsm, p):
         fsm._transition("Ascension")
         return True
 
-    fsm.register_state("Ascension", enter=enter, tick=st_ascension,
-                       kill_break=kill_brk, fx=lambda: asc.effect,
-                       tier=T_LOCKED)
+    fsm.register_state(
+        "Ascension", enter=enter, tick=st_ascension, kill_break=kill_brk, fx=lambda: asc.effect, tier=T_LOCKED
+    )
     fsm.drag_takeover = drag_takeover
     fsm.stun_takeover = stun_takeover
     fsm.add_threat_responder(respond)

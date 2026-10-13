@@ -1,4 +1,5 @@
 """爆破（工匠）：空中爆跳 / 招架、燃料计数与过热、水下憋气见底即溺爆。"""
+
 from __future__ import annotations
 
 from ..base import Ability, Param
@@ -9,13 +10,18 @@ from .reach import PyroJumpReach
 class PyroAbility(Ability):
     key = "pyro"
     title = {"zh": "爆破", "en": "Pyro"}
-    doc = ("空中爆跳（手动控制可招架）；每跳燃料 +1、随时间回落，过热眩晕、满了自爆；"
-           "水下憋气降到 drown_burst_air 即溺爆。AI 只在燃料 ≤ heat_cap 时爆跳，永不自爆。")
+    doc = (
+        "空中爆跳（手动控制可招架）；每跳燃料 +1、随时间回落，过热眩晕、满了自爆；"
+        "水下憋气降到 drown_burst_air 即溺爆。AI 只在燃料 ≤ heat_cap 时爆跳，永不自爆。"
+    )
     params = {
-        "heat_cap": Param(mechanics.WARN_AT, 0, mechanics.CAPACITY - 1,
-                          "AI 自主爆跳的燃料上限（默认 = 过热警告线，AI 永不至眩晕 / 自爆）"),
-        "drown_burst_air": Param(0.65, 0.0, 0.95,
-                                 "水下憋气剩余降到此值即溺爆（也是气量条的死亡下界）"),
+        "heat_cap": Param(
+            mechanics.WARN_AT,
+            0,
+            mechanics.CAPACITY - 1,
+            "AI 自主爆跳的燃料上限（默认 = 过热警告线，AI 永不至眩晕 / 自爆）",
+        ),
+        "drown_burst_air": Param(0.65, 0.0, 0.95, "水下憋气剩余降到此值即溺爆（也是气量条的死亡下界）"),
     }
 
     def fuel_ok(self, body, cost=1):

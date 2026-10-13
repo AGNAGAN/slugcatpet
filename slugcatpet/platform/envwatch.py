@@ -1,4 +1,5 @@
 """环境守望：别的程序全屏时收起或沉底 + 工作区/任务栏适应 + 置顶保持，单定时器 ≤2s 轮询。"""
+
 from __future__ import annotations
 import ctypes
 from ctypes import wintypes
@@ -8,15 +9,23 @@ from PySide6.QtGui import QGuiApplication
 
 from .topmost import TopmostKeeper
 
-_TRUSTED_FULLSCREEN_STATES = {3, 4}   # D3D独占/演示态（SHQueryUserNotificationState）
+_TRUSTED_FULLSCREEN_STATES = {3, 4}  # D3D独占/演示态（SHQueryUserNotificationState）
 _DESKTOP_CLASSES = {"Progman", "WorkerW"}
 # 任务栏、开始菜单、搜索、多任务视图等浮层：拿到前台时保持原状态
-_HOLD_CLASSES = {"Shell_TrayWnd", "Shell_SecondaryTrayWnd", "Button", "Windows.UI.Core.CoreWindow",
-                 "XamlExplorerHostIslandWindow", "MultitaskingViewFrame", "ForegroundStaging",
-                 "NotifyIconOverflowWindow", "TopLevelWindowForOverflowXamlIsland"}
+_HOLD_CLASSES = {
+    "Shell_TrayWnd",
+    "Shell_SecondaryTrayWnd",
+    "Button",
+    "Windows.UI.Core.CoreWindow",
+    "XamlExplorerHostIslandWindow",
+    "MultitaskingViewFrame",
+    "ForegroundStaging",
+    "NotifyIconOverflowWindow",
+    "TopLevelWindowForOverflowXamlIsland",
+}
 POLL_MS = 1000
-_RECT_TOL = 2              # 矩形匹配容差(物理 px)
-DEBOUNCE_POLLS = 2         # 连续这么多次判断一致才切换
+_RECT_TOL = 2  # 矩形匹配容差(物理 px)
+DEBOUNCE_POLLS = 2  # 连续这么多次判断一致才切换
 
 
 def _default_state_provider() -> int:
@@ -49,14 +58,18 @@ def _default_foreground_provider():
 
 
 class _MonitorInfo(ctypes.Structure):
-    _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT),
-                ("rcWork", wintypes.RECT), ("dwFlags", wintypes.DWORD)]
+    _fields_ = [
+        ("cbSize", wintypes.DWORD),
+        ("rcMonitor", wintypes.RECT),
+        ("rcWork", wintypes.RECT),
+        ("dwFlags", wintypes.DWORD),
+    ]
 
 
 def _default_monitor_provider(hwnd: int):
     try:
         user32 = ctypes.windll.user32
-        mon = user32.MonitorFromWindow(wintypes.HWND(hwnd), 2)     # MONITOR_DEFAULTTONEAREST
+        mon = user32.MonitorFromWindow(wintypes.HWND(hwnd), 2)  # MONITOR_DEFAULTTONEAREST
         mi = _MonitorInfo()
         mi.cbSize = ctypes.sizeof(mi)
         if not user32.GetMonitorInfoW(mon, ctypes.byref(mi)):
@@ -68,8 +81,17 @@ def _default_monitor_provider(hwnd: int):
 
 
 class EnvironmentWatcher(QObject):
-    def __init__(self, windows, pet, state_provider=None, foreground_provider=None,
-                 interval_ms: int = POLL_MS, parent=None, topmost=None, monitor_provider=None):
+    def __init__(
+        self,
+        windows,
+        pet,
+        state_provider=None,
+        foreground_provider=None,
+        interval_ms: int = POLL_MS,
+        parent=None,
+        topmost=None,
+        monitor_provider=None,
+    ):
         super().__init__(parent)
         self._windows = list(windows)
         self._pet = pet
@@ -77,7 +99,7 @@ class EnvironmentWatcher(QObject):
         self._foreground_provider = foreground_provider or _default_foreground_provider
         self._monitor_provider = monitor_provider or _default_monitor_provider
         self._fullscreen = False
-        self._mode = "normal"           # normal / hide / sink
+        self._mode = "normal"  # normal / hide / sink
         self._streak = 0
         self._topmost = topmost or TopmostKeeper(self._windows, is_suspended=lambda: self._fullscreen)
         self._vis_snapshot: list[bool] | None = None
@@ -122,7 +144,7 @@ class EnvironmentWatcher(QObject):
     def _on_poll(self):
         self._check_fullscreen()
         self._check_workspace()
-        if self._mode == "sink":        # 全屏程序常自带置顶，要主动压到它上面
+        if self._mode == "sink":  # 全屏程序常自带置顶，要主动压到它上面
             self._topmost.force_top()
         else:
             self._topmost.reassert()
@@ -132,7 +154,7 @@ class EnvironmentWatcher(QObject):
             exclusive = self._state_provider() in _TRUSTED_FULLSCREEN_STATES
         except Exception:
             exclusive = False
-        if exclusive:                           # 独占全屏时置顶窗画不出来，只能收起
+        if exclusive:  # 独占全屏时置顶窗画不出来，只能收起
             self._streak = 0
             self._set_mode("hide")
             return

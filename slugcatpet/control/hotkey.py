@@ -1,4 +1,5 @@
 """Windows 全局热键注册/分发，非 Win 平台降级。"""
+
 from __future__ import annotations
 import sys
 from PySide6.QtCore import QAbstractNativeEventFilter, QObject, Signal
@@ -7,17 +8,19 @@ WM_HOTKEY = 0x0312
 MOD_ALT, MOD_CONTROL, MOD_SHIFT, MOD_WIN = 0x0001, 0x0002, 0x0004, 0x0008
 MOD_NOREPEAT = 0x4000
 VK_ESCAPE = 0x1B
-HK_PLACE_ESC = 4   # 放置模式 Esc 热键 id，1/2/3 见 main.py
+HK_PLACE_ESC = 4  # 放置模式 Esc 热键 id，1/2/3 见 main.py
 
 _IS_WIN = sys.platform == "win32"
 if _IS_WIN:
     import ctypes
     from ctypes import wintypes
+
     _user32 = ctypes.windll.user32
 
 
 class HotkeyFilter(QObject, QAbstractNativeEventFilter):
     """装到 QApplication 上，命中热键 emit triggered(id)；多继承需单一 super().__init__()，退出需 removeNativeEventFilter。"""
+
     triggered = Signal(int)
 
     def __init__(self):

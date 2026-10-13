@@ -1,4 +1,5 @@
 """Drawing methods mixed into :class:`slugcatpet.graphics.SlugcatGraphics`."""
+
 from __future__ import annotations
 
 import math
@@ -8,13 +9,12 @@ from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
 
 from ..core.units import clampf
 from ..core.vecmath import _ang_from_up, _rot
-from ..core.gfxmath import (_lerp, _catmull,
-                            SHOULDER_OFF_Y, ARM_DIV, ARM_MAX)
+from ..core.gfxmath import _lerp, _catmull, SHOULDER_OFF_Y, ARM_DIV, ARM_MAX
 from .primitives import blit
 from .tailtex import draw_game_tail, game_tail_vertices
 from ..skins.resolver import SKIN_KEY
 
-TAIL_SUBDIV = 4              # 尾巴每段 Catmull-Rom 细分数
+TAIL_SUBDIV = 4  # 尾巴每段 Catmull-Rom 细分数
 
 
 class GraphicsDrawMixin:
@@ -133,7 +133,7 @@ class GraphicsDrawMixin:
         for q in reversed(right):
             path.lineTo(q)
         path.closeSubpath()
-        path.setFillRule(Qt.FillRule.WindingFill)        # 防自交留洞
+        path.setFillRule(Qt.FillRule.WindingFill)  # 防自交留洞
         col = QColor(*self._color("TAIL", self.BODY))
         p.save()
         p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
@@ -195,19 +195,33 @@ class GraphicsDrawMixin:
                 scale_y = -1.0 if d0x < d1x else 1.0
             else:
                 denom = math.hypot(d0y - d1y, d0x - d1x) or 1.0
-                dtl = ((d0y - d1y) * hx - (d0x - d1x) * hy
-                       + d0x * d1y - d0y * d1x) / denom
+                dtl = ((d0y - d1y) * hx - (d0x - d1x) * hy + d0x * d1y - d0y * d1x) / denom
                 scale_y = math.copysign(1.0, -dtl) if dtl != 0.0 else 1.0
 
-            blit(p, atlas, element, hx, hy, rotation,
-                 1.0, scale_y, self._color("ARMS", self.BODY), ax=0.9, ay=0.5)
+            blit(
+                p,
+                atlas,
+                element,
+                hx,
+                hy,
+                rotation,
+                1.0,
+                scale_y,
+                self._color("ARMS", self.BODY),
+                ax=0.9,
+                ay=0.5,
+            )
 
     def _draw_hand_grips(self, p, atlas, ts=1.0):
         """抓握精灵，须在 draw_sprites 与画杆之后单独调。"""
         anim = getattr(self.body, "animation", None)
-        grip_elem = ("OnTopOfTerrainHand" if anim in ("ClimbOnBeam", "ZeroGPoleGrab")
-                     else "OnTopOfTerrainHand2" if anim in ("HangFromBeam", "GetUpOnBeam")
-                     else None)
+        grip_elem = (
+            "OnTopOfTerrainHand"
+            if anim in ("ClimbOnBeam", "ZeroGPoleGrab")
+            else "OnTopOfTerrainHand2"
+            if anim in ("HangFromBeam", "GetUpOnBeam")
+            else None
+        )
         if grip_elem is None:
             return
         for j in range(2):
@@ -218,8 +232,19 @@ class GraphicsDrawMixin:
             hy = _lerp(hand.ly, hand.y, ts)
             gy = hy - (0.0 if anim in ("ClimbOnBeam", "ZeroGPoleGrab") else 3.0)
             scale_x = -1.0 if j == 1 else 1.0
-            blit(p, atlas, self._sd(atlas, grip_elem, "L" if j == 0 else "R"), hx, gy, 0.0,
-                 scale_x, 1.0, self._color("ARMS", self.BODY), ax=0.5, ay=0.5)
+            blit(
+                p,
+                atlas,
+                self._sd(atlas, grip_elem, "L" if j == 0 else "R"),
+                hx,
+                gy,
+                0.0,
+                scale_x,
+                1.0,
+                self._color("ARMS", self.BODY),
+                ax=0.5,
+                ay=0.5,
+            )
 
     def _draw_body_hips(self, p, atlas, ts=1.0):
         d0x = _lerp(self._last_draw0[0], self.draw0[0], ts)
@@ -240,20 +265,31 @@ class GraphicsDrawMixin:
         heave = clampf((fatigue - 0.5) / 0.5, 0.0, 1.0)
         swing = 2.0 * breath - 1.0
         chest_h = swing * heave * 0.5
-        head_h = swing * (heave ** 1.5) * 0.75
+        head_h = swing * (heave**1.5) * 0.75
         self._breath_head_off = (-ux * head_h, -uy * head_h)
         chest_x = draw0[0] + ux * chest_h
         chest_y = draw0[1] + uy * chest_h
         self._breath_chest_off = (ux * chest_h, uy * chest_h)
         breath_bob = _lerp(0.5, 1.0, fatigue) * breath * (1.0 - upright)
         body_x = chest_x
-        body_y = chest_y + 4.0 * sleep - breath_bob      # y↓ 睡眠下沉+起伏
+        body_y = chest_y + 4.0 * sleep - breath_bob  # y↓ 睡眠下沉+起伏
         body_rot = body_axis
         body_sx = 1.0 + _lerp(_lerp(-0.05, 0.05, breath) * upright, 0.15, sleep)
-        body_sy = 1.0                                # 竖直呼吸走 body_y，不缩 Y
+        body_sy = 1.0  # 竖直呼吸走 body_y，不缩 Y
         side = self._motion_side(d0x, d0y, d1x, d1y)
-        blit(p, atlas, self._sd(atlas, "BodyA", side), body_x, body_y, body_rot, body_sx, body_sy,
-             self._color("BODY", self.BODY), ax=0.5, ay=0.2105263)
+        blit(
+            p,
+            atlas,
+            self._sd(atlas, "BodyA", side),
+            body_x,
+            body_y,
+            body_rot,
+            body_sx,
+            body_sy,
+            self._color("BODY", self.BODY),
+            ax=0.5,
+            ay=0.2105263,
+        )
 
         hip_x = (draw1[0] * 2.0 + chest_x) / 3.0
         hip_y = (draw1[1] * 2.0 + chest_y) / 3.0 + 3.0 * sleep
@@ -266,8 +302,19 @@ class GraphicsDrawMixin:
             hip_rot = body_axis
         hip_sx = 1.0 + sleep * 0.2 + 0.05 * breath
         hip_sy = 1.0 + sleep * 0.2
-        blit(p, atlas, self._sd(atlas, "HipsA", side), hip_x, hip_y, hip_rot, hip_sx, hip_sy,
-             self._color("HIPS", self.BODY), ax=0.5, ay=0.5)
+        blit(
+            p,
+            atlas,
+            self._sd(atlas, "HipsA", side),
+            hip_x,
+            hip_y,
+            hip_rot,
+            hip_sx,
+            hip_sy,
+            self._color("HIPS", self.BODY),
+            ax=0.5,
+            ay=0.5,
+        )
 
     def _draw_legs(self, p, atlas, ts=1.0):
         if self.bodyMode == "Swimming" and getattr(self.body, "swim_mode", None) == "deep":
@@ -321,7 +368,7 @@ class GraphicsDrawMixin:
         head = self.head
         b = self.body
 
-        if b.animation == "Flip":                # 翻滚转得快，按插值后的体轴画头
+        if b.animation == "Flip":  # 翻滚转得快，按插值后的体轴画头
             d0x = _lerp(self._last_draw0[0], self.draw0[0], ts)
             d0y = _lerp(self._last_draw0[1], self.draw0[1], ts)
             d1x = _lerp(self._last_draw1[0], self.draw1[0], ts)
@@ -352,8 +399,19 @@ class GraphicsDrawMixin:
         hx_r += hox
         hy_r += hoy
 
-        blit(p, atlas, self._sd(atlas, element, "L" if scale_x < 0 else "R"), hx_r, hy_r,
-             head_ang, scale_x, 1.0, self._color("HEAD", self.BODY), ax=0.5, ay=0.5)
+        blit(
+            p,
+            atlas,
+            self._sd(atlas, element, "L" if scale_x < 0 else "R"),
+            hx_r,
+            hy_r,
+            head_ang,
+            scale_x,
+            1.0,
+            self._color("HEAD", self.BODY),
+            ax=0.5,
+            ay=0.5,
+        )
 
     def _draw_face(self, p, atlas, ts=1.0):
         b = self.body
@@ -391,8 +449,7 @@ class GraphicsDrawMixin:
             if self.blink > 0 or self.sleep_curl > 0.0:
                 frames = blink_frames
             else:
-                frames = (self._face_mirror_frames
-                          if sx < 0.0 and self._face_mirror_frames else face_frames)
+                frames = self._face_mirror_frames if sx < 0.0 and self._face_mirror_frames else face_frames
             n_max = len(frames) - 1
             if self.sleep_curl > 0.0:
                 awake_idx = 7
@@ -411,4 +468,3 @@ class GraphicsDrawMixin:
         self._run_layers("behind_face", p, atlas, ts)
         element = self._sd(atlas, element, "L" if sx < 0 else "R")
         blit(p, atlas, element, fx, fy, rot, sx, 1.0, face_color, ax=0.5, ay=0.5)
-

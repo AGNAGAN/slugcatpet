@@ -1,4 +1,5 @@
 """窗口上的物品管理：放置 / 移除 / 清空、鼠标拖拽、逐 tick 推进与分层绘制，全部按注册表通用处理。"""
+
 from __future__ import annotations
 
 import math
@@ -38,21 +39,20 @@ def _g():
             late=tuple(k for k in stores if k.late_tick),
             mobile=tuple(k for k in kinds() if k.mobile),
             collide=tuple(k for k in kinds() if k.collides),
-            grab=tuple(sorted((k for k in stores if k.grab_pad is not None),
-                              key=lambda k: -k.grab_rank)),
-            by_use={})
+            grab=tuple(sorted((k for k in stores if k.grab_pad is not None), key=lambda k: -k.grab_rank)),
+            by_use={},
+        )
     return _groups
 
 
 class ItemHost:
-
     def _init_items(self):
         for k in kinds():
             setattr(self, k.store, None if k.single else [])
         self._item_seeds = {}
-        self._drag = None              # (kind, obj, 上一帧光标)
+        self._drag = None  # (kind, obj, 上一帧光标)
         self._place_mode = False
-        self._place_kind = None        # 物品 key 或 "remove"
+        self._place_kind = None  # 物品 key 或 "remove"
         self._place_preview = None
         self._stun_rng = random.Random(98765)
 
@@ -77,7 +77,7 @@ class ItemHost:
                     plan.extend((m, False) for m in mates if use in m.affords)
             plan = by_use[use] = tuple(plan)
         if len(plan) == 1 and plan[0][1] and not plan[0][0].single:
-            return getattr(self, plan[0][0].store)    # 单一存放：直接给原列表，不复制
+            return getattr(self, plan[0][0].store)  # 单一存放：直接给原列表，不复制
         out = []
         for k, whole in plan:
             if whole:
@@ -151,6 +151,7 @@ class ItemHost:
         if not self._hwnd:
             self._hwnd = int(self.winId())
         from ..control.mouse import set_passthrough
+
         set_passthrough(self._hwnd, False)
         self._passthrough = False
         self.setCursor(Qt.CursorShape.CrossCursor)
@@ -280,7 +281,7 @@ class ItemHost:
 
     def _tick_items(self, late=False):
         d = self._drag
-        for k in (_g().late if late else _g().early):
+        for k in _g().late if late else _g().early:
             if d is not None and d[0] is k:
                 self._step_item_drag(k)
             if getattr(self, k.store):

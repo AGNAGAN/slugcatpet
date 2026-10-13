@@ -1,4 +1,5 @@
 """超度：业力满时悬浮升空并放出幽灵触手全屏特效。"""
+
 from __future__ import annotations
 
 from ..base import Ability

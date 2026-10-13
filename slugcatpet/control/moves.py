@@ -1,4 +1,5 @@
 """控制态 _movement_update，站立/跑动/跳物理入口。"""
+
 from __future__ import annotations
 
 from ..core import creature as cr
@@ -33,21 +34,20 @@ def ctrl_movement_update(body):
     now_floor = body.on_floor()
     if not now_floor:
         body._ctrl_fall_speed = abs(c1.vy)  # 下坠速度，供落地 impact 近似
-        body.crawl_anchor = None            # 离地清趴锚，防落地被旧锚拖回
+        body.crawl_anchor = None  # 离地清趴锚，防落地被旧锚拖回
     if now_floor and not body._ctrl_prev_floor:
         ms.try_land_roll(body, inp0)
     body._ctrl_prev_floor = now_floor
 
     move_x = inp0.x
     # 强蓄力锁横向：蓄力过半按跳键不能移
-    if (getattr(body, "_ctrl_super_launch", 0) > 10
-            and inp0.jmp and inp1.jmp and inp[2].jmp and inp0.y < 1):
+    if getattr(body, "_ctrl_super_launch", 0) > 10 and inp0.jmp and inp1.jmp and inp[2].jmp and inp0.y < 1:
         move_x = 0
     if move_x > 0:
         body.facing = 1
     elif move_x < 0:
         body.facing = -1
-    body.move_dir = move_x           # 同步给 _gait_update，防脸/腿判定误判静止
+    body.move_dir = move_x  # 同步给 _gait_update，防脸/腿判定误判静止
 
     mp.toggle_standing(body, inp0, inp1)
 
@@ -59,7 +59,7 @@ def ctrl_movement_update(body):
         body.crawl_anchor = None
         body.crawl_pose = max(0.0, body.crawl_pose - 0.08)
 
-    flag = (move_x == 0 and body.standing and c1.on_floor)
+    flag = move_x == 0 and body.standing and c1.on_floor
     if body.feet_stuck is not None and not flag:
         body.feet_stuck = None
     elif body.feet_stuck is None and flag:
@@ -82,13 +82,13 @@ def ctrl_movement_update(body):
     else:
         body.bodyMode = "Crawl"
 
-    mp.anim_forces(body, move_x)               # 可覆写 bodyMode/清 animation
-    ms.anim_forces(body, move_x, inp0, inp1)   # 覆写 bodyMode=Default
+    mp.anim_forces(body, move_x)  # 可覆写 bodyMode/清 animation
+    ms.anim_forces(body, move_x, inp0, inp1)  # 覆写 bodyMode=Default
     mp.crawl_turn_delay(body)
     mp.posture_entry(body, move_x)
     ms.movement_increments(body)
 
-    if body._ctrl_roll_direction != 0:      # 滚/滑期间横向意图=滚向
+    if body._ctrl_roll_direction != 0:  # 滚/滑期间横向意图=滚向
         move_x = body._ctrl_roll_direction
 
     if on_ground:
@@ -110,11 +110,10 @@ def ctrl_movement_update(body):
         if (move_x > 0) == (c0.x < c1.x):
             dyn0 *= 0.75
             dyn1 *= 0.75
-        if (move_x == 0 and c1.on_floor and not c0.pinned and not c1.pinned
-                and body._jump_pending is None):
-            body._crawl_pose()      # 勿投影头到 conn 距圆，会破坏蓄力接地判定
+        if move_x == 0 and c1.on_floor and not c0.pinned and not c1.pinned and body._jump_pending is None:
+            body._crawl_pose()  # 勿投影头到 conn 距圆，会破坏蓄力接地判定
 
-    if body._ctrl_roll_direction != 0:      # 滚/滑期跑速取默认上限
+    if body._ctrl_roll_direction != 0:  # 滚/滑期跑速取默认上限
         dyn0 = dyn1 = ms.DEFAULT_DYN
     ms.super_launch_charge(body, move_x, inp0, inp1)
 
@@ -142,7 +141,7 @@ def ctrl_movement_update(body):
             c.vx += (target - c.vx) * cr.SKID_DAMP
 
     # 跳跃转移链分派：Roll/BellySlide/DownOnFours/标准/蹲跳
-    want_pre = body._ctrl_want_jump   # 快照，供工匠钩子读消费前值
+    want_pre = body._ctrl_want_jump  # 快照，供工匠钩子读消费前值
     can_pre = body._ctrl_can_jump
     mj.dispatch(body, inp0)
 
@@ -153,9 +152,11 @@ def ctrl_movement_update(body):
     # 持跳可变跳高：离地且按住才施，松键即停
     if on_ground:
         pass
-    elif body.jump_boost > 0 and (inp0.jmp or body._ctrl_sim_hold > 0
-                                  or (getattr(body, "_ctrl_pyro", None) is not None
-                                      and inp0.pckp and body._ctrl_pyro_jumped)):
+    elif body.jump_boost > 0 and (
+        inp0.jmp
+        or body._ctrl_sim_hold > 0
+        or (getattr(body, "_ctrl_pyro", None) is not None and inp0.pckp and body._ctrl_pyro_jumped)
+    ):
         body.jump_boost -= cr.JUMPBOOST_DECAY
         kick = (body.jump_boost + 1) * cr.JUMPBOOST_GAIN
         c0.vy -= kick

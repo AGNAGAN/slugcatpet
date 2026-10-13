@@ -1,4 +1,5 @@
 """读取内置角色定义（resources/characters/*.json），格式错误直接报错。"""
+
 from __future__ import annotations
 
 import json
@@ -13,8 +14,23 @@ from .stats import DEFAULT_STATS
 
 FORMAT = 1
 CHAR_DIR = resource_dir() / "characters"
-_KEYS = {"format", "key", "order", "notes", "name", "body_color", "eye_color", "layout", "atlases",
-         "frames", "abilities", "behaviors", "stats", "personality", "wip"}
+_KEYS = {
+    "format",
+    "key",
+    "order",
+    "notes",
+    "name",
+    "body_color",
+    "eye_color",
+    "layout",
+    "atlases",
+    "frames",
+    "abilities",
+    "behaviors",
+    "stats",
+    "personality",
+    "wip",
+}
 _REQUIRED = ("key", "body_color", "eye_color", "layout", "atlases", "frames")
 # 语义帧名：必填 / 可选（含义见 ai-docs/CHARACTERS.md）
 FRAMES_REQUIRED = ("head", "face", "face_blink", "legs_walk", "legs_crawl", "legs_air")
@@ -72,7 +88,7 @@ def load_character(path: Path) -> tuple[int, CatDef]:
     for name, ref in data["frames"].items():
         atlas, sep, frame = ref.partition("/") if isinstance(ref, str) else ("", "", "")
         if not (sep and atlas and frame):
-            raise ValueError(f"{where}: frames.{name} 应写成 \"图集/帧名\"，得到 {ref!r}")
+            raise ValueError(f'{where}: frames.{name} 应写成 "图集/帧名"，得到 {ref!r}')
         frames[name] = (atlas, frame)
     bad = [n for n in frames if n not in FRAMES_REQUIRED + FRAMES_OPTIONAL]
     lack = [n for n in FRAMES_REQUIRED if n not in frames]
@@ -82,15 +98,17 @@ def load_character(path: Path) -> tuple[int, CatDef]:
     behaviors = data.get("behaviors", {})
     if not isinstance(abilities, dict) or not all(isinstance(v, dict) for v in abilities.values()):
         raise ValueError(f"{where}: abilities 应为 {{能力: {{参数}}}}")
-    if not isinstance(behaviors, dict) or not all(v is False or isinstance(v, dict)
-                                                  for v in behaviors.values()):
+    if not isinstance(behaviors, dict) or not all(
+        v is False or isinstance(v, dict) for v in behaviors.values()
+    ):
         raise ValueError(f"{where}: behaviors 应为 {{行为: {{参数}} 或 false}}")
     names = data.get("name")
     if isinstance(names, str):
         names = {"zh": names, "en": names}
-    if names is not None and not (isinstance(names, dict) and names
-                                  and all(isinstance(v, str) for v in names.values())):
-        raise ValueError(f"{where}: name 应为字符串或 {{\"zh\": ..., \"en\": ...}}")
+    if names is not None and not (
+        isinstance(names, dict) and names and all(isinstance(v, str) for v in names.values())
+    ):
+        raise ValueError(f'{where}: name 应为字符串或 {{"zh": ..., "en": ...}}')
     cat = CatDef(
         key=data["key"],
         body_color=_color(data["body_color"], f"{where} body_color"),
@@ -101,8 +119,7 @@ def load_character(path: Path) -> tuple[int, CatDef]:
         abilities=abilities,
         behaviors=behaviors,
         stats=_override(DEFAULT_STATS, data.get("stats", {}), f"{where} stats"),
-        personality=_override(DEFAULT_PERSONALITY, data.get("personality", {}),
-                              f"{where} personality"),
+        personality=_override(DEFAULT_PERSONALITY, data.get("personality", {}), f"{where} personality"),
         wip=bool(data.get("wip", False)),
         names=names,
     )

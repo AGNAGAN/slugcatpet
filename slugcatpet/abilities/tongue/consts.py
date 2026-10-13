@@ -1,4 +1,5 @@
 """舌头能力内部常量（不对角色开放）。"""
+
 from __future__ import annotations
 
 CEIL_SWAY_AMP_MIN = 0.3

@@ -1,4 +1,5 @@
 """从用户本机 Rain World 安装提取图集和场景曲到 ~/.slugcatpet/assets。"""
+
 from __future__ import annotations
 import re
 import sys
@@ -8,8 +9,7 @@ from ._paths import assets_dir, bundled_assets_dir, music_asset_dirs, user_dir
 from .i18n import t
 
 # 图集名：base + MSC 各含贴图与 UI
-ATLASES = ("rainWorld", "rainworldmsc",
-           "uiSprites", "uispritesmsc")
+ATLASES = ("rainWorld", "rainworldmsc", "uiSprites", "uispritesmsc")
 _ATLAS_REL = Path("RainWorld_Data") / "resources.assets"
 
 
@@ -18,24 +18,33 @@ class SetupError(RuntimeError):
 
 
 def atlases_present(d: Path) -> bool:
-    return all((d / f).exists() for f in
-               ("rainWorld", "rainWorld.png", "rainworldmsc", "rainworldmsc.png",
-                "uiSprites", "uiSprites.png", "uispritesmsc", "uispritesmsc.png"))
+    return all(
+        (d / f).exists()
+        for f in (
+            "rainWorld",
+            "rainWorld.png",
+            "rainworldmsc",
+            "rainworldmsc.png",
+            "uiSprites",
+            "uiSprites.png",
+            "uispritesmsc",
+            "uispritesmsc.png",
+        )
+    )
 
 
 def _drive_roots() -> list[Path]:
     if sys.platform == "win32":
-        return [Path(f"{c}:\\") for c in "CDEFGHIJKLMNOP"
-                if Path(f"{c}:\\").exists()]
+        return [Path(f"{c}:\\") for c in "CDEFGHIJKLMNOP" if Path(f"{c}:\\").exists()]
     home = Path.home()
-    return [home / "Library/Application Support/Steam",
-            home / ".steam/steam", home / ".local/share/Steam"]
+    return [home / "Library/Application Support/Steam", home / ".steam/steam", home / ".local/share/Steam"]
 
 
 def _steam_root() -> Path | None:
     if sys.platform == "win32":
         try:
             import winreg
+
             for hive, key, val in (
                 (winreg.HKEY_CURRENT_USER, r"Software\Valve\Steam", "SteamPath"),
                 (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Valve\Steam", "InstallPath"),
@@ -58,8 +67,7 @@ def _steam_libraries() -> list[Path]:
     if sr:
         roots.append(sr)
     for d in _drive_roots():
-        roots += [d / "Program Files (x86)" / "Steam", d / "Steam",
-                  d / "SteamLibrary", d]
+        roots += [d / "Program Files (x86)" / "Steam", d / "Steam", d / "SteamLibrary", d]
     libs: list[Path] = []
     seen: set[Path] = set()
     for r in roots:
@@ -78,7 +86,7 @@ def _steam_libraries() -> list[Path]:
     return libs
 
 
-INSTALL_FILE = "game_path.txt"     # 导入图集时记下游戏目录，手动选的也能再找到
+INSTALL_FILE = "game_path.txt"  # 导入图集时记下游戏目录，手动选的也能再找到
 
 
 def _saved_install() -> Path | None:
@@ -158,6 +166,7 @@ _LOOSE_AUDIO = (("music/songs", ".mp3"),)
 def _bundle_clips(install: Path, names) -> dict[str, bytes]:
     import UnityPy
     from UnityPy.helpers.ResourceReader import get_resource_data
+
     want, got = set(names), {}
     for bundle in _AUDIO_BUNDLES:
         path = install / _STREAMING / "AssetBundles" / bundle
@@ -177,11 +186,12 @@ def read_bundle_clip(install: Path, name: str) -> bytes:
     return _bundle_clips(Path(install), [name])[name]
 
 
-_MUSIC_MARK = ".format"          # 记录提取时的 ogg 格式版本，对不上就重新提取
+_MUSIC_MARK = ".format"  # 记录提取时的 ogg 格式版本，对不上就重新提取
 
 
 def _ogg_format() -> int:
     from .audio.fsbogg import FORMAT
+
     return FORMAT
 
 
@@ -194,8 +204,7 @@ def _music_current(d: Path) -> bool:
 
 def music_missing(names, dirs=None) -> list[str]:
     dirs = [d for d in (music_asset_dirs() if dirs is None else dirs) if _music_current(d)]
-    return [n for n in names
-            if not any((d / (n + ext)).is_file() for d in dirs for ext in (".ogg", ".mp3"))]
+    return [n for n in names if not any((d / (n + ext)).is_file() for d in dirs for ext in (".ogg", ".mp3"))]
 
 
 def prune_music(keep) -> None:
@@ -215,6 +224,7 @@ def prune_music(keep) -> None:
 def extract_music(install: Path, names, dest: Path | None = None) -> list[str]:
     """游戏里有完整散文件就直接复制，否则从资源包重新封装成 ogg；已有的跳过，单首失败不影响别的，返回这次写出的曲名。"""
     from .audio.fsbogg import fsb_to_ogg
+
     install = Path(install)
     out = Path(dest) / "music" if dest is not None else music_asset_dirs()[0]
     todo = music_missing(names, [out] if dest is not None else None)

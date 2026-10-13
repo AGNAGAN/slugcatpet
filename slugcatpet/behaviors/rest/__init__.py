@@ -1,4 +1,5 @@
 """休息。"""
+
 from __future__ import annotations
 
 from ... import tuning
@@ -26,18 +27,28 @@ class Rest(Behavior):
         b = fsm.body
 
         def exhaust(cursor):
-            if (not fsm._exhausted and not fsm._hibernating and not fsm.grab.active
-                    and not fsm.ask("cold_urgent") and not fsm._zerog()
-                    and b.energy < tuning.EXHAUST_ENTER_ENERGY
-                    and not fsm.blocked(EXHAUST)):
+            if (
+                not fsm._exhausted
+                and not fsm._hibernating
+                and not fsm.grab.active
+                and not fsm.ask("cold_urgent")
+                and not fsm._zerog()
+                and b.energy < tuning.EXHAUST_ENTER_ENERGY
+                and not fsm.blocked(EXHAUST)
+            ):
                 fsm._exhausted = True
                 enter_exhaustion(fsm)
 
         def hibernate(cursor):
-            if (not fsm._hibernating and not fsm.grab.active and not fsm._exhausted
-                    and not too_cold_to_sleep(fsm) and not fsm._zerog()
-                    and b.food >= b.food_max
-                    and fsm.state in ("IdleStand", "LieDown")):
+            if (
+                not fsm._hibernating
+                and not fsm.grab.active
+                and not fsm._exhausted
+                and not too_cold_to_sleep(fsm)
+                and not fsm._zerog()
+                and b.food >= b.food_max
+                and fsm.state in ("IdleStand", "LieDown")
+            ):
                 fsm._hibernating = True
                 if fsm.state == "IdleStand":
                     fsm._transition("LieDown")

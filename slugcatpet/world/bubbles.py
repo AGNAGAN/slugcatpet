@@ -1,4 +1,5 @@
 """溺水气泡粒子（y↓）。"""
+
 from __future__ import annotations
 import math
 
@@ -28,7 +29,7 @@ class Bubble:
         deg = math.radians(-90.0 + 180.0 * rng.random())
         mag = rng.random() * BUOYANCY_MAG
         self.vx += math.sin(deg) * mag
-        self.vy += -math.cos(deg) * mag                     # y↓ 取反
+        self.vy += -math.cos(deg) * mag  # y↓ 取反
         self.x += self.vx
         self.y += self.vy
         self.age += 1

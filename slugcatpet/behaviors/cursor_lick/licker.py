@@ -1,4 +1,5 @@
 """舔光标交互：三阶段状态机。"""
+
 from __future__ import annotations
 import math
 
@@ -46,8 +47,12 @@ class CursorLicker:
         return HL * BAND_LO <= cursor[1] <= HL * BAND_HI
 
     def _phase_walk_under(self, cursor, cursor_speed):
-        if (cursor is None or not self._in_band(cursor)
-                or cursor_speed > SPEED_RELEASE or self.timer > WALK_TIMEOUT):
+        if (
+            cursor is None
+            or not self._in_band(cursor)
+            or cursor_speed > SPEED_RELEASE
+            or self.timer > WALK_TIMEOUT
+        ):
             self.outcome = "walk_abort"
             return "to_idle"
         self.body.walk_to(cursor[0])
@@ -61,8 +66,7 @@ class CursorLicker:
     def _phase_lick_shoot(self, cursor, cursor_speed):
         tg = self.tongue
         if self._intent is None:
-            if (cursor is None or not self._in_band(cursor)
-                    or cursor_speed > SPEED_RELEASE):
+            if cursor is None or not self._in_band(cursor) or cursor_speed > SPEED_RELEASE:
                 self.outcome = "walk_abort"
                 return "to_idle"
             if not tg.is_idle():
@@ -100,8 +104,7 @@ class CursorLicker:
         dx, dy = cursor[0] - mox, cursor[1] - moy
         d = math.hypot(dx, dy) or 1.0
         ux, uy = dx / d, dy / d
-        self.tongue.shoot(mox, moy, mox + ux * self.tongue.total,
-                          moy + uy * self.tongue.total, hit=False)
+        self.tongue.shoot(mox, moy, mox + ux * self.tongue.total, moy + uy * self.tongue.total, hit=False)
 
     def _phase_hang(self, cursor, cursor_speed):
         tg = self.tongue

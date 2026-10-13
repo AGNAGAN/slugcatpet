@@ -1,4 +1,5 @@
 """取暖。"""
+
 from __future__ import annotations
 
 from ... import tuning
@@ -25,14 +26,21 @@ class Warmth(Behavior):
             warm = wg.available()
             return warm and ctx.cold > 0.05
 
-        fsm.mood.add(Candidate(
-            "seek_warmth", base=tuning.COLD_SEEK_BASE, start=0.1, quit=0.0,
-            decay=0.0, recover=1.0,
-            gate=gate,
-            energy_factor=lambda e: 1.0,
-            temper_factor=lambda t: 1.0,
-            cold_factor=lambda c: c,
-            one_shot=True))
+        fsm.mood.add(
+            Candidate(
+                "seek_warmth",
+                base=tuning.COLD_SEEK_BASE,
+                start=0.1,
+                quit=0.0,
+                decay=0.0,
+                recover=1.0,
+                gate=gate,
+                energy_factor=lambda e: 1.0,
+                temper_factor=lambda t: 1.0,
+                cold_factor=lambda c: c,
+                one_shot=True,
+            )
+        )
         fsm.register_mood_entry("seek_warmth", "SeekWarmth")
 
         def rule(cursor):

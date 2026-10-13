@@ -1,4 +1,5 @@
 """物品状态字符串常量。"""
+
 from __future__ import annotations
 
 

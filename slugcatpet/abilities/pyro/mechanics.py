@@ -1,32 +1,37 @@
 """工匠手操爆炸跳（y 已翻转）。"""
+
 from __future__ import annotations
 
 import math
 import random
 
 from ...core.units import inv_lerp, lerp
-from ...world.explosionfx import (spawn_overheat_smoke, spawn_overheat_spark,
-                                  spawn_parry_fx, spawn_pyro_death_fx,
-                                  spawn_pyro_jump_fx)
+from ...world.explosionfx import (
+    spawn_overheat_smoke,
+    spawn_overheat_spark,
+    spawn_parry_fx,
+    spawn_pyro_death_fx,
+    spawn_pyro_jump_fx,
+)
 from ...core.vecmath import _dirvec
 
 
-CAPACITY = 10           # counter≥此→自爆
-WARN_AT = 5             # 过热警告阈（随 CAPACITY 走 max(1,容量-5)）
-OVERHEAT_AT = 7         # 眩晕惩罚阈（随 CAPACITY 走 max(1,容量-3)）
+CAPACITY = 10  # counter≥此→自爆
+WARN_AT = 5  # 过热警告阈（随 CAPACITY 走 max(1,容量-5)）
+OVERHEAT_AT = 7  # 眩晕惩罚阈（随 CAPACITY 走 max(1,容量-3)）
 JUMP_COOLDOWN = 150.0
 PARRY_COOLDOWN = 40.0
 PARRY_STONE_R = 300.0
 PARRY_CAT_R = 200.0
 PARRY_STUN = 80
 PARRY_KNOCK = 30.0
-DEATH_RAD = 350.0       # 自爆力场：半径/力/最低眩晕
+DEATH_RAD = 350.0  # 自爆力场：半径/力/最低眩晕
 DEATH_FORCE = 26.2
 DEATH_MIN_STUN = 160.0
 
 # 需与 session.RESET_TABLE 同步（有测试断言）
 PYRO_DEFAULTS: dict[str, object] = {
-    "_ctrl_pyro_jumped": False,      # 复位前不可再爆
+    "_ctrl_pyro_jumped": False,  # 复位前不可再爆
     "_ctrl_pyro_counter": 0,
     "_ctrl_pyro_cooldown": 0.0,
     "_ctrl_pyro_parry_cd": 0.0,
@@ -116,7 +121,7 @@ def fire_air_jump(pet, body, ix, iy) -> None:
 
 def _zerog_burst(body, ix, iy) -> None:
     """零重力爆冲（y 翻号）：无输入随机方向，vel 9/8。"""
-    nx, ny = float(ix), float(iy)            # 上=+1，写 vy 时取负（y↓ 约定）
+    nx, ny = float(ix), float(iy)  # 上=+1，写 vy 时取负（y↓ 约定）
     while nx == 0.0 and ny == 0.0:
         nx = 0.0 if random.random() <= 0.33 else (1.0 if random.random() <= 0.5 else -1.0)
         ny = 0.0 if random.random() <= 0.33 else (1.0 if random.random() <= 0.5 else -1.0)
@@ -143,7 +148,6 @@ def _pyro_death(pet, body) -> None:
 
 
 class PyroController:
-
     def __init__(self, pet):
         self.pet = pet
         ensure(pet.body)
@@ -151,19 +155,34 @@ class PyroController:
     def update(self, body, inp0, inp1, want_pre, can_pre) -> None:
         tick_fuel(self.pet, body)
         trigger = (want_pre > 0 and inp0.pckp) or (inp0.pckp and not inp1.pckp)
-        low_grav = body.bodyMode == "ZeroG" or body.room_gravity <= 0.1   # 零/低重力豁免：压下也可空中爆跳
-        if (trigger and not body._ctrl_pyro_jumped and can_pre <= 0
-                and (inp0.y >= 0 or low_grav)
-                and body.bodyMode != "Crawl" and not body.on_pole):
+        low_grav = body.bodyMode == "ZeroG" or body.room_gravity <= 0.1  # 零/低重力豁免：压下也可空中爆跳
+        if (
+            trigger
+            and not body._ctrl_pyro_jumped
+            and can_pre <= 0
+            and (inp0.y >= 0 or low_grav)
+            and body.bodyMode != "Crawl"
+            and not body.on_pole
+        ):
             self._air_jump(body, inp0)
-        elif (trigger and (inp0.y < 0 or body.bodyMode == "Crawl")
-                and (can_pre > 0 or inp0.y < 0)
-                and not body._ctrl_pyro_jumped and body._ctrl_pyro_parry_cd <= 0.0):
+        elif (
+            trigger
+            and (inp0.y < 0 or body.bodyMode == "Crawl")
+            and (can_pre > 0 or inp0.y < 0)
+            and not body._ctrl_pyro_jumped
+            and body._ctrl_pyro_parry_cd <= 0.0
+        ):
             self._ground_parry(body, can_pre)
-        if (body._ctrl_can_jump > 0 or body.on_pole
-                or body.chunk0.cx != 0 or body.chunk1.cx != 0
-                or ((body.bodyMode == "ZeroG" or body.room_gravity <= 0.5)
-                    and (body._ctrl_want_jump == 0 or not inp0.pckp))):
+        if (
+            body._ctrl_can_jump > 0
+            or body.on_pole
+            or body.chunk0.cx != 0
+            or body.chunk1.cx != 0
+            or (
+                (body.bodyMode == "ZeroG" or body.room_gravity <= 0.5)
+                and (body._ctrl_want_jump == 0 or not inp0.pckp)
+            )
+        ):
             body._ctrl_pyro_jumped = False
 
     def _air_jump(self, body, inp0) -> None:

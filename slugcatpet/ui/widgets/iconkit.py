@@ -1,4 +1,5 @@
 """侧边栏小图标共用的笔、配色与图集贴图。"""
+
 from __future__ import annotations
 
 from PySide6.QtCore import QRectF, Qt
@@ -29,9 +30,15 @@ def cat_ready(atlas):
     if atlas is None:
         return False
     base = atlas.get("base")
-    return (base.has("BodyA") and base.has("LegsAVerticalPole") and base.has("PlayerArm0")
-            and atlas.get(FACE_ATLAS).has(FACE_FAM + "1") and base.has("OnTopOfTerrainHand")
-            and atlas.get(HEAD_ATLAS).has(HEAD_FAM + "0") and atlas.get("ui").has(CAT_HEAD))
+    return (
+        base.has("BodyA")
+        and base.has("LegsAVerticalPole")
+        and base.has("PlayerArm0")
+        and atlas.get(FACE_ATLAS).has(FACE_FAM + "1")
+        and base.has("OnTopOfTerrainHand")
+        and atlas.get(HEAD_ATLAS).has(HEAD_FAM + "0")
+        and atlas.get("ui").has(CAT_HEAD)
+    )
 
 
 def blit(p, atlas, key, frame, center, k, w, rot=0.0, tint=None):

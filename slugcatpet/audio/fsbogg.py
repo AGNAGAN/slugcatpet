@@ -3,6 +3,7 @@
 FSB5 头解析与重建流程改写自 python-fsb5（MIT，见同目录 LICENSE.python-fsb5），
 setup 头取自 vorbis_setups（由 tools/gen_vorbis_setups.py 用 libvorbis 生成，BSD，见 LICENSE.libvorbis）。
 """
+
 from __future__ import annotations
 
 import struct
@@ -14,7 +15,7 @@ _CHUNK_VORBISDATA = 11
 _FREQ = {1: 8000, 2: 11000, 3: 11025, 4: 16000, 5: 22050, 6: 24000, 7: 32000, 8: 44100, 9: 48000}
 _VENDOR = b"SlugcatPet"
 _PAGE_FILL = 4096
-FORMAT = 2                     # 输出格式版本；变了旧的提取结果会重新生成
+FORMAT = 2  # 输出格式版本；变了旧的提取结果会重新生成
 
 
 def _bits(v, start, n):
@@ -32,7 +33,7 @@ def parse_fsb5(data: bytes) -> dict:
         raise ValueError(f"expected 1 sample, got {nsamples}")
     pos = 60 + (4 if version == 0 else 0)
     head_end = pos + shdr_size
-    raw, = struct.unpack_from("<Q", data, pos)
+    (raw,) = struct.unpack_from("<Q", data, pos)
     pos += 8
     more = _bits(raw, 0, 1)
     rate = _FREQ.get(_bits(raw, 1, 4))
@@ -41,19 +42,24 @@ def parse_fsb5(data: bytes) -> dict:
     frames = _bits(raw, 34, 30)
     crc = None
     while more:
-        c, = struct.unpack_from("<I", data, pos)
+        (c,) = struct.unpack_from("<I", data, pos)
         pos += 4
         more, size, kind = _bits(c, 0, 1), _bits(c, 1, 24), _bits(c, 25, 7)
         if kind == _CHUNK_FREQUENCY:
-            rate, = struct.unpack_from("<I", data, pos)
+            (rate,) = struct.unpack_from("<I", data, pos)
         elif kind == _CHUNK_VORBISDATA:
-            crc, = struct.unpack_from("<I", data, pos)
+            (crc,) = struct.unpack_from("<I", data, pos)
         pos += size
     if crc is None or rate is None:
         raise ValueError("missing vorbis/frequency info")
     start = head_end + name_size + offset
-    return {"channels": channels, "rate": rate, "crc32": crc, "frames": frames,
-            "data": data[start:start + data_size - offset]}
+    return {
+        "channels": channels,
+        "rate": rate,
+        "crc32": crc,
+        "frames": frames,
+        "data": data[start : start + data_size - offset],
+    }
 
 
 # Ogg 的 CRC（多项式 0x04C11DB7、非反射、初值 0）= 字节位反转后的 zlib CRC 再整体位反转
@@ -70,7 +76,7 @@ class _OggStream:
 
     def __init__(self, serial: int):
         self.serial, self.seq = serial, 0
-        self.lacing: list[int] = []      # 段长，0x100 标记包首段
+        self.lacing: list[int] = []  # 段长，0x100 标记包首段
         self.granules: list[int] = []
         self.body = bytearray()
         self.bos = self.eos = False
@@ -127,8 +133,13 @@ class _OggStream:
         self.bos = True
         segs = bytes(v & 0xFF for v in self.lacing[:vals])
         size = sum(segs)
-        head = bytearray(b"OggS\x00" + bytes([flags]) + struct.pack("<qIII", granule, self.serial, self.seq, 0)
-                         + bytes([vals]) + segs)
+        head = bytearray(
+            b"OggS\x00"
+            + bytes([flags])
+            + struct.pack("<qIII", granule, self.serial, self.seq, 0)
+            + bytes([vals])
+            + segs
+        )
         body = bytes(self.body[:size])
         struct.pack_into("<I", head, 22, _ogg_crc(bytes(head) + body))
         self.out += head + body
@@ -149,6 +160,7 @@ def _comment_header() -> bytes:
 def fsb_to_ogg(data: bytes) -> bytes:
     """FSB5（单个 Vorbis 样本）→ 完整 Ogg 文件字节；setup 头未知时抛 ValueError。"""
     from .vorbis_setups import SETUPS
+
     s = parse_fsb5(data)
     info = SETUPS.get(s["crc32"])
     if info is None:
@@ -165,7 +177,7 @@ def fsb_to_ogg(data: bytes) -> bytes:
     body, pos, granule, prev = s["data"], 0, 0, 0
     size = struct.unpack_from("<H", body, 0)[0] if len(body) >= 2 else 0
     while size:
-        pkt = body[pos + 2:pos + 2 + size]
+        pkt = body[pos + 2 : pos + 2 + size]
         pos += 2 + size
         size = struct.unpack_from("<H", body, pos)[0] if pos + 2 <= len(body) else 0
         flag = modes[(pkt[0] >> 1) & 0x7F] if pkt else "x"

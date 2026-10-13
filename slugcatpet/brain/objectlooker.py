@@ -1,4 +1,5 @@
 """东张西望：兴趣衰减换目标，偶尔瞟随机点或谁也不看。"""
+
 from __future__ import annotations
 import math
 
@@ -9,8 +10,8 @@ class ObjectLooker:
     def __init__(self, rng, look_fac=1.0):
         self.rng = rng
         self.look_fac = look_fac
-        self.mode = "nothing"     # "cursor"/对象引用/"point"/"nothing"
-        self.point = None         # mode=="point" 时的冻结点
+        self.mode = "nothing"  # "cursor"/对象引用/"point"/"nothing"
+        self.point = None  # mode=="point" 时的冻结点
         self.point_interest = 0.0
         self.time_looking = 0
 
@@ -20,7 +21,7 @@ class ObjectLooker:
         interest = base
         if dist < tuning.LOOK_DIST_NEAR:
             interest *= 0.5 * vel + 1.5
-        denom = 0.005 * (dist ** 1.5) + 0.995
+        denom = 0.005 * (dist**1.5) + 0.995
         return interest / denom
 
     def _current_interest(self, head, candidates):

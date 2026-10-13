@@ -1,4 +1,5 @@
 """取暖目标：场上提供 warm 用法的暖源。"""
+
 from __future__ import annotations
 
 from ... import tuning
@@ -13,7 +14,6 @@ def warm_source(fsm):
 
 
 class WarmGoal:
-
     def __init__(self, fsm):
         self.fsm = fsm
         self._goal = None

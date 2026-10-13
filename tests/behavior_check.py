@@ -1,4 +1,5 @@
 """行为检查：固定种子和脚本化输入下逐 tick 比对状态、位置和渲染帧，确认改动没有意外改变行为。"""
+
 from __future__ import annotations
 
 import argparse
@@ -21,8 +22,8 @@ SEED = 20261012
 ROUND = 3
 HASH_SEED = "0"
 FRAME_EVERY = 50
-SCREEN = {"name": "check", "x": 0, "y": 0, "width": 1920, "height": 1080,
-          "logicalDpi": 96, "dpr": 1}
+SCREEN = {"name": "check", "x": 0, "y": 0, "width": 1920, "height": 1080, "logicalDpi": 96, "dpr": 1}
+
 
 def _cursor_park(t, win):
     return (win._WL * 0.92, win._HL * 0.12)
@@ -39,6 +40,7 @@ def _follow(pet_idx, dx, fy, jitter=0.0):
     def f(t, win):
         c = win.pets[pet_idx].body.chunk0
         return (c.x + dx + jitter * math.sin(t / 7.0), win._HL * fy)
+
     return f
 
 
@@ -46,6 +48,7 @@ def _follow_low(pet_idx, dx, above):
     def f(t, win):
         c = win.pets[pet_idx].body.chunk0
         return (c.x + dx, win._HL - above)
+
     return f
 
 
@@ -53,6 +56,7 @@ def _on_body(pet_idx):
     def f(t, win):
         b = win.pets[pet_idx].body
         return ((b.chunk0.x + b.chunk1.x) * 0.5, (b.chunk0.y + b.chunk1.y) * 0.5)
+
     return f
 
 
@@ -63,6 +67,7 @@ def _phases(*spec):
             if t >= start:
                 cur = fn
         return cur(t, win)
+
     return f
 
 
@@ -103,10 +108,12 @@ SCENARIOS = {
         "doc": "光标依次停在圣徒/溪流/工匠旁：舔光标、后空翻劫持、低好感扑咬",
         "pets": ["saint", "rivulet", "artificer"],
         "ticks": 5400,
-        "cursor": _phases((0, _cursor_park),
-                          (200, _follow(0, 30.0, 0.62)),
-                          (1800, _follow_low(1, 60.0, 110.0)),
-                          (3400, _on_body(2))),
+        "cursor": _phases(
+            (0, _cursor_park),
+            (200, _follow(0, 30.0, 0.62)),
+            (1800, _follow_low(1, 60.0, 110.0)),
+            (3400, _on_body(2)),
+        ),
         "events": [
             (3300, "set", 2, "temper", -0.8),
         ],
@@ -149,14 +156,20 @@ def _setup_env(home: Path):
     (home / "screen.json").write_text(json.dumps({"screens": [SCREEN]}), encoding="utf-8")
     # configfile 用相对路径：绝对路径的盘符冒号会被 Qt 当成平台参数分隔符
     os.environ["QT_QPA_PLATFORM"] = "offscreen:configfile=screen.json"
-    for k in ("SLUGCATPET_FORCE_ENERGY", "SLUGCATPET_FORCE_TEMPER", "SLUGCATPET_FORCE_FOOD",
-              "SLUGCATPET_PETS", "SLUGCATPET_DEBUG"):
+    for k in (
+        "SLUGCATPET_FORCE_ENERGY",
+        "SLUGCATPET_FORCE_TEMPER",
+        "SLUGCATPET_FORCE_FOOD",
+        "SLUGCATPET_PETS",
+        "SLUGCATPET_DEBUG",
+    ):
         os.environ.pop(k, None)
     sys.path.insert(0, str(ROOT))
 
 
 def _make_app(home: Path):
     from PySide6.QtWidgets import QApplication
+
     app = QApplication.instance()
     if app is None:
         here = os.getcwd()
@@ -184,7 +197,7 @@ def _apply_event(win, ev, drag_state):
     kind = ev[1]
     W, H = win._WL, win._HL
     if kind in ("place_fruit", "place_stone", "place_slimemold", "place_batfly", "place_lamp"):
-        win.place(kind[len("place_"):], W * ev[2], H * ev[3])
+        win.place(kind[len("place_") :], W * ev[2], H * ev[3])
     elif kind == "place_pole":
         win.place(ev[4], W * ev[2], H * ev[3])
     elif kind == "water":
@@ -222,26 +235,47 @@ def _row(win):
     for pet in win.pets:
         b = pet.body
         beh = pet.behavior
-        out.append([
-            beh.state if beh is not None else None,
-            b.bodyMode, getattr(b, "animation", None),
-            round(b.chunk0.x, ROUND), round(b.chunk0.y, ROUND),
-            round(b.chunk1.x, ROUND), round(b.chunk1.y, ROUND),
-            round(b.energy, ROUND + 1), round(b.temper, ROUND + 1),
-            b.food, round(b.cold, ROUND + 1),
-        ])
-    items = [round(sum(o.x + o.y for o in group), 1) for group in
-             (win.fruits, win.stones, win.slimemolds, win.batflies)]
+        out.append(
+            [
+                beh.state if beh is not None else None,
+                b.bodyMode,
+                getattr(b, "animation", None),
+                round(b.chunk0.x, ROUND),
+                round(b.chunk0.y, ROUND),
+                round(b.chunk1.x, ROUND),
+                round(b.chunk1.y, ROUND),
+                round(b.energy, ROUND + 1),
+                round(b.temper, ROUND + 1),
+                b.food,
+                round(b.cold, ROUND + 1),
+            ]
+        )
+    items = [
+        round(sum(o.x + o.y for o in group), 1)
+        for group in (win.fruits, win.stones, win.slimemolds, win.batflies)
+    ]
     out.append(items)
     return out
 
 
-FIELDS = ("state", "bodyMode", "animation", "c0.x", "c0.y", "c1.x", "c1.y",
-          "energy", "temper", "food", "cold")
+FIELDS = (
+    "state",
+    "bodyMode",
+    "animation",
+    "c0.x",
+    "c0.y",
+    "c1.x",
+    "c1.y",
+    "energy",
+    "temper",
+    "food",
+    "cold",
+)
 
 
 def _frame_hash(win) -> str:
     from PySide6.QtGui import QImage
+
     win._ts = 1.0
     img = QImage(win.size(), QImage.Format.Format_ARGB32)
     img.fill(0)
@@ -253,29 +287,34 @@ def _frame_hash(win) -> str:
 def _check_painted_bounds(win, img):
     """画到的像素必须都在记录的范围内，否则局部重绘会留残影。"""
     import numpy as np
-    a = np.frombuffer(img.constBits(), np.uint32).reshape(img.height(), -1)[:, :img.width()]
+
+    a = np.frombuffer(img.constBits(), np.uint32).reshape(img.height(), -1)[:, : img.width()]
     ys, xs = np.nonzero(a)
     if not len(xs):
         return
     r = win._painted
-    if not (r.left() <= xs.min() and xs.max() <= r.right()
-            and r.top() <= ys.min() and ys.max() <= r.bottom()):
-        raise AssertionError(f"painted pixels {xs.min()},{ys.min()}..{xs.max()},{ys.max()} "
-                             f"outside recorded bounds {r}")
+    if not (
+        r.left() <= xs.min() and xs.max() <= r.right() and r.top() <= ys.min() and ys.max() <= r.bottom()
+    ):
+        raise AssertionError(
+            f"painted pixels {xs.min()},{ys.min()}..{xs.max()},{ys.max()} outside recorded bounds {r}"
+        )
 
 
 def run_scenario(name: str, home: Path) -> tuple[list, dict]:
     sc = SCENARIOS[name]
-    random.seed(SEED)                         # 全局 random（爆跳/气泡/爆炸特效）
+    random.seed(SEED)  # 全局 random（爆跳/气泡/爆炸特效）
     app = _make_app(home)
     from slugcatpet.platform import cursorfx
-    cursorfx._IS_WIN = False                  # 光标劫持走 mock，不动真实鼠标
+
+    cursorfx._IS_WIN = False  # 光标劫持走 mock，不动真实鼠标
     from slugcatpet import skins
+
     skins.configure(False)
     skins.reload()
     from slugcatpet.window import PetWindow
-    params = {"seed": SEED, "pets": [{"id": f"pet-{i}", "variant": v}
-                                     for i, v in enumerate(sc["pets"])]}
+
+    params = {"seed": SEED, "pets": [{"id": f"pet-{i}", "variant": v} for i, v in enumerate(sc["pets"])]}
     win = PetWindow(params=params)
     win.anim.stop()
     cur = [None]
@@ -342,8 +381,9 @@ def _child(args):
     if args.cmd == "record":
         BASELINE_DIR.mkdir(parents=True, exist_ok=True)
         with gzip.open(path, "wt", encoding="utf-8") as f:
-            json.dump({"seed": SEED, "round": ROUND, "rows": rows, "frames": frames}, f,
-                      separators=(",", ":"))
+            json.dump(
+                {"seed": SEED, "round": ROUND, "rows": rows, "frames": frames}, f, separators=(",", ":")
+            )
         print(f"[record] {name}: {len(rows)} ticks ({dt:.1f}s)")
         return 0
     if not path.exists():
@@ -351,7 +391,7 @@ def _child(args):
         return 1
     with gzip.open(path, "rt", encoding="utf-8") as f:
         base = json.load(f)
-    got = json.loads(json.dumps(rows))               # 与基线同经 JSON 往返（tuple→list）
+    got = json.loads(json.dumps(rows))  # 与基线同经 JSON 往返（tuple→list）
     div = _first_divergence(base["rows"], got)
     if div is not None:
         t, where, a, b, ctx = div
@@ -362,8 +402,10 @@ def _child(args):
         return 1
     bad = [t for t, h in base.get("frames", {}).items() if frames.get(t) != h]
     if bad:
-        print(f"[DIFF]   {name}: physics identical, but {len(bad)} rendered frames "
-              f"differ (first at tick {min(bad, key=int)})")
+        print(
+            f"[DIFF]   {name}: physics identical, but {len(bad)} rendered frames "
+            f"differ (first at tick {min(bad, key=int)})"
+        )
         return 1
     print(f"[ok]     {name}: {len(rows)} ticks identical ({dt:.1f}s)")
     return 0
@@ -371,7 +413,7 @@ def _child(args):
 
 def main(argv=None):
     try:
-        sys.stdout.reconfigure(errors="replace")       # 非 UTF-8 控制台不因中文崩溃
+        sys.stdout.reconfigure(errors="replace")  # 非 UTF-8 控制台不因中文崩溃
     except (AttributeError, ValueError):
         pass
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
@@ -384,10 +426,20 @@ def main(argv=None):
     env = dict(os.environ, PYTHONHASHSEED=HASH_SEED, PYTHONIOENCODING="utf-8")
     names = [args.scenario] if args.scenario else list(SCENARIOS)
     me = str(Path(__file__).resolve())
-    procs = [(n, subprocess.Popen([sys.executable, me, args.cmd, "--child", "-s", n], env=env,
-                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                  encoding="utf-8", errors="replace"))
-             for n in names]
+    procs = [
+        (
+            n,
+            subprocess.Popen(
+                [sys.executable, me, args.cmd, "--child", "-s", n],
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                encoding="utf-8",
+                errors="replace",
+            ),
+        )
+        for n in names
+    ]
     failed = False
     for n, p in procs:
         out, _ = p.communicate()

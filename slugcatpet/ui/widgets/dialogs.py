@@ -1,7 +1,16 @@
 """自绘卡片弹窗：show()=非模态，open()=WindowModal，不走 exec。"""
+
 from __future__ import annotations
-from PySide6.QtWidgets import (QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-                               QPushButton, QRadioButton, QButtonGroup)
+from PySide6.QtWidgets import (
+    QDialog,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QRadioButton,
+    QButtonGroup,
+)
 from PySide6.QtCore import Qt, QPoint
 from PySide6.QtGui import QGuiApplication
 from ..theme import qss
@@ -16,9 +25,9 @@ class CardDialog(QDialog):
     def __init__(self, title: str, parent=None, width: int = 300):
         super().__init__(parent)
         self.setObjectName("cardShell")
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint
-                            | Qt.WindowType.WindowStaysOnTopHint
-                            | Qt.WindowType.Dialog)
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Dialog
+        )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self._drag_off = None
         self._finished = False
@@ -42,7 +51,7 @@ class CardDialog(QDialog):
         self.setStyleSheet(_CARD_QSS)
 
     def done(self, result):
-        if self._finished:               # 防二次发射 finished
+        if self._finished:  # 防二次发射 finished
             return
         self._finished = True
         super().done(result)
@@ -95,8 +104,9 @@ class CardDialog(QDialog):
 class ConfirmDialog(CardDialog):
     """确认弹窗（Accepted=确认）；cancel_btn 供外部程序化点击。"""
 
-    def __init__(self, title: str, text: str, confirm_text: str, cancel_text: str,
-                 parent=None, width: int = 300):
+    def __init__(
+        self, title: str, text: str, confirm_text: str, cancel_text: str, parent=None, width: int = 300
+    ):
         super().__init__(title, parent, width)
         lbl = QLabel(text)
         lbl.setObjectName("cardText")
@@ -116,8 +126,17 @@ class ConfirmDialog(CardDialog):
 class PickDialog(CardDialog):
     """选择弹窗；Accepted 后读 selected_index()。"""
 
-    def __init__(self, title: str, label: str, items: list, ok_text: str, cancel_text: str,
-                 parent=None, current: int = 0, width: int = 320):
+    def __init__(
+        self,
+        title: str,
+        label: str,
+        items: list,
+        ok_text: str,
+        cancel_text: str,
+        parent=None,
+        current: int = 0,
+        width: int = 320,
+    ):
         super().__init__(title, parent, width)
         lbl = QLabel(label)
         lbl.setObjectName("cardText")

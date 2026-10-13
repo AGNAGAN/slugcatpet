@@ -1,4 +1,5 @@
 """跳跃转移链分派（控制路径专用，y↓）；degvec 返回 y↑ 向量，取 vy 时翻号。"""
+
 from __future__ import annotations
 
 from ..core.units import lerp, inv_lerp
@@ -65,12 +66,12 @@ def _roll_to_rocket(body, c0, c1, rd) -> None:
     t = inv_lerp(0.0, 25.0, body._ctrl_roll_counter)
     ang = rd * lerp(60.0, 35.0, t)
     speed = lerp(9.5, 13.1, t)
-    vx, vy = vmath.degvec(ang)                   # y↑ 向量，此时未翻
+    vx, vy = vmath.degvec(ang)  # y↑ 向量，此时未翻
     vx *= speed
     vy *= speed
     m = body.stats.roll_rocket_vx_mult
     c0.vx = vx * m
-    c0.vy = -vy                                  # y 翻
+    c0.vy = -vy  # y 翻
     c1.vx = vx * m
     c1.vy = -vy
     body.animation = "RocketJump"
@@ -83,7 +84,7 @@ def _belly_to_flip_or_rocket(body, c0, c1, rd, inp0) -> None:
     if body._ctrl_whiplash or inp0.x == -rd:
         body.animation = "Flip"
         body.standing = True
-        c0.y -= 14.0                              # 无砖格，不做原版的后退瞬移
+        c0.y -= 14.0  # 无砖格，不做原版的后退瞬移
         c0.vx = rd * (-s.backflip_vx)
         c0.vy = s.backflip_c0_vy
         c1.vx = rd * (-s.backflip_vx)

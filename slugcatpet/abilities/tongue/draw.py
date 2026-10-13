@@ -1,4 +1,5 @@
 """舌头渲染：渲染链每 tick 推进（Verlet），绘制时只画不推。"""
+
 from __future__ import annotations
 
 import math
@@ -32,11 +33,14 @@ class TongueRope:
         rope = self.pts
         rope_v = self.vel
         # 无链/长度变/跳变>80px 时重建
-        if (rope is None or len(rope) != N
-                or rope_v is None or len(rope_v) != N
-                or math.hypot(rope[-1][0] - mx, rope[-1][1] - my) > 80.0):
-            rope = [(tx + (mx - tx) * (i / (N - 1)),
-                     ty + (my - ty) * (i / (N - 1))) for i in range(N)]
+        if (
+            rope is None
+            or len(rope) != N
+            or rope_v is None
+            or len(rope_v) != N
+            or math.hypot(rope[-1][0] - mx, rope[-1][1] - my) > 80.0
+        ):
+            rope = [(tx + (mx - tx) * (i / (N - 1)), ty + (my - ty) * (i / (N - 1))) for i in range(N)]
             rope_v = [(0.0, 0.0)] * N
 
         pts = list(rope)
@@ -77,7 +81,7 @@ class TongueRope:
             d = math.hypot(dx, dy)
             if d < 1e-6:
                 continue
-            over = (d - rest)
+            over = d - rest
             ux, uy = dx / d, dy / d
             if i - 1 != 0:
                 pax, pay = pts[i - 1]
@@ -138,7 +142,7 @@ def draw_tongue(t, rope, p):
     for j in range(m):
         mid_t = max(0.0, min(1.0, math.sin(j / max(1, m - 1) * PI)))
         h = HA + (HB - HA) * mid_t
-        lv = A2 + (B2 - A2) * (mid_t ** 0.15)
+        lv = A2 + (B2 - A2) * (mid_t**0.15)
         gr, gg, gb = _hsl2rgb(h, HSL_SL, lv)
         cr = int(fog[0] + (gr * 255.0 - fog[0]) * 0.7)
         cg = int(fog[1] + (gg * 255.0 - fog[1]) * 0.7)

@@ -1,4 +1,5 @@
 """鳃：头侧鳞片随视线扇动。"""
+
 from __future__ import annotations
 
 from ...core.units import K_VEL
@@ -6,7 +7,7 @@ from ..base import Accessory
 from .draw import EFFECT, draw_gills
 from .organ import Gills
 
-FLAT_RATE = 0.08 * K_VEL      # 趴 / 睡时鳃锚退回世界水平的速度
+FLAT_RATE = 0.08 * K_VEL  # 趴 / 睡时鳃锚退回世界水平的速度
 
 
 class GillsAccessory(Accessory):
@@ -32,6 +33,13 @@ class GillsAccessory(Accessory):
             g.flat = min(flat, g.flat + FLAT_RATE)
         elif g.flat > flat:
             g.flat = max(flat, g.flat - FLAT_RATE)
-        g.update(b.chunk0.x, b.chunk0.y, b.chunk1.x, b.chunk1.y,
-                 gfx.look_dir[0], gfx.look_dir[1],
-                 submerged=b.head_sub > 0.5, flat_anchor=g.flat)
+        g.update(
+            b.chunk0.x,
+            b.chunk0.y,
+            b.chunk1.x,
+            b.chunk1.y,
+            gfx.look_dir[0],
+            gfx.look_dir[1],
+            submerged=b.head_sub > 0.5,
+            flat_anchor=g.flat,
+        )

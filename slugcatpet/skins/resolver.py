@@ -1,4 +1,5 @@
 """每只猫的图集查找链：皮肤（按组）→ 原版。"""
+
 from __future__ import annotations
 
 from . import groups as G
@@ -8,7 +9,6 @@ _SIDES = {"L": "left", "R": "right"}
 
 
 class SkinAtlasSet:
-
     def __init__(self, base, pack, species: str):
         self.base = base
         self.pack = pack

@@ -1,4 +1,5 @@
 """内置行为状态：趋暖。"""
+
 from __future__ import annotations
 
 from ... import tuning
@@ -11,7 +12,7 @@ class SeekWarmth(State):
     name = "SeekWarmth"
     tier = T_WARM
     energy = LIGHT
-    warm = None                  # WarmGoal（挂载时设）
+    warm = None  # WarmGoal（挂载时设）
 
     def __init__(self, fsm):
         super().__init__(fsm)
@@ -39,7 +40,9 @@ class SeekWarmth(State):
         b = fsm.body
         src = warm_source(fsm)
         if src is None or self._warm_exec is None:
-            self._seekwarmth_break(); fsm._transition("IdleStand"); return
+            self._seekwarmth_break()
+            fsm._transition("IdleStand")
+            return
         fsm.gfx.look_at = src.look_point
         status = self._warm_exec.update()
         if status == GIVEUP:

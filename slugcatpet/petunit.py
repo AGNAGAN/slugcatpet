@@ -1,4 +1,5 @@
 """单只宠物实例。"""
+
 from __future__ import annotations
 import math
 import random
@@ -18,32 +19,41 @@ from .items.base import WARM
 
 TAIL_SNAP = 40.0
 
-ZEROG_ROOM_GRAVITY = 0.5     # 判为零重力的阈值
+ZEROG_ROOM_GRAVITY = 0.5  # 判为零重力的阈值
 ZEROG_TAIL_RATE = 0.08
 ZEROG_TAIL_AMP0 = 0.4
 ZEROG_TAIL_AMP1 = 0.16
 
 
 class PetUnit:
-    def __init__(self, window, index: int, pet_id: str, variant: str, init_state: dict,
-                 spawn_x: float | None = None, look: Look | None = None, name: str = ""):
+    def __init__(
+        self,
+        window,
+        index: int,
+        pet_id: str,
+        variant: str,
+        init_state: dict,
+        spawn_x: float | None = None,
+        look: Look | None = None,
+        name: str = "",
+    ):
         self.window = window
         self.index = index
         self.id = pet_id
         self.variant = variant
         self.cat = get_cat_def(variant)
         self.traits = Traits(self.cat.personality)
-        self.abilities = build_abilities(self.cat)   # key → Ability
-        self.organs = {}                    # 能力建的器官（key → 器官对象）
+        self.abilities = build_abilities(self.cat)  # key → Ability
+        self.organs = {}  # 能力建的器官（key → 器官对象）
         self.look = look or Look()
-        self.name = name                    # 用户起的名字，空=用猫种名
-        self.hidden = False                 # 收起：不在场景里，但保留状态
+        self.name = name  # 用户起的名字，空=用猫种名
+        self.hidden = False  # 收起：不在场景里，但保留状态
         self._reincarnate_pending = False
-        self._cramp_delay = -1                              # <0 才可再抽
+        self._cramp_delay = -1  # <0 才可再抽
         self._cold_rng = random.Random(0xC01D + index)
         self._kill_dialog = None
         self._kill_cancel_by_self = False
-        self._kill_dismiss_silent = False   # 静默消解，跳过扣好感
+        self._kill_dismiss_silent = False  # 静默消解，跳过扣好感
         self.controlled = False
         self.behavior = None
         self._build(init_state, spawn_x)
@@ -60,17 +70,22 @@ class PetUnit:
         self.layout_data = Layout.for_cat(self.cat)
         cx = spawn_x if spawn_x is not None else w._WL / 2.0
         floor_y = w._HL
-        self.body = SlugcatBody((cx, floor_y), w._WL, floor_y,
-                                energy=init_state.get("energy", 1.0),
-                                temper=init_state.get("temper", 0.0),
-                                food=init_state.get("food"),
-                                karma=init_state.get("karma"),
-                                stats=self.cat.stats)
+        self.body = SlugcatBody(
+            (cx, floor_y),
+            w._WL,
+            floor_y,
+            energy=init_state.get("energy", 1.0),
+            temper=init_state.get("temper", 0.0),
+            food=init_state.get("food"),
+            karma=init_state.get("karma"),
+            stats=self.cat.stats,
+        )
         for ab in self.abilities.values():
             ab.attach_body(self, self.body)
         self.body.cold = float(init_state.get("cold", 0.0))
         self.body.visual_floor_y = floor_y
         from .core import chunkphys as _cp
+
         _hips_half_w = w.atlas.source_size("base", "HipsA")[0] / 2.0
         _crawl_draw_raise = 4.0
         self.body.crawl_sink = _cp.RAD1 - _hips_half_w + _crawl_draw_raise
@@ -78,8 +93,7 @@ class PetUnit:
         self.body.walk_min = margin
         self.body.walk_max = w._WL - margin
         self.atlas = self._make_atlas()
-        self.gfx = SlugcatGraphics(self.body, self.layout_data, self.atlas, cat=self.cat,
-                                   look=self.look)
+        self.gfx = SlugcatGraphics(self.body, self.layout_data, self.atlas, cat=self.cat, look=self.look)
         for _ in range(40):
             self.body.step()
             self.gfx.update()
@@ -102,8 +116,8 @@ class PetUnit:
 
     def _build_accessories(self):
         from .accessories import BUILTIN
-        self.accessories = {cls.key: cls(self) for cls in BUILTIN
-                            if self.look.wears(cls, self.cat.key)}
+
+        self.accessories = {cls.key: cls(self) for cls in BUILTIN if self.look.wears(cls, self.cat.key)}
         for acc in self.accessories.values():
             acc.color = self.look.acc_color(acc.key)
         layers = self.gfx.acc_layers
@@ -134,6 +148,7 @@ class PetUnit:
     def _make_atlas(self):
         """皮肤 → 原版。"""
         from . import skins
+
         return skins.resolver_for(self.window.atlas, self.skin_id, self.cat.key)
 
     def set_skin(self, skin_id: str | None):
@@ -174,23 +189,22 @@ class PetUnit:
         except Exception:
             self.behavior = None
             return
-        seed = getattr(self.window, "_seed", None)      # 测试/复现用；None=随机
+        seed = getattr(self.window, "_seed", None)  # 测试/复现用；None=随机
         self.behavior = BehaviorFSM(self, seed=None if seed is None else seed * 1009 + self.index)
 
     def respawn(self, preserve=False):
         """重置本猫（preserve=True 保留体征）。"""
-        if self.controlled:              # 先退控制，防丢 provider
+        if self.controlled:  # 先退控制，防丢 provider
             from .control.session import exit_control
+
             exit_control(self)
         self.dismiss_kill_dialog()
         w = self.window
         if preserve:
             b = self.body
-            init_state = {"energy": b.energy, "temper": b.temper,
-                          "food": b.food, "karma": b.karma}
+            init_state = {"energy": b.energy, "temper": b.temper, "food": b.food, "karma": b.karma}
         else:
-            init_state = {"energy": 1.0, "temper": 0.0,
-                          "food": tuning.FOOD_INIT, "karma": tuning.KARMA_INIT}
+            init_state = {"energy": 1.0, "temper": 0.0, "food": tuning.FOOD_INIT, "karma": tuning.KARMA_INIT}
         self._build(init_state)
         self._attach_behavior()
         w._shown = None
@@ -223,12 +237,13 @@ class PetUnit:
         box = self._kill_dialog
         if box is not None:
             self._kill_dismiss_silent = True
-            box.reject()          # 触发 finished 回调
+            box.reject()  # 触发 finished 回调
 
     def step(self, cursor, cycle_prog):
         if self.controlled and self.body.dead:
             # 死须先退控制再转世
             from .control.session import exit_control
+
             exit_control(self)
         if self._reincarnate_pending:
             self._reincarnate_pending = False
@@ -245,7 +260,7 @@ class PetUnit:
         elif w.follow_cursor:
             g.look_at = cursor
 
-        b.suspended = False                 # 舌头能力会按吊挂状态改写
+        b.suspended = False  # 舌头能力会按吊挂状态改写
         for ab in self.abilities.values():
             ab.pre_step(self)
 
@@ -272,10 +287,15 @@ class PetUnit:
             sp.reset()
             return
         r = tuning.SWIM_AVOID_TRIGGER_DIST
-        sp.neighbors = [o.body.swim_pass.as_neighbor() for o in self.window.pets
-                        if o is not self and o.body.swimming and not o.body.dead
-                        and abs(o.body.chunk0.x - b.chunk0.x) <= r
-                        and abs(o.body.chunk0.y - b.chunk0.y) <= r]
+        sp.neighbors = [
+            o.body.swim_pass.as_neighbor()
+            for o in self.window.pets
+            if o is not self
+            and o.body.swimming
+            and not o.body.dead
+            and abs(o.body.chunk0.x - b.chunk0.x) <= r
+            and abs(o.body.chunk0.y - b.chunk0.y) <= r
+        ]
 
     def resize(self, floor_y):
         self.tail.floor_y = floor_y
@@ -311,17 +331,18 @@ class PetUnit:
             cg *= inv_lerp(50.0, -10.0, b.total_mass)
             if b.cold > 0.8:
                 cg *= 0.5
-            cg *= self.traits.cold_gain    # 低=更耐寒
-            cg = clampf(cg, -1.0, tuning.COLD_GAIN_CLAMP_HI)             # 勿改
+            cg *= self.traits.cold_gain  # 低=更耐寒
+            cg = clampf(cg, -1.0, tuning.COLD_GAIN_CLAMP_HI)  # 勿改
             cold_gain = cg
             b.cold += cg
             conscious = b.stun < 10 and not b.dead
             if b.cold >= 0.8 and conscious:
-                if cg > tuning.COLD_CRAMP_GAIN_GATE:                     # 勿改
+                if cg > tuning.COLD_CRAMP_GAIN_GATE:  # 勿改
                     if self._cramp_delay < 0:
-                        st = int(lerp(5.0, 60.0, b.cold ** 8))
-                        self._cramp_delay = int(self._cold_rng.uniform(
-                            300 - b.cold * 240, 500 - b.cold * 200))
+                        st = int(lerp(5.0, 60.0, b.cold**8))
+                        self._cramp_delay = int(
+                            self._cold_rng.uniform(300 - b.cold * 240, 500 - b.cold * 200)
+                        )
                         b.stun = max(b.stun, st)
                 else:
                     self._cramp_delay = self._cold_rng.randint(200, 499)
@@ -354,21 +375,21 @@ class PetUnit:
         elif b.bodyMode == "Crawl":
             looseness = 1.0
         elif b.bodyMode == "ClimbingOnBeam":
-            looseness = 1.0   # 漏此分支尾巴发僵
+            looseness = 1.0  # 漏此分支尾巴发僵
         elif b.bodyMode == "ZeroG":
-            looseness = 1.0   # 漏此分支尾巴发僵
+            looseness = 1.0  # 漏此分支尾巴发僵
         else:
-            looseness = 0.0   # 空中无动画
+            looseness = 0.0  # 空中无动画
         ref_x, ref_y = b.chunk0.x, b.chunk0.y
-        if (b.bodyMode == "Stand"
-                and abs(b.chunk0.vx) / K_VEL > 2.0 and abs(b.chunk1.vx) / K_VEL > 2.0):
+        if b.bodyMode == "Stand" and abs(b.chunk0.vx) / K_VEL > 2.0 and abs(b.chunk1.vx) / K_VEL > 2.0:
             ref_x = b.chunk1.x + b.facing * 16.0 * clampf(abs(b.chunk1.vx) / K_VEL - 0.2, 0.0, 1.0)
             ref_y = b.chunk1.y + 4.0
-        self.tail.step(rx, ry, b.chunk1.x, b.chunk1.y, ref_x, ref_y, looseness,
-                       gravity_norm=self.window.room_gravity)   # 零重力不朝世界下耷拉
+        self.tail.step(
+            rx, ry, b.chunk1.x, b.chunk1.y, ref_x, ref_y, looseness, gravity_norm=self.window.room_gravity
+        )  # 零重力不朝世界下耷拉
         if b.bodyMode == "ZeroG":
             self._apply_zerog_tail_sway(b)
-        g._apply_sleep_tail_curl()   # 须在 tail.step 之后
+        g._apply_sleep_tail_curl()  # 须在 tail.step 之后
         self._prev_root = (rx, ry)
         if b.animation in ("Roll", "Flip"):
             vx, vy = dirvec(b.chunk0.x, b.chunk0.y, b.chunk1.x, b.chunk1.y)
@@ -380,9 +401,9 @@ class PetUnit:
 
     def _apply_zerog_tail_sway(self, b):
         self._zerog_tail_phase += ZEROG_TAIL_RATE
-        ax, ay = b.chunk0.x - b.chunk1.x, b.chunk0.y - b.chunk1.y   # 体轴
+        ax, ay = b.chunk0.x - b.chunk1.x, b.chunk0.y - b.chunk1.y  # 体轴
         d = math.hypot(ax, ay) or 1.0
-        px, py = -ay / d, ax / d                                    # 垂体轴单位向量
+        px, py = -ay / d, ax / d  # 垂体轴单位向量
         s = math.sin(self._zerog_tail_phase)
         segs = self.tail.segs
         segs[0].vx += px * ZEROG_TAIL_AMP0 * s

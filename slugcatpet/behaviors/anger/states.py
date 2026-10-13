@@ -1,4 +1,5 @@
 """内置行为状态：被砸后生气 / 扔石头。"""
+
 from __future__ import annotations
 
 from ...brain.state import T_ACTIVITY, State, LIGHT, IDLE
@@ -54,6 +55,7 @@ class AngryStone(State):
     def enter(self):
         fsm = self.fsm
         from .thrower import StoneThrower
+
         fsm.gfx.hand_aim["l"] = None
         fsm.gfx.hand_aim["r"] = None
         self.thrower = StoneThrower(fsm.win, fsm.rng, fsm)

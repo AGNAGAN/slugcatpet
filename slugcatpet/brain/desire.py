@@ -1,4 +1,5 @@
 """欲望加权选择：freshness 滞回控冷却，合格候选中加权随机抽取。"""
+
 from __future__ import annotations
 
 from .. import tuning
@@ -26,13 +27,36 @@ def _one(_):
 
 
 class Candidate:
-    __slots__ = ("name", "base", "start", "quit", "decay", "recover",
-                 "gate", "energy_factor", "temper_factor", "cold_factor",
-                 "one_shot", "freshness")
+    __slots__ = (
+        "name",
+        "base",
+        "start",
+        "quit",
+        "decay",
+        "recover",
+        "gate",
+        "energy_factor",
+        "temper_factor",
+        "cold_factor",
+        "one_shot",
+        "freshness",
+    )
 
-    def __init__(self, name, base, start, quit, decay, recover,
-                 gate, energy_factor, temper_factor, one_shot, init=1.0,
-                 cold_factor=None):
+    def __init__(
+        self,
+        name,
+        base,
+        start,
+        quit,
+        decay,
+        recover,
+        gate,
+        energy_factor,
+        temper_factor,
+        one_shot,
+        init=1.0,
+        cold_factor=None,
+    ):
         self.name = name
         self.base = base
         self.start = start
@@ -43,13 +67,18 @@ class Candidate:
         self.energy_factor = energy_factor
         self.temper_factor = temper_factor
         self.cold_factor = cold_factor if cold_factor is not None else _one
-        self.one_shot = one_shot          # True=自身结束，False=freshness 降至 quit 退出
+        self.one_shot = one_shot  # True=自身结束，False=freshness 降至 quit 退出
         self.freshness = init
 
     def weight(self, ctx, noise):
-        return max(0.0, self.base * self.energy_factor(ctx.energy)
-                   * self.temper_factor(ctx.temper)
-                   * self.cold_factor(ctx.cold) + noise)
+        return max(
+            0.0,
+            self.base
+            * self.energy_factor(ctx.energy)
+            * self.temper_factor(ctx.temper)
+            * self.cold_factor(ctx.cold)
+            + noise,
+        )
 
 
 class MoodArbiter:

@@ -1,4 +1,5 @@
 """行为（Behavior）基类。"""
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -26,21 +27,31 @@ def _one(_):
 
 
 def mood_candidate(fsm, name, p, gate, one_shot=True, energy_factor=_one, before=None):
-    fsm.mood.add(Candidate(
-        name, base=p.mood_base * fsm.traits.mood_weight(name),
-        start=p.mood_start, quit=p.mood_quit,
-        decay=p.mood_decay, recover=p.mood_recover,
-        gate=gate, energy_factor=energy_factor, temper_factor=_one,
-        one_shot=one_shot, init=p.mood_init), before=before)
+    fsm.mood.add(
+        Candidate(
+            name,
+            base=p.mood_base * fsm.traits.mood_weight(name),
+            start=p.mood_start,
+            quit=p.mood_quit,
+            decay=p.mood_decay,
+            recover=p.mood_recover,
+            gate=gate,
+            energy_factor=energy_factor,
+            temper_factor=_one,
+            one_shot=one_shot,
+            init=p.mood_init,
+        ),
+        before=before,
+    )
 
 
 class Behavior:
-    key = ""                 # 注册键，角色定义 behaviors 里用它
+    key = ""  # 注册键，角色定义 behaviors 里用它
     title = {"zh": "", "en": ""}
     doc = ""
-    requires = ()            # 依赖的能力 key 或物品用法；能力不齐不挂载，用法只标明会用到哪类物品
-    essential = False        # 状态机离不开它，角色里不能关
-    mood = None              # 心情候选名（性格按它调权重），无则 None
+    requires = ()  # 依赖的能力 key 或物品用法；能力不齐不挂载，用法只标明会用到哪类物品
+    essential = False  # 状态机离不开它，角色里不能关
+    mood = None  # 心情候选名（性格按它调权重），无则 None
     params: dict = {}
 
     def __init__(self, p: SimpleNamespace):

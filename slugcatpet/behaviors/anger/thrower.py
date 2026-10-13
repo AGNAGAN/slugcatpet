@@ -1,4 +1,5 @@
 """生气期捡石/投石控制器；select→approach→hold→throw，update() 返回路由串。"""
+
 from __future__ import annotations
 import math
 
@@ -11,11 +12,11 @@ APPROACH_TIMEOUT = 240
 MAX_FAILS = 5
 ABANDON_FAILS = 3
 THROW_FRAMES = 5
-HOLD_AIM_TICKS = 80             # 拿到石头后先盯光标这么久才扔
+HOLD_AIM_TICKS = 80  # 拿到石头后先盯光标这么久才扔
 # 横向门：猫→光标角度，度
 THROW_BAND_LO = -28.0
 THROW_BAND_HI = 18.0
-ABANDON_MIN = 400               # 一直等不到机会，过这么久就消气
+ABANDON_MIN = 400  # 一直等不到机会，过这么久就消气
 ABANDON_MAX = 600
 
 THROW_SPEED_FRAC = 0.06
@@ -56,14 +57,17 @@ class StoneThrower:
 
     def _avail(self, s):
         """可作目标：free 态 + 地面静止 + 未判 unfetchable + 没被别的猫占着。"""
-        return (s.state == "free" and not s.unfetchable
-                and s.at_rest_on_ground(self.win._HL)
-                and self.win.social.free_for(self.win, s))
+        return (
+            s.state == "free"
+            and not s.unfetchable
+            and s.at_rest_on_ground(self.win._HL)
+            and self.win.social.free_for(self.win, s)
+        )
 
     def _in_band(self, cursor):
         c0 = self._chunk0()
         horiz = abs(cursor[0] - c0.x)
-        above = c0.y - cursor[1]    # y↓：>0 光标在上方
+        above = c0.y - cursor[1]  # y↓：>0 光标在上方
         if horiz < 1e-6:
             return False
         ang = math.degrees(math.atan2(above, horiz))
@@ -80,7 +84,7 @@ class StoneThrower:
         if dx < 1.0 or abs(vx) < 1e-3:
             return None
         n = dx / abs(vx)
-        return dy / n - 0.5 * STONE_GRAVITY * self.body.room_gravity * (n + 1.0)   # 逐 tick 积分的闭式解
+        return dy / n - 0.5 * STONE_GRAVITY * self.body.room_gravity * (n + 1.0)  # 逐 tick 积分的闭式解
 
     def update(self, still_angry) -> str:
         self.timer += 1
@@ -157,8 +161,9 @@ class StoneThrower:
     def _phase_throw(self, still_angry):
         if self.throw_t == 0:
             base = max(THROW_SPEED_MIN, self.win._WL * THROW_SPEED_FRAC)
-            self._thrown = self.body.throw_stone(self.throw_dir, base, up=3.0,
-                                                 recoil=THROW_RECOIL, vy=self._solve_vy(base))
+            self._thrown = self.body.throw_stone(
+                self.throw_dir, base, up=3.0, recoil=THROW_RECOIL, vy=self._solve_vy(base)
+            )
             self.gfx.blink = 15
         side = self.grab_side
         c0 = self._chunk0()

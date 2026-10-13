@@ -1,4 +1,5 @@
 """幽灵触手 GhostTentacle：飞升时的发光软触手；坐标 y↓。"""
+
 from __future__ import annotations
 import math
 import random
@@ -11,7 +12,6 @@ def deg_to_vec_qt(ang_deg):
 
 
 class GhostTentacle:
-
     def __init__(self, root_x, root_y, length=100.0, seed=0):
         self.length = float(length)
         n = int(max(1.0, min(200.0, length / 20.0)))
@@ -49,8 +49,14 @@ class GhostTentacle:
         t = 0.0 if self.conRad <= 0 else max(0.0, min(1.0, d / self.conRad))
         m = (self.conRad - d) * 0.5 * t
         mx, my = nx * m, ny * m
-        a[0] += mx; a[4] += mx; a[1] += my; a[5] += my
-        b[0] -= mx; b[4] -= mx; b[1] -= my; b[5] -= my
+        a[0] += mx
+        a[4] += mx
+        a[1] += my
+        a[5] += my
+        b[0] -= mx
+        b[4] -= mx
+        b[1] -= my
+        b[5] -= my
 
     def update(self):
         n = self.n
@@ -77,9 +83,12 @@ class GhostTentacle:
         for j in range(n):
             frac = j / (n - 1) if n > 1 else 0.0
             s = self.seg[j]
-            s[2] = s[0]; s[3] = s[1]
-            s[0] += s[4]; s[1] += s[5]
-            s[4] *= 0.999; s[5] *= 0.999
+            s[2] = s[0]
+            s[3] = s[1]
+            s[0] += s[4]
+            s[1] += s[5]
+            s[4] *= 0.999
+            s[5] *= 0.999
             s[4] += self.wind_x * 0.005
             s[5] += self.wind_y * 0.005
             if frac > 0.5:
@@ -101,8 +110,10 @@ class GhostTentacle:
         if self.activeUpdateTime == 1:
             s0 = self.seg[0]
             for i in range(1, self.n):
-                self.seg[i][0] = s0[0]; self.seg[i][1] = s0[1]
-                self.seg[i][2] = s0[2]; self.seg[i][3] = s0[3]
+                self.seg[i][0] = s0[0]
+                self.seg[i][1] = s0[1]
+                self.seg[i][2] = s0[2]
+                self.seg[i][3] = s0[3]
 
     def inactive_update(self):
         if self.lengthFactor <= 0.01:
@@ -115,13 +126,13 @@ class GhostTentacle:
         return 0.2 + (1.0 - 0.2) * math.sqrt(max(0.0, min(1.0, math.sin(f * math.pi))))
 
     @staticmethod
-    def _mesh_color(f):                                  # → (r,g,b) 0..255
+    def _mesh_color(f):  # → (r,g,b) 0..255
         f = abs(f - 0.5) * 2.0
-        e = 0.5 + 0.5 * (f ** 3)
+        e = 0.5 + 0.5 * (f**3)
         h = (0.4 + (0.1 - 0.4) * e) % 1.0
         s = (0.4 + (0.1 - 0.4) * e) % 1.0
-        l = 0.1 + (0.02 - 0.1) * max(0.0, min(1.0, (f - 0.7) / 0.3))
-        r, g, b = colorsys.hls_to_rgb(h, l, s)
+        lum = 0.1 + (0.02 - 0.1) * max(0.0, min(1.0, (f - 0.7) / 0.3))
+        r, g, b = colorsys.hls_to_rgb(h, lum, s)
         return (int(r * 255), int(g * 255), int(b * 255))
 
     def build_centerline(self, ts):

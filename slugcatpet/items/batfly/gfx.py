@@ -1,4 +1,5 @@
 """蝙蝠渲染状态推进（不画），y↓。"""
+
 from __future__ import annotations
 import math
 
@@ -7,7 +8,7 @@ from ...core.vecmath import _ang_from_up, _rot
 from ..state import ItemState
 
 LOWER_CONN = 10.0
-LOWER_DROOP = 0.9 * 2.0       # y↓ 取正
+LOWER_DROOP = 0.9 * 2.0  # y↓ 取正
 
 
 def update_render(bat, sub: float) -> None:

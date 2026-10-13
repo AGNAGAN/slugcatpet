@@ -1,22 +1,23 @@
 """物理内核：显式速度质点 + 连接约束 + 轴对齐碰撞。坐标系 y↓，常量换算见 core.units。"""
+
 from __future__ import annotations
 import math
 
 from .units import K_IMP, K_VEL, clampf, damp60, lerp
 
-RAD0 = 9.0            # chest
-RAD1 = 8.0            # hips
+RAD0 = 9.0  # chest
+RAD1 = 8.0  # hips
 MASS = 0.35
 DIST_STAND = 17.0
 DIST_CRAWL = 17.0
 
-GRAVITY = 0.9 * K_IMP            # y↓
+GRAVITY = 0.9 * K_IMP  # y↓
 AIR_FRICTION = damp60(0.999)
 BOUNCE = 0.1
 WEIGHT_SYMMETRY = 0.5
 ELASTICITY = 1.0
 SURFACE_FRICTION = 0.5
-MAX_STRETCH = 1.5    # pinned 端硬上限，rest×此值
+MAX_STRETCH = 1.5  # pinned 端硬上限，rest×此值
 
 STOP_THRESH = (1.0 + 9.0 * (1.0 - BOUNCE)) * K_VEL
 TANGENTIAL = min(max(SURFACE_FRICTION * 2.0, 0.0), 1.0)
@@ -26,8 +27,15 @@ IMPACT_SHAKE_MOMENTUM = 7.0 * K_VEL
 IMPACT_STRENGTH_KNEE = 30.0 * K_VEL
 
 
-def apply_water(obj, water_y, buoyancy: float, water_friction, room_gravity: float,
-                air_friction: float, immunity: float = 0.0) -> None:
+def apply_water(
+    obj,
+    water_y,
+    buoyancy: float,
+    water_friction,
+    room_gravity: float,
+    air_friction: float,
+    immunity: float = 0.0,
+) -> None:
     r = obj.rad
     sub = 0.0
     if water_y is not None and obj.y + r > water_y:
@@ -42,7 +50,7 @@ def apply_water(obj, water_y, buoyancy: float, water_friction, room_gravity: flo
         obj.vy *= -0.5
         obj.vx *= 0.75
         return
-    obj.vy -= buoyancy * room_gravity * sub              # 浮力，y↓取负
+    obj.vy -= buoyancy * room_gravity * sub  # 浮力，y↓取负
     wf = water_friction if water_friction is not None else air_friction
     spd = math.hypot(obj.vx, obj.vy)
     inner = lerp(wf * immunity, wf, (1.0 / max(1.0, spd - 10.0)) ** 0.5)
@@ -52,9 +60,26 @@ def apply_water(obj, water_y, buoyancy: float, water_friction, room_gravity: flo
 
 
 class BodyChunk:
-    __slots__ = ("x", "y", "vx", "vy", "last_x", "last_y", "last_last_x", "last_last_y",
-                 "rad", "mass", "index", "cx", "cy", "lcx", "lcy", "pinned",
-                 "collide_with_objects", "impact_scale")
+    __slots__ = (
+        "x",
+        "y",
+        "vx",
+        "vy",
+        "last_x",
+        "last_y",
+        "last_last_x",
+        "last_last_y",
+        "rad",
+        "mass",
+        "index",
+        "cx",
+        "cy",
+        "lcx",
+        "lcy",
+        "pinned",
+        "collide_with_objects",
+        "impact_scale",
+    )
 
     def __init__(self, index: int, x: float, y: float, rad: float, mass: float):
         self.index = index
@@ -65,18 +90,27 @@ class BodyChunk:
         self.mass = mass
         self.cx = self.cy = 0
         self.lcx = self.lcy = 0
-        self.pinned = False        # 外部定位，不积分不撞
+        self.pinned = False  # 外部定位，不积分不撞
         self.collide_with_objects = True
-        self.impact_scale = 1.0            # 撞击速度放大（拖拽时补回限速）
+        self.impact_scale = 1.0  # 撞击速度放大（拖拽时补回限速）
 
     @property
     def on_floor(self) -> bool:
-        return self.cy == 1     # y↓，+1=着地
+        return self.cy == 1  # y↓，+1=着地
 
-    def update(self, W: float, H: float, gravity: float = GRAVITY,
-               air_friction: float = AIR_FRICTION, impact=None,
-               room_gravity: float = 1.0, water_y=None, buoyancy: float = 1.0,
-               water_friction=None, water_immunity: float = 0.0) -> None:
+    def update(
+        self,
+        W: float,
+        H: float,
+        gravity: float = GRAVITY,
+        air_friction: float = AIR_FRICTION,
+        impact=None,
+        room_gravity: float = 1.0,
+        water_y=None,
+        buoyancy: float = 1.0,
+        water_friction=None,
+        water_immunity: float = 0.0,
+    ) -> None:
         if self.vx != self.vx:
             self.vx = 0.0
         if self.vy != self.vy:
@@ -163,9 +197,15 @@ def fire_impact(c: BodyChunk, direction, speed: float, first_contact: bool, impa
     impact(c, direction, speed, strength, ix, iy)
 
 
-def solve_conn(a: BodyChunk, b: BodyChunk, rest: float = DIST_STAND,
-               wsym: float = WEIGHT_SYMMETRY, elasticity: float = ELASTICITY,
-               ctype: str = "Normal", max_stretch: float = MAX_STRETCH) -> None:
+def solve_conn(
+    a: BodyChunk,
+    b: BodyChunk,
+    rest: float = DIST_STAND,
+    wsym: float = WEIGHT_SYMMETRY,
+    elasticity: float = ELASTICITY,
+    ctype: str = "Normal",
+    max_stretch: float = MAX_STRETCH,
+) -> None:
     dx, dy = b.x - a.x, b.y - a.y
     d = math.hypot(dx, dy) or 1e-6
     if ctype == "Pull" and not (d > rest):
@@ -217,7 +257,7 @@ def solve_conn(a: BodyChunk, b: BodyChunk, rest: float = DIST_STAND,
 def aabb_wall_collide(obj, WL, HL, impact=None):
     r = obj.rad
     tang = clampf(obj.surface_friction * 2.0, 0.0, 1.0)
-    stop = 1.0 + 9.0 * (1.0 - obj.bounce)                 # 低弹性→高阈值，撞墙即停
+    stop = 1.0 + 9.0 * (1.0 - obj.bounce)  # 低弹性→高阈值，撞墙即停
     has_ceil = hasattr(obj, "_contact_ceil")
     prev_floor, prev_x = obj._contact_floor, obj._contact_x
     prev_ceil = obj._contact_ceil if has_ceil else False
@@ -296,7 +336,7 @@ def _collide_pair(a, b, a_chunks, b_chunks) -> None:
             dist = math.hypot(dx, dy)
             if dist >= rad_sum:
                 continue
-            ap, bp = getattr(ca, "pinned", False), getattr(cb, "pinned", False)   # 世界物体无 pinned
+            ap, bp = getattr(ca, "pinned", False), getattr(cb, "pinned", False)  # 世界物体无 pinned
             if ap and bp:
                 continue
             if dist < 1e-9:
@@ -313,9 +353,15 @@ def _collide_pair(a, b, a_chunks, b_chunks) -> None:
                 wb = 1.0 - wa
             ax, ay = ux * pen * wa, uy * pen * wa
             bx, by = ux * pen * wb, uy * pen * wb
-            ca.x -= ax; ca.y -= ay; ca.vx -= ax; ca.vy -= ay
-            cb.x += bx; cb.y += by; cb.vx += bx; cb.vy += by
-            if ca.x == cb.x:                    # 同 x 时加确定性微扰
+            ca.x -= ax
+            ca.y -= ay
+            ca.vx -= ax
+            ca.vy -= ay
+            cb.x += bx
+            cb.y += by
+            cb.vx += bx
+            cb.vy += by
+            if ca.x == cb.x:  # 同 x 时加确定性微扰
                 if not ap:
                     ca.vx += 1e-4
                 if not bp:

@@ -1,4 +1,5 @@
 """启动应用，管理 PetWindow、TabBar、托盘、全局热键。"""
+
 from __future__ import annotations
 import sys
 import os
@@ -28,7 +29,7 @@ HK_ABORT = 1
 HK_QUIT = 2
 HK_HUD = 3
 _APP_PARAMS = user_dir() / "app.json"
-SCHEMA_VERSION = 2   # pets[] 分猫存档
+SCHEMA_VERSION = 2  # pets[] 分猫存档
 AUTOSAVE_MS = 60_000
 
 
@@ -48,6 +49,7 @@ def _migrate_params(params: dict) -> dict:
     if params.get("schema_version") == SCHEMA_VERSION and isinstance(params.get("pets"), list):
         return params
     from . import tuning
+
     old_keys = ("energy", "temper", "food", "karma", "cold", "dead")
     if any(k in params for k in old_keys) or not params.get("pets"):
         pet_state = {
@@ -65,8 +67,13 @@ def _migrate_params(params: dict) -> dict:
     return params
 
 
-_DROPPED_KEYS = ("music_water_enabled", "music_hud_enabled", "music_theme_loop",
-                 "music_hud_ambient_ms", "music_hud_ambient_ts")     # 不再读取的设置键，载入时丢弃
+_DROPPED_KEYS = (
+    "music_water_enabled",
+    "music_hud_enabled",
+    "music_theme_loop",
+    "music_hud_ambient_ms",
+    "music_hud_ambient_ts",
+)  # 不再读取的设置键，载入时丢弃
 
 
 def _load_params(path: Path | None = None) -> dict:
@@ -102,25 +109,29 @@ def _save_params(params: dict, path: Path | None = None):
 def setup_signal_handling(app):
     def _h(sig, frame):
         app.quit()
+
     signal.signal(signal.SIGINT, _h)
     t = QTimer()
     t.timeout.connect(lambda: None)
-    t.start(500)   # 唤醒让 CPython 跑 SIGINT handler
+    t.start(500)  # 唤醒让 CPython 跑 SIGINT handler
     return t
 
 
 def _ensure_assets_interactive() -> bool:
     from .gameassets import atlases_present
     from ._paths import assets_dir
+
     if atlases_present(assets_dir()):
         return True
     from .ui.panels.setup_panel import SetupPanel
+
     return SetupPanel().run()
 
 
 def _extract_scene_music_later(names):
     """缺游戏配乐且找得到游戏时在后台补提取；这次启动没赶上的下次就有。"""
     from .gameassets import detect_install, extract_music, music_missing, prune_music
+
     prune_music(names)
     if not music_missing(names):
         return
@@ -134,37 +145,43 @@ def _extract_scene_music_later(names):
             pass
 
     import threading
+
     threading.Thread(target=run, name="scene-music", daemon=True).start()
 
 
 def main():
     from .platform.appid import set_app_id
-    set_app_id()                                   # 须在建任何窗口之前
+
+    set_app_id()  # 须在建任何窗口之前
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
 
     from .platform.singleton import SingleInstance
+
     si = SingleInstance()
     if not si.acquire():
         si.notify_primary()
         return
-    app._singleton = si                            # 保持引用
+    app._singleton = si  # 保持引用
 
-    _sig = setup_signal_handling(app)            # noqa: 保持引用
+    _sig = setup_signal_handling(app)  # 保持引用
 
     params = _load_params()
     from . import i18n
+
     i18n.set_lang(params.get("lang"))
-    params.setdefault("lang", i18n.LANG)           # 首次启动按系统语言定下，之后不随系统变
+    params.setdefault("lang", i18n.LANG)  # 首次启动按系统语言定下，之后不随系统变
 
     if not _ensure_assets_interactive():
         return
 
     from . import skins
+
     skins.configure(params.get("skins_scan_external", True))
     skins.reload()
     from .skins.folder import ensure_folder
-    ensure_folder()                        # 不导出模板
+
+    ensure_folder()  # 不导出模板
 
     pet = PetWindow(params=params)
     pet.show()
@@ -182,11 +199,19 @@ def main():
         params["hud_x"] = hud.x()
         params["hud_y"] = hud.y()
         params["pets"] = [
-            {"id": p.id, "variant": p.variant, **p.look_state(), "name": p.name,
-             "hidden": p.hidden,
-             "energy": p.body.energy, "temper": p.body.temper,
-             "food": p.body.food, "karma": p.body.karma, "cold": p.body.cold,
-             "dead": p.behavior is not None and p.behavior.is_truly_dead()}
+            {
+                "id": p.id,
+                "variant": p.variant,
+                **p.look_state(),
+                "name": p.name,
+                "hidden": p.hidden,
+                "energy": p.body.energy,
+                "temper": p.body.temper,
+                "food": p.body.food,
+                "karma": p.body.karma,
+                "cold": p.body.cold,
+                "dead": p.behavior is not None and p.behavior.is_truly_dead(),
+            }
             for p in pet.all_pets()
         ]
         params["skins_scan_external"] = skins.scan_external()
@@ -194,7 +219,7 @@ def main():
         _save_params(params)
 
     settings = SettingsWindow(pet, hud, _write_state)
-    pet._hud = hud                       # 供增删猫后 rebuild_rows
+    pet._hud = hud  # 供增删猫后 rebuild_rows
     pet._pets_changed_cb = _write_state
     pet._open_settings_cb = settings.open
     app._settings = settings
@@ -205,6 +230,7 @@ def main():
     def _watch_skins():
         if pet.reload_skins(force=False) and settings.isVisible():
             settings._rebuild()
+
     skin_timer = QTimer()
     skin_timer.timeout.connect(_watch_skins)
     skin_timer.start(4000)
@@ -240,8 +266,7 @@ def main():
     player.add_paths([user_music_dir()])
     player.restore_state(params.get("music_last_track"), int(params.get("music_last_ms", 0) or 0))
     director = MusicDirector(player, params)
-    pet.env_listeners.append(
-        lambda kind, on: kind == "zerog" and director.on_zerog(on))
+    pet.env_listeners.append(lambda kind, on: kind == "zerog" and director.on_zerog(on))
     music = MusicPanel(player, _write_state)
     pet._open_music_cb = music.open
     pet._music_player = player
@@ -273,6 +298,7 @@ def main():
         music._rebuild()
         _build_tray_menu()
         from .skins.folder import ensure_folder, write_report
+
         ensure_folder()
         write_report()
         _write_state()
@@ -281,19 +307,18 @@ def main():
     _build_tray_menu()
     tray.setContextMenu(menu)
     tray.show()
-    tray.showMessage(t("app_title"), t("tray_started"),
-                     QSystemTrayIcon.MessageIcon.Information, 4000)
+    tray.showMessage(t("app_title"), t("tray_started"), QSystemTrayIcon.MessageIcon.Information, 4000)
 
     si.on_secondary_attempt = lambda: tray.showMessage(
-        t("app_title"), t("already_running"),
-        QSystemTrayIcon.MessageIcon.Information, 4000)
+        t("app_title"), t("already_running"), QSystemTrayIcon.MessageIcon.Information, 4000
+    )
 
     hotkey = HotkeyFilter()
     app.installNativeEventFilter(hotkey)
     hotkey.register(HK_ABORT, MOD_CONTROL | MOD_ALT, VK_Q)
     hotkey.register(HK_QUIT, MOD_CONTROL | MOD_ALT, VK_X)
     hotkey.register(HK_HUD, MOD_CONTROL | MOD_ALT, VK_H)
-    pet._hotkey_filter = hotkey          # 放置模式临时挂/摘 Esc
+    pet._hotkey_filter = hotkey  # 放置模式临时挂/摘 Esc
 
     def _on_hotkey(hk_id):
         if hk_id == HK_QUIT:
@@ -304,6 +329,7 @@ def main():
             pet._exit_place_mode()
         else:
             cursorfx.abort_all()
+
     hotkey.triggered.connect(_on_hotkey)
     app._hotkey = hotkey
 
@@ -313,6 +339,7 @@ def main():
     app._autosave = autosave
 
     from .platform.envwatch import EnvironmentWatcher
+
     envwatch = EnvironmentWatcher([pet, tab, hud, settings, music], pet)
     envwatch.start()
     pet._refresh_top_cb = envwatch.force_top
@@ -320,10 +347,11 @@ def main():
 
     def _cleanup():
         pet.shutdown()
-        app.removeNativeEventFilter(hotkey)   # 关停期需先摘 filter，防虚方法 dispatch 崩溃
+        app.removeNativeEventFilter(hotkey)  # 关停期需先摘 filter，防虚方法 dispatch 崩溃
         cursorfx.abort_all()
         try:
             from .control.mouse import set_passthrough
+
             if pet._hwnd:
                 set_passthrough(pet._hwnd, False)
         except Exception:
@@ -332,6 +360,7 @@ def main():
         autosave.stop()
         _write_state()
         hotkey.unregister_all()
+
     app.aboutToQuit.connect(_cleanup)
 
     sys.exit(app.exec())

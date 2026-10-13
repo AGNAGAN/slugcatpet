@@ -1,4 +1,5 @@
 """舌头：射出粘住墙 / 天花板 / 果子 / 横杆，收绳拉近或吊挂。"""
+
 from __future__ import annotations
 
 import math
@@ -35,7 +36,7 @@ class TongueAbility(Ability):
         mx, my = pet.gfx.mouth_world()
         t = Tongue(mx, my, POINTS, _taper(POINTS, ROOT_W, TIP_W))
         t.floor_y = pet.window._HL
-        t.body = pet.body                   # 供零重力吐舌自推进
+        t.body = pet.body  # 供零重力吐舌自推进
         self.rope = TongueRope()
         return t
 

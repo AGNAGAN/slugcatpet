@@ -1,12 +1,19 @@
 """竖杆舌钩够取：爬到竖杆合适高度，从杆上射舌够目标。"""
+
 from __future__ import annotations
 import math
 
 from ... import tuning
 from . import consts
 from ...core.units import clampf
-from ...planning.pole_reach import (LAUNCH_ARRIVE_EPS, POLE_TIP_C0_H, _PoleClimb, _c0_range,
-                                    _climb_cost_to, _vpoles)
+from ...planning.pole_reach import (
+    LAUNCH_ARRIVE_EPS,
+    POLE_TIP_C0_H,
+    _PoleClimb,
+    _c0_range,
+    _climb_cost_to,
+    _vpoles,
+)
 from ...planning.reach import Reach, Estimate, RUNNING, GIVEUP, reach_assist
 from .reach import FETCH_IDEAL, FETCH_REEL, APPROACH_TIMEOUT, reset_tongue
 
@@ -32,8 +39,11 @@ class PoleTongueReach(Reach):
                 t = ct + d / consts.PLAN_TONGUE_SPEED + tuning.PLAN_STARTUP_TICKS
                 if best_t is None or t < best_t:
                     best_t = t
-                    best = (pole, hy, Estimate(t, ce + (d / consts.PLAN_TONGUE_SPEED)
-                                               * tuning.PLAN_EN_RATE_LIGHT))
+                    best = (
+                        pole,
+                        hy,
+                        Estimate(t, ce + (d / consts.PLAN_TONGUE_SPEED) * tuning.PLAN_EN_RATE_LIGHT),
+                    )
         return best
 
     def can_touch(self, goal):
@@ -42,13 +52,10 @@ class PoleTongueReach(Reach):
 
     def make_controller(self, goal):
         plan = self._plan(goal)
-        return PoleTongueController(self.pet, goal,
-                                    plan[0] if plan else None,
-                                    plan[1] if plan else None)
+        return PoleTongueController(self.pet, goal, plan[0] if plan else None, plan[1] if plan else None)
 
 
 class PoleTongueController(_PoleClimb):
-
     def __init__(self, pet, goal, pole, release_hy):
         self.pet = pet
         self.goal = goal
@@ -66,8 +73,9 @@ class PoleTongueController(_PoleClimb):
         reach_assist(pet, self.goal, gx, gy)
         if self.phase == "climb":
             tip_c0y = self.pole.top_y - POLE_TIP_C0_H
-            st = self._step_to_height(self.release_hy,
-                                      want_tip=(self.release_hy <= tip_c0y + LAUNCH_ARRIVE_EPS))
+            st = self._step_to_height(
+                self.release_hy, want_tip=(self.release_hy <= tip_c0y + LAUNCH_ARRIVE_EPS)
+            )
             if st == "fail":
                 return GIVEUP
             if st == "ready":

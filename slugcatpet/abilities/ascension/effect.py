@@ -1,4 +1,5 @@
 """飞升超度 Ascension：冲击波→悬浮回正→追锁蓄能→闪→劫持光标。"""
+
 from __future__ import annotations
 import math
 
@@ -25,11 +26,11 @@ KILLFAC_RATE = 0.025
 FLASH_RADIUS = 60.0
 SPARK_COUNT = 20
 SPARK_SPEED_MAX = 40.0 * K_VEL
-SPARK_LIFE_MIN, SPARK_LIFE_MAX = 30, 120   # 40Hz
+SPARK_LIFE_MIN, SPARK_LIFE_MAX = 30, 120  # 40Hz
 
 NUM_GOD_PIPS = 12
 
-GUARD_ICON_COLOR = (255, 221, 132)   # 固定色，不随皮肤和体色变
+GUARD_ICON_COLOR = (255, 221, 132)  # 固定色，不随皮肤和体色变
 
 
 class Ascension:
@@ -65,6 +66,7 @@ class Ascension:
         self.rubber_radius = 6.0
 
         from .tentacles import GhostTentacle
+
         self.darken = 0.0
         self.tentacles_visible = 0
         rx, ry = self._body_root()
@@ -137,6 +139,7 @@ class Ascension:
         if self.darken <= 0.0:
             return
         from .tentacles import deg_to_vec_qt
+
         rx, ry = self._body_root()
         for i, t in enumerate(self.tentacles):
             t.update()
@@ -215,8 +218,14 @@ class Ascension:
         for i in range(SPARK_COUNT):
             ang = (i / SPARK_COUNT) * 2 * math.pi + (i * 0.37)
             sp = ((i * 13 % 20) / 20.0) * SPARK_SPEED_MAX
-            win.add_spark(self.fx, self.fy, math.cos(ang) * sp, math.sin(ang) * sp,
-                          white=True, life=SPARK_LIFE_MIN + (i * 9 % (SPARK_LIFE_MAX - SPARK_LIFE_MIN)))
+            win.add_spark(
+                self.fx,
+                self.fy,
+                math.cos(ang) * sp,
+                math.sin(ang) * sp,
+                white=True,
+                life=SPARK_LIFE_MIN + (i * 9 % (SPARK_LIFE_MAX - SPARK_LIFE_MIN)),
+            )
         win.start_cursor_hijack(self.fx, self.fy)
 
     def _exit(self, hijack):
@@ -236,6 +245,7 @@ class Ascension:
     def _draw_tentacles(self, p, ts):
         from ...rendering.primitives import ribbon
         from PySide6.QtGui import QPainter
+
         p.save()
         p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         p.setCompositionMode(QPainter.CompositionMode.CompositionMode_Plus)
@@ -249,8 +259,9 @@ class Ascension:
     def _draw_ghost_distortion(self, p):
         from PySide6.QtGui import QColor, QRadialGradient, QBrush, QPainter
         from PySide6.QtCore import QPointF, Qt
+
         hx, hy = self._hip_pos()
-        radius = 15.0 * self.darken * 8.0            # 16px 贴图，半径≈scale*8
+        radius = 15.0 * self.darken * 8.0  # 16px 贴图，半径≈scale*8
         if radius < 1.0:
             return
         a = int(70 * self.darken)
@@ -269,6 +280,7 @@ class Ascension:
         if self.flashed:
             return
         from PySide6.QtGui import QPainter
+
         p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         flat_x, flat_y = self.fx, self.fy
         eye_x = self.rubber_mark_x + self.rubber_mouse_x
@@ -283,9 +295,10 @@ class Ascension:
             return
         from PySide6.QtGui import QColor, QRadialGradient, QBrush, QPainter
         from PySide6.QtCore import QPointF, Qt
+
         scale = 50.0 + (2.0 - 50.0) * math.sqrt(f)
-        radius = scale * 8.0                           # 16px 贴图，半径≈scale*8
-        alpha = f ** 3.0
+        radius = scale * 8.0  # 16px 贴图，半径≈scale*8
+        alpha = f**3.0
         grad = QRadialGradient(QPointF(cx, cy), radius)
         grad.setColorAt(0.0, QColor(255, 255, 255, int(alpha * 255)))
         grad.setColorAt(1.0, QColor(255, 255, 255, 0))
@@ -300,6 +313,7 @@ class Ascension:
     def _draw_guard_eye(self, p, cx, cy, alpha=1.0):
         from PySide6.QtGui import QColor
         from PySide6.QtCore import QPointF
+
         a = max(0, min(255, int(alpha * 255)))
         if a <= 0:
             return
@@ -318,6 +332,7 @@ class Ascension:
     def _draw_god_pips(self, p, cx, cy, alpha=1.0, radius=15.0):
         from PySide6.QtGui import QColor
         from PySide6.QtCore import QPointF
+
         a = max(0, min(255, int(alpha * 255)))
         if a <= 0:
             return
@@ -338,7 +353,7 @@ class Ascension:
             ang = math.radians(-(i * (360.0 / NUM_GOD_PIPS)))
             cos_a = math.cos(ang)
             sin_a = math.sin(ang)
-            ox = radius * cos_a - radius * sin_a   # 旋转的向量为 (radius, radius)
+            ox = radius * cos_a - radius * sin_a  # 旋转的向量为 (radius, radius)
             oy = radius * sin_a + radius * cos_a
             p.drawPixmap(QPointF(cx + ox - hw, cy + oy - hh), pm)
         p.restore()

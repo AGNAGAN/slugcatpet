@@ -1,4 +1,5 @@
 """输入层：命中测试 + 抓取-拖拽-甩出 + 动态穿透。"""
+
 from __future__ import annotations
 import sys
 import math
@@ -11,7 +12,7 @@ GRAB_RAD_BODY = 9.0
 GRAB_RAD_HIP = 8.0
 HOVER_PAD = 4.0
 GRAB_PAD = 5.0
-TETHER_VEL_CAP = 14.0    # 桌宠护栏
+TETHER_VEL_CAP = 14.0  # 桌宠护栏
 
 
 def hit_test(body, gfx, cursor, pad=GRAB_PAD):
@@ -84,7 +85,7 @@ class GrabController:
             vx = cx - self._last[0]
             vy = cy - self._last[1]
             sp = math.hypot(vx, vy)
-            self.body.drag_speed = sp          # 撞击伤害按真实速度算
+            self.body.drag_speed = sp  # 撞击伤害按真实速度算
             if sp > TETHER_VEL_CAP:
                 k = TETHER_VEL_CAP / sp
                 vx *= k

@@ -1,4 +1,5 @@
 """舔光标。"""
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -34,8 +35,9 @@ class CursorLick(Behavior):
     doc = "光标停在屏幕中下部、离猫够近够久：伸舌去舔（好感越高等得越短），舔到加好感。"
     requires = ("tongue",)
     params = {
-        "dwell_ticks": Param(tuning.CURSOR_DWELL_TICKS, 1, 4000,
-                             "光标驻留基准 tick（好感 -1 时 ×1.5，+1 时 ×0.5）"),
+        "dwell_ticks": Param(
+            tuning.CURSOR_DWELL_TICKS, 1, 4000, "光标驻留基准 tick（好感 -1 时 ×1.5，+1 时 ×0.5）"
+        ),
         "gate_frac": Param(1.0 / 3.0, 0.0, 1.0, "光标与猫水平距离 < 屏宽 × 此值才会舔"),
         "relick_cooldown": Param(60, 0, 100000, "舔完后的冷却 tick"),
         "temper_gain": Param(0.10, -1.0, 1.0, "成功舔到一次的好感变化"),
@@ -72,7 +74,7 @@ def _mount(fsm, p):
         elif status == "to_airborne":
             brk()
             fsm._transition("Airborne")
-        elif (lick.licker.phase == "hang" and fsm.win.tongue.attached):
+        elif lick.licker.phase == "hang" and fsm.win.tongue.attached:
             pole = _horizontal_pole_near(fsm, cursor)
             if pole is not None:
                 lick.licker = None
@@ -92,18 +94,30 @@ def _mount(fsm, p):
         lick.licker = None
 
     fsm.register_ticker(cool_down)
-    fsm.register_state("CursorLick", enter=enter, tick=st_cursorlick,
-                       brk=brk, kill_break=brk, stun_break=stun_brk, tier=T_ACTIVITY,
-                       energy=LIGHT)
+    fsm.register_state(
+        "CursorLick",
+        enter=enter,
+        tick=st_cursorlick,
+        brk=brk,
+        kill_break=brk,
+        stun_break=stun_brk,
+        tier=T_ACTIVITY,
+        energy=LIGHT,
+    )
 
     def lick_rule(cursor):
         need = _lerpmap(fsm.body.temper, -1.0, 1.0, p.dwell_ticks * 1.5, p.dwell_ticks * 0.5)
-        if (fsm.state == "IdleStand" and not fsm.grab.active and not fsm._exhausted
-                and not fsm._zerog()
-                and lick.cooldown <= 0 and fsm._dwell >= need
-                and cursor is not None
-                and fsm.HL * BAND_LO <= cursor[1] <= fsm.HL * BAND_HI
-                and abs(fsm.body.chunk0.x - cursor[0]) < fsm.WL * p.gate_frac):
+        if (
+            fsm.state == "IdleStand"
+            and not fsm.grab.active
+            and not fsm._exhausted
+            and not fsm._zerog()
+            and lick.cooldown <= 0
+            and fsm._dwell >= need
+            and cursor is not None
+            and fsm.HL * BAND_LO <= cursor[1] <= fsm.HL * BAND_HI
+            and abs(fsm.body.chunk0.x - cursor[0]) < fsm.WL * p.gate_frac
+        ):
             fsm._transition("CursorLick")
 
     fsm.register_rule(lick_rule)

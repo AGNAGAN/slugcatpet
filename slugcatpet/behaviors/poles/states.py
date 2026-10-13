@@ -1,4 +1,5 @@
 """内置行为状态：竖杆攀爬 / 横杆玩耍。"""
+
 from __future__ import annotations
 
 from ... import tuning
@@ -21,12 +22,13 @@ class PoleClimb(State):
     def energy_delta(self, drain_fac):
         pc = self.climber
         if pc is not None and pc.phase == "tip":
-            return -EN_DRAIN_LIGHT * drain_fac          # 站杆顶不算剧烈
+            return -EN_DRAIN_LIGHT * drain_fac  # 站杆顶不算剧烈
         return super().energy_delta(drain_fac)
 
     def enter(self):
         fsm = self.fsm
         from ...brain.skills.pole_climb import PoleClimber
+
         fsm.gfx.hand_aim["l"] = None
         fsm.gfx.hand_aim["r"] = None
         pole = self._pick_climbable_pole()
@@ -89,6 +91,7 @@ class HPole(State):
     def enter(self):
         fsm = self.fsm
         from ...brain.skills.hpole import HPoleController
+
         pole = fsm.social.held(fsm.win, "hpole")
         fsm.social.release(fsm.win, "hpole")
         self.ctl = HPoleController(fsm.win, pole, fsm.rng) if pole is not None else None

@@ -1,4 +1,5 @@
 """内置行为状态：站立待机（含无重力漂浮）。"""
+
 from __future__ import annotations
 
 import math
@@ -32,7 +33,7 @@ def _stare_nearness(d):
     """对视邻近度 0..1，越近越大。"""
     span = max(1.0, tuning.STARE_DIST_MAX - tuning.STARE_DIST_NEAR)
     t = max(0.0, min(1.0, 1.0 - (d - tuning.STARE_DIST_NEAR) / span))
-    return t ** tuning.STARE_DECAY_MULT
+    return t**tuning.STARE_DECAY_MULT
 
 
 class IdleStand(State):
@@ -99,8 +100,12 @@ class IdleStand(State):
 
     def _idle_on_floor(self, o):
         ob = getattr(o, "body", None)
-        return (ob is not None and self.fsm.social.state_of(o) == "IdleStand"
-                and ob.on_floor() and not ob.is_moving())
+        return (
+            ob is not None
+            and self.fsm.social.state_of(o) == "IdleStand"
+            and ob.on_floor()
+            and not ob.is_moving()
+        )
 
     def _update_stare(self):
         fsm = self.fsm
@@ -123,8 +128,9 @@ class IdleStand(State):
                 best, bd = o, d
         if best is None:
             return
-        prob = (tuning.STARE_BASE_PROB
-                + (tuning.STARE_NEAR_PROB - tuning.STARE_BASE_PROB) * _stare_nearness(bd))
+        prob = tuning.STARE_BASE_PROB + (tuning.STARE_NEAR_PROB - tuning.STARE_BASE_PROB) * _stare_nearness(
+            bd
+        )
         prob *= fsm.traits.activity
         if bd < tuning.STARE_ENGAGE_DIST:
             prob *= tuning.STARE_ENGAGE_MULT
@@ -139,8 +145,7 @@ class IdleStand(State):
 
     def _mood_select(self):
         fsm = self.fsm
-        ctx = MoodContext(fsm.body.energy, fsm.body.temper,
-                          cold=fsm.body.cold, submerged=fsm.body.swimming)
+        ctx = MoodContext(fsm.body.energy, fsm.body.temper, cold=fsm.body.cold, submerged=fsm.body.swimming)
         return fsm.mood.select(ctx)
 
     def _nearest_zerog_edible(self):
@@ -174,7 +179,7 @@ class IdleStand(State):
         dist = math.hypot(dx, dy)
         if dist < tuning.SWIM_FETCH_REACH:
             if getattr(e, "stuck_pos", None) is not None:
-                e.stuck_pos = None    # 抓取瞬间剥离黏菌
+                e.stuck_pos = None  # 抓取瞬间剥离黏菌
             b.grab_fruit(e, "r" if e.x >= b.chunk0.x else "l")
             motor.chew_reset(fsm)
             return
@@ -182,10 +187,12 @@ class IdleStand(State):
         b.zerog_swim(ux, uy, b.canJump > 0)
         if b.canJump > 0 and dist > ZEROG_KICK_FAR:
             b.request_zerog_kick(ux, uy)
-        if (fsm.win.tongue is not None
-                and fsm.win.tongue.is_idle()
-                and dist > ZEROG_KICK_FAR
-                and fsm.rng.random() < ZEROG_CHASE_LICK_PROB):
+        if (
+            fsm.win.tongue is not None
+            and fsm.win.tongue.is_idle()
+            and dist > ZEROG_KICK_FAR
+            and fsm.rng.random() < ZEROG_CHASE_LICK_PROB
+        ):
             fsm.win.fire_tongue(e.x, e.y)
 
     def _zerog_eat(self, b):
@@ -243,9 +250,7 @@ class IdleStand(State):
                 ang = fsm.rng.uniform(0.0, math.tau)
                 b.zerog_swim(math.cos(ang), math.sin(ang), b.canJump > 0)
 
-        if (fsm.win.tongue is not None
-                and fsm.win.tongue.is_idle()
-                and fsm.rng.random() < ZEROG_LICK_PROB):
+        if fsm.win.tongue is not None and fsm.win.tongue.is_idle() and fsm.rng.random() < ZEROG_LICK_PROB:
             fsm.win.fire_tongue(tx, ty)
 
     def _zerog_nearest_pole(self, x, y):
@@ -296,15 +301,16 @@ class IdleStand(State):
             b = fsm.body
             pole = self._zerog_seek_pole(b.chunk0.x, b.chunk0.y)
             if pole is not None:
-                cx, cy, _ = _closest_on_segment(b.chunk0.x, b.chunk0.y,
-                                                pole.ax, pole.ay, pole.bx, pole.by)
+                cx, cy, _ = _closest_on_segment(b.chunk0.x, b.chunk0.y, pole.ax, pole.ay, pole.bx, pole.by)
                 self._zerog_target = (cx, cy)
                 return self._zerog_target
         if cursor is not None and fsm.rng.random() < ZEROG_CURSOR_FRAC:
             t = (float(cursor[0]), float(cursor[1]))
         else:
-            t = (fsm.rng.uniform(WALL_MARGIN, fsm.WL - WALL_MARGIN),
-                 fsm.rng.uniform(WALL_MARGIN, fsm.HL - WALL_MARGIN))
+            t = (
+                fsm.rng.uniform(WALL_MARGIN, fsm.WL - WALL_MARGIN),
+                fsm.rng.uniform(WALL_MARGIN, fsm.HL - WALL_MARGIN),
+            )
         self._zerog_target = t
         return t
 

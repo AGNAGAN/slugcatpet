@@ -1,4 +1,5 @@
 """游泳。"""
+
 from __future__ import annotations
 
 from ... import tuning
@@ -15,8 +16,6 @@ class Swim(Behavior):
 
     def mount(self, fsm):
         z = fsm.traits.swim_zeal
-        depth_max = _lerpmap(z, 0.0, 1.0, tuning.SWIM_DRIFT_DEPTH_MAX,
-                                       tuning.SWIM_DRIFT_DEEP_MAX)
-        fsm.body.swim_boost_dist = _lerpmap(z, 0.0, 1.0, tuning.SWIM_BOOST_DIST,
-                                            tuning.SWIM_BOOST_DIST_ZEAL)
+        depth_max = _lerpmap(z, 0.0, 1.0, tuning.SWIM_DRIFT_DEPTH_MAX, tuning.SWIM_DRIFT_DEEP_MAX)
+        fsm.body.swim_boost_dist = _lerpmap(z, 0.0, 1.0, tuning.SWIM_BOOST_DIST, tuning.SWIM_BOOST_DIST_ZEAL)
         fsm.add_state(Swimming).depth_max = depth_max

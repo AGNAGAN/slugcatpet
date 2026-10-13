@@ -1,4 +1,5 @@
 """Resolve asset and writable data paths across dev and frozen (PyInstaller) contexts."""
+
 from __future__ import annotations
 import os
 import sys

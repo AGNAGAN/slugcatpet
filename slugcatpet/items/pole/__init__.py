@@ -1,4 +1,5 @@
 """竖杆和横杆：竖杆立在地上，横杆从最近的侧边伸出；能爬。"""
+
 from __future__ import annotations
 
 from PySide6.QtCore import QPointF, QRectF, Qt
@@ -93,6 +94,7 @@ class PoleKind(ItemKind):
 
     def paint_icon(self, p, r, atlas):
         from ...ui.widgets import iconkit as ik
+
         vertical = self.pole_kind == VERTICAL
         w = r.width()
         L, T = r.left(), r.top()
@@ -111,8 +113,7 @@ class PoleKind(ItemKind):
             ik.blit(p, atlas, "base", "BodyA", Pt(0.64, 0.48), 0.50, w)
             ik.blit(p, atlas, "base", "PlayerArm0", Pt(0.56, 0.47), 0.36, w, rot=16.0)
             ik.blit(p, atlas, ik.HEAD_ATLAS, ik.HEAD_FAM + "0", Pt(0.64, 0.30), 0.46, w)
-            ik.blit(p, atlas, ik.FACE_ATLAS, ik.FACE_FAM + "1", Pt(0.64, 0.28), 0.46, w,
-                    tint=ik.ICON_EYE)
+            ik.blit(p, atlas, ik.FACE_ATLAS, ik.FACE_FAM + "1", Pt(0.64, 0.28), 0.46, w, tint=ik.ICON_EYE)
             ik.blit(p, atlas, "base", "OnTopOfTerrainHand", Pt(0.39, 0.35), 0.37, w)
             _icon_rod(p, r, vertical)
             ik.blit(p, atlas, "base", "OnTopOfTerrainHand", Pt(0.575, 0.47), 0.37, w)

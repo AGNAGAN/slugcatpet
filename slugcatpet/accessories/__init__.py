@@ -1,4 +1,5 @@
 """配件注册表：配件 key → Accessory 子类。"""
+
 from __future__ import annotations
 
 from .base import Accessory

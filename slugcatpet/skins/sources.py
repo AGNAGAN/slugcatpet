@@ -1,4 +1,5 @@
 """皮肤来源发现（用户目录 / 游戏 mods / 创意工坊）与 zip 解压。"""
+
 from __future__ import annotations
 
 import hashlib
@@ -37,8 +38,7 @@ def pack_dirs(root: Path) -> list[Path]:
     out = []
     try:
         for meta in root.rglob(META_FILE):
-            if meta.is_file() and meta.parent != root \
-                    and not _skipped(meta.parent.relative_to(root).parts):
+            if meta.is_file() and meta.parent != root and not _skipped(meta.parent.relative_to(root).parts):
                 out.append(meta.parent)
     except OSError:
         pass
@@ -50,6 +50,7 @@ def collection_of(pack_dir: Path, root: Path, source: str) -> str:
         mod = root.parent
         try:
             from ..rendering.atlas import load_json_lenient
+
             name = load_json_lenient(mod / "modinfo.json").get("name")
             if isinstance(name, str) and name.strip():
                 return name.strip()
@@ -84,10 +85,10 @@ def signature(roots) -> tuple:
     return tuple(sorted(sig))
 
 
-
 def game_mod_roots() -> list[Path]:
     """<游戏>/RainWorld_Data/StreamingAssets/mods/*/dressmyslugcat。"""
     from ..gameassets import detect_install
+
     game = detect_install()
     if game is None:
         return []
@@ -98,6 +99,7 @@ def game_mod_roots() -> list[Path]:
 def workshop_roots() -> list[Path]:
     """<Steam 库>/steamapps/workshop/content/312520/*/dressmyslugcat。"""
     from ..gameassets import _steam_libraries
+
     out = []
     for lib in _steam_libraries():
         out += _dms_roots_under(lib / "steamapps" / "workshop" / "content" / RW_APP_ID)
@@ -162,5 +164,3 @@ def safe_extract(zpath: Path, dest: Path) -> str:
     except (zipfile.BadZipFile, OSError) as e:
         shutil.rmtree(dest, ignore_errors=True)
         return str(e)
-
-

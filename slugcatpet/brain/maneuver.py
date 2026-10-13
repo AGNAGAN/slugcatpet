@@ -1,4 +1,5 @@
 """跳跃 / 光标劫持类独占状态共用的收尾工具。"""
+
 from __future__ import annotations
 
 # ctx：各状态的私有命名空间；dirty=有运动残留待清理，hj=持有的光标劫持句柄（无则 None）
@@ -36,7 +37,9 @@ def hold_lost(win, ctx) -> bool:
 
 def leak_watch(fsm, state_name, ctx):
     """ticker：被旁路打断（被抓 / 被砸晕不走 brk）时只清运动残留。"""
+
     def watch():
         if fsm.state != state_name and getattr(ctx, "dirty", False):
             clear_motion(fsm.body, ctx)
+
     return watch

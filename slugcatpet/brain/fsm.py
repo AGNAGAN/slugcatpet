@@ -1,4 +1,5 @@
 """行为状态机 BehaviorFSM。"""
+
 from __future__ import annotations
 import math
 import os
@@ -18,7 +19,7 @@ T_POSTTHROW_WANDER = 200
 T_POSTTHROW_STAND = 400
 ANGER_TOTAL = T_POSTTHROW_WANDER + T_POSTTHROW_STAND
 
-_NO_STATE = State(None)      # 未注册状态名的空声明（见 BehaviorFSM._cur）
+_NO_STATE = State(None)  # 未注册状态名的空声明（见 BehaviorFSM._cur）
 
 
 def _lerpmap(x, lo, hi, flo, fhi):
@@ -62,7 +63,7 @@ class BehaviorFSM:
         self.anger = 0
         self._cursor_prev = None
         self._cursor_speed = 0.0
-        self._dwell = 0                   # 光标在中下高度带内静止的 tick 数
+        self._dwell = 0  # 光标在中下高度带内静止的 tick 数
         self.cursorfx = getattr(window, "cursorfx", None)
         self._force_energy = None
         _fs = os.environ.get("SLUGCATPET_FORCE_ENERGY")
@@ -87,38 +88,62 @@ class BehaviorFSM:
                 pass
 
         self._states = {}
-        self._mood_entries = {}           # 心情 → (状态名, 进入前回调)
+        self._mood_entries = {}  # 心情 → (状态名, 进入前回调)
         self._register_core_states()
         self._ext_tickers = []
-        self._rules = []                  # (优先级, 序号, fn)，见 register_rule
+        self._rules = []  # (优先级, 序号, fn)，见 register_rule
         self._rule_seq = ()
         self._stun_hooks = []
         self._provided = {}
         self._interaction_blockers = set()
         self._threat_responders = []
-        self.drag_takeover = None         # fn(拎住帧数) → 是否接管（超度）
-        self.stun_takeover = None         # fn() → 砸晕醒来是否接管（超度）
+        self.drag_takeover = None  # fn(拎住帧数) → 是否接管（超度）
+        self.stun_takeover = None  # fn() → 砸晕醒来是否接管（超度）
         self.drown_burst_fx = None
-        self.kill_cancel_temper = None    # 自己取消杀死弹窗时的好感变化（舌头躲杀挂）
+        self.kill_cancel_temper = None  # 自己取消杀死弹窗时的好感变化（舌头躲杀挂）
         for ab in getattr(self.win, "abilities", {}).values():
             ab.mount(self)
         if getattr(self.win, "cat", None) is not None:
             from ..behaviors import mount_all
+
             mount_all(self)
 
         self._enter("IdleStand")
 
     def _register_core_states(self):
         from .core_states import CORE_STATES
+
         for cls in CORE_STATES:
             self.add_state(cls)
 
-    def register_state(self, name, enter=None, tick=None, brk=None, kill_break=None, fx=None,
-                       mood=None, mood_entry=True, tier=T_IDLE, energy=None, stun_break=None):
+    def register_state(
+        self,
+        name,
+        enter=None,
+        tick=None,
+        brk=None,
+        kill_break=None,
+        fx=None,
+        mood=None,
+        mood_entry=True,
+        tier=T_IDLE,
+        energy=None,
+        stun_break=None,
+    ):
         """mood_entry=False 时 mood 只参与新鲜度结算、不直接进入。"""
-        self._states[name] = FuncState(self, name, enter=enter, tick=tick, brk=brk,
-                                       kill_break=kill_break, fx=fx, mood=mood, tier=tier,
-                                       energy=energy, stun_break=stun_break)
+        self._states[name] = FuncState(
+            self,
+            name,
+            enter=enter,
+            tick=tick,
+            brk=brk,
+            kill_break=kill_break,
+            fx=fx,
+            mood=mood,
+            tier=tier,
+            energy=energy,
+            stun_break=stun_break,
+        )
         if mood is not None and mood_entry:
             self.register_mood_entry(mood, name)
 
@@ -205,7 +230,7 @@ class BehaviorFSM:
         self._hibernating = False
         self.body.food_eat(-tuning.FOOD_KILL_PENALTY)
         if self.body.karma > 0 or self.body.karma_bottomed():
-            self.body.karma_drop()    # 业力锁底也照常空转复活
+            self.body.karma_drop()  # 业力锁底也照常空转复活
             self.body.temper_shift(tuning.TEMPER_KILL_REVIVED)
             self.body.die()
             self.gfx.dead = True
@@ -251,8 +276,7 @@ class BehaviorFSM:
 
     def kill_threat_canceled(self, by_self: bool):
         """杀死弹窗被取消：by_self=猫自己（舌头躲杀）取消，否则是用户点的。"""
-        self.body.temper_shift(self.kill_cancel_temper if by_self
-                               else tuning.TEMPER_KILL_CANCEL_HUMAN)
+        self.body.temper_shift(self.kill_cancel_temper if by_self else tuning.TEMPER_KILL_CANCEL_HUMAN)
 
     def is_truly_dead(self) -> bool:
         return self.state == "Dead" and self._revive_timer <= 0
@@ -292,16 +316,17 @@ class BehaviorFSM:
         z = self._zerog()
         if z and not self._prev_zerog:
             self._zerog_entered = True
-        elif (self._prev_zerog and not z and self.state == "IdleStand"
-                and self.body.carried_fruit is not None):
+        elif self._prev_zerog and not z and self.state == "IdleStand" and self.body.carried_fruit is not None:
             f = self.body.carried_fruit
             self.body.release_fruit()
             f.state = "free"
         self._prev_zerog = z
 
-        if (getattr(self.win, "_kill_dialog", None) is not None
-                and self._threat_responders
-                and not self.blocked(THREAT)):
+        if (
+            getattr(self.win, "_kill_dialog", None) is not None
+            and self._threat_responders
+            and not self.blocked(THREAT)
+        ):
             self._break_active_controllers()
             self.grab.force_release()
             for respond in self._threat_responders:
@@ -330,10 +355,10 @@ class BehaviorFSM:
             rule(cursor)
 
         self.gfx.look_at = None
-        self.gfx.sleeping = (self.state == "Sleep")
-        self.body.sleeping = (self.state == "Sleep")
-        self.gfx.dead = (self.state == "Dead")
-        self.gfx.stunned = (self.state == "Stunned")
+        self.gfx.sleeping = self.state == "Sleep"
+        self.body.sleeping = self.state == "Sleep"
+        self.gfx.dead = self.state == "Dead"
+        self.gfx.stunned = self.state == "Stunned"
 
         st = self._states.get(self.state)
         if st is not None:
@@ -362,7 +387,7 @@ class BehaviorFSM:
     def _act_or_wake(self, target):
         """趴/睡态先起身并稳定一会再行动；已站立则直接进入目标态。"""
         if self.state in ("LieDown", "Sleep"):
-            self._transition("WakeSequence")   # 顺序：_enter 会清 _wake_then
+            self._transition("WakeSequence")  # 顺序：_enter 会清 _wake_then
             self._wake_then = target
         else:
             self._transition(target)
@@ -414,12 +439,12 @@ class BehaviorFSM:
     def _track_cursor(self, cursor):
         inst = 0.0
         if cursor is not None and self._cursor_prev is not None:
-            inst = math.hypot(cursor[0] - self._cursor_prev[0],
-                              cursor[1] - self._cursor_prev[1])
+            inst = math.hypot(cursor[0] - self._cursor_prev[0], cursor[1] - self._cursor_prev[1])
         self._cursor_speed = self._cursor_speed * 0.5 + inst * 0.5
-        in_band = (cursor is not None
-                   and self.HL * tuning.CURSOR_DWELL_BAND_LO <= cursor[1]
-                   <= self.HL * tuning.CURSOR_DWELL_BAND_HI)
+        in_band = (
+            cursor is not None
+            and self.HL * tuning.CURSOR_DWELL_BAND_LO <= cursor[1] <= self.HL * tuning.CURSOR_DWELL_BAND_HI
+        )
         if in_band and inst < tuning.CURSOR_DWELL_TOL:
             self._dwell += 1
         else:

@@ -1,4 +1,5 @@
 """内置行为状态：趴下 / 睡眠 / 起身。"""
+
 from __future__ import annotations
 
 from ... import tuning
@@ -10,8 +11,8 @@ def too_cold_to_sleep(fsm):
     return fsm.body.cold >= tuning.COLD_NOSLEEP
 
 
-T_POINT_WAKE = 160               # 起身后指光标最长时长（tick）
-WAKE_STABILIZE_TICKS = 30        # 落地稳定多久才算醒透
+T_POINT_WAKE = 160  # 起身后指光标最长时长（tick）
+WAKE_STABILIZE_TICKS = 30  # 落地稳定多久才算醒透
 
 
 class LieDown(State):

@@ -1,4 +1,5 @@
 """内置行为状态：被挡让路。"""
+
 from __future__ import annotations
 
 from ... import tuning
@@ -14,8 +15,8 @@ class MakeWay(State):
 
     def __init__(self, fsm):
         super().__init__(fsm)
-        self._away = 0.0       # 跳起时横向让开方向
-        self._face = 0         # 趴下时的朝向（顺对方前进方向）
+        self._away = 0.0  # 跳起时横向让开方向
+        self._face = 0  # 趴下时的朝向（顺对方前进方向）
         self._hop = False
         self._lie_min = 0
 
@@ -79,9 +80,11 @@ class MakeWay(State):
             if self._face:
                 b.facing = self._face
         # 退出：让开了 / 超时 / 顶人者走了；趴下的至少趴稳再起
-        if (fsm.timer >= tuning.MAKEWAY_TIMEOUT or ob is None
-                or not blocks_path(b.chunk1.x, ob.chunk1.x, ob.walk_target_x,
-                                   tuning.SHOVE_CONTACT_DIST)):
+        if (
+            fsm.timer >= tuning.MAKEWAY_TIMEOUT
+            or ob is None
+            or not blocks_path(b.chunk1.x, ob.chunk1.x, ob.walk_target_x, tuning.SHOVE_CONTACT_DIST)
+        ):
             if fsm.timer < self._lie_min:
                 return
             fsm._transition("IdleStand")

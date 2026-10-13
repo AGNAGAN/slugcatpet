@@ -1,4 +1,5 @@
 """水生体质：潜泳冲刺、低水阻、浮泳拖臀。"""
+
 from __future__ import annotations
 
 from ..base import Ability

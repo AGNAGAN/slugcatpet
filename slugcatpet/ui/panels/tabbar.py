@@ -1,10 +1,17 @@
 """侧边 Tab：收起态可拖动箭头，展开态图标盘+动作列。"""
+
 from __future__ import annotations
 import math
-from PySide6.QtWidgets import (QWidget, QPushButton, QVBoxLayout, QGridLayout,
-                               QFrame, QLabel, QGraphicsOpacityEffect)
-from PySide6.QtCore import (Qt, QTimer, QPropertyAnimation, QRect, QRectF,
-                            QPointF, QSize, QEvent)
+from PySide6.QtWidgets import (
+    QWidget,
+    QPushButton,
+    QVBoxLayout,
+    QGridLayout,
+    QFrame,
+    QLabel,
+    QGraphicsOpacityEffect,
+)
+from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QRect, QRectF, QPointF, QSize, QEvent
 from PySide6.QtGui import QGuiApplication, QColor, QPainter, QPixmap, QIcon
 from ...i18n import t
 from ...items import kinds as item_kinds
@@ -14,7 +21,7 @@ from ..theme import qss
 
 COLLAPSED_W, COLLAPSED_H = 24, 48
 EXPANDED_W = 120
-EXPANDED_H = 250                       # 仅估值，实际走 _expanded_h()
+EXPANDED_H = 250  # 仅估值，实际走 _expanded_h()
 SLIDE_MS = 150
 
 
@@ -45,8 +52,10 @@ def _paint_tool_icon(p, kind, r):
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawEllipse(ring)
         a, rr = math.radians(45), d / 2
-        p.drawLine(QPointF(cx - math.cos(a) * rr, cy + math.sin(a) * rr),
-                   QPointF(cx + math.cos(a) * rr, cy - math.sin(a) * rr))
+        p.drawLine(
+            QPointF(cx - math.cos(a) * rr, cy + math.sin(a) * rr),
+            QPointF(cx + math.cos(a) * rr, cy - math.sin(a) * rr),
+        )
 
 
 def _make_icon(paint, size, dpr):
@@ -72,9 +81,9 @@ class TabBar(QWidget):
         self.expanded = False
         self._drag = None
 
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint
-                            | Qt.WindowType.WindowStaysOnTopHint
-                            | Qt.WindowType.Tool)
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool
+        )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
 
@@ -100,12 +109,18 @@ class TabBar(QWidget):
             grid.setColumnStretch(c, 1)
         dpr = QGuiApplication.primaryScreen().devicePixelRatio()
         atlas = getattr(self.pet, "atlas", None)
-        place_items = [(lambda p, r, k=k: k.paint_icon(p, r, atlas), t(f"tip_{k.key}"),
-                        lambda _=False, k=k: self._place(k)) for k in item_kinds()]
-        place_items += [(lambda p, r: _paint_tool_icon(p, "remove", r), t("tip_remove"),
-                         self._remove_one),
-                        (lambda p, r: _paint_tool_icon(p, "clear", r), t("tip_clear"),
-                         self._clear_all)]
+        place_items = [
+            (
+                lambda p, r, k=k: k.paint_icon(p, r, atlas),
+                t(f"tip_{k.key}"),
+                lambda _=False, k=k: self._place(k),
+            )
+            for k in item_kinds()
+        ]
+        place_items += [
+            (lambda p, r: _paint_tool_icon(p, "remove", r), t("tip_remove"), self._remove_one),
+            (lambda p, r: _paint_tool_icon(p, "clear", r), t("tip_clear"), self._clear_all),
+        ]
         for i, (paint, tip, cb) in enumerate(place_items):
             ib = QPushButton()
             ib.setIcon(QIcon(_make_icon(paint, 22, dpr)))
@@ -147,9 +162,9 @@ class TabBar(QWidget):
 
         # toast 需顶层窗口，防裁切
         self._toast_lbl = QLabel("", None)
-        self._toast_lbl.setWindowFlags(Qt.WindowType.FramelessWindowHint
-                                       | Qt.WindowType.WindowStaysOnTopHint
-                                       | Qt.WindowType.ToolTip)
+        self._toast_lbl.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.ToolTip
+        )
         self._toast_lbl.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self._toast_lbl.setStyleSheet(qss.TOAST)
         self._toast_lbl.hide()
@@ -220,22 +235,24 @@ class TabBar(QWidget):
             try:
                 t = ev.type()
             except AttributeError:
-                return False                   # 关停期丢 type，放行
+                return False  # 关停期丢 type，放行
             if t == QEvent.Type.MouseButtonPress and ev.button() == Qt.MouseButton.LeftButton:
                 self._arrow_press = ev.globalPosition().y() - self.y()
                 self._arrow_moved = False
                 return False
             if t == QEvent.Type.MouseMove and self._arrow_press is not None and not self.expanded:
                 ny = int(ev.globalPosition().y() - self._arrow_press)
-                ny = max(self._screen.y(),
-                         min(self._screen.y() + self._screen.height() - self.height(), ny))
+                ny = max(self._screen.y(), min(self._screen.y() + self._screen.height() - self.height(), ny))
                 if abs(ny - self._y) > 2:
                     self._arrow_moved = True
                 self._y = ny
                 self.move(self._edge_x, ny)
                 return False
-            if t == QEvent.Type.MouseButtonRelease and ev.button() == Qt.MouseButton.LeftButton \
-                    and self._arrow_press is not None:
+            if (
+                t == QEvent.Type.MouseButtonRelease
+                and ev.button() == Qt.MouseButton.LeftButton
+                and self._arrow_press is not None
+            ):
                 moved = self._arrow_moved
                 self._arrow_press = None
                 self._arrow_moved = False
@@ -287,6 +304,7 @@ class TabBar(QWidget):
         # 释放劫持后再 quit
         try:
             from ...platform.cursorfx import abort_all
+
             abort_all()
         except Exception:
             pass

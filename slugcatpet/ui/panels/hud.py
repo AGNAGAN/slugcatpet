@@ -1,4 +1,5 @@
 """状态面板 HUD：每猫一行体征，可拖动可隐藏；超出屏幕高时内部滚动。"""
+
 from __future__ import annotations
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QFrame, QScrollArea
 from PySide6.QtCore import Qt, QTimer
@@ -21,9 +22,9 @@ class HudPanel(QWidget):
         self.params = params if params is not None else {}
         self._drag = None
 
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint
-                            | Qt.WindowType.WindowStaysOnTopHint
-                            | Qt.WindowType.Tool)
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool
+        )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
 
@@ -90,8 +91,9 @@ class HudPanel(QWidget):
         self._panel.layout().activate()
         hint = self._panel.sizeHint()
         screen = QGuiApplication.primaryScreen().availableGeometry()
-        self.resize(hint.width() + SCROLLBAR_W,
-                    min(hint.height(), max(120, screen.height() - SCREEN_PAD * 2)))
+        self.resize(
+            hint.width() + SCROLLBAR_W, min(hint.height(), max(120, screen.height() - SCREEN_PAD * 2))
+        )
         x = self.params.get("hud_x")
         y = self.params.get("hud_y")
         if x is None or y is None:

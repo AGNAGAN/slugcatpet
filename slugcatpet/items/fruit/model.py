@@ -1,4 +1,5 @@
 """果子+Stalk 物理核心；y↓ 坐标；积分顺序 重力→空气阻尼→积分→碰撞。"""
+
 from __future__ import annotations
 import math
 import random as _random
@@ -7,8 +8,8 @@ from ..state import ItemState
 from ...core.vecmath import _dirvec, _dist, _span
 
 RAD = 8.0
-MASS = 0.2               # 舌头弹簧质量比依赖此值
-GRAVITY = 0.9            # y↓
+MASS = 0.2  # 舌头弹簧质量比依赖此值
+GRAVITY = 0.9  # y↓
 AIR_FRICTION = 0.999
 BOUNCE = 0.2
 SURFACE_FRICTION = 0.7
@@ -16,10 +17,10 @@ BUOYANCY = 1.1
 WATER_FRICTION = 0.95
 BITES = 3
 
-STALK_ANCHOR_Y = -10.0          # 锚点 y，房顶 y=0 之上 10
+STALK_ANCHOR_Y = -10.0  # 锚点 y，房顶 y=0 之上 10
 STALK_SEG_LEN = 15.0
 STALK_VEL_DAMP = 0.99
-STALK_SEG_GRAV = 0.9           # y↓
+STALK_SEG_GRAV = 0.9  # y↓
 STALK_CONN_POW = 1.1
 STALK_RELEASE_FACTOR = 1.4
 STALK_RELEASE_PAD = 10.0
@@ -34,14 +35,36 @@ def _perp(nx, ny):
 
 
 class Fruit:
-    collision_layer = 1              # 与 Saint/黏菌同层互推
+    collision_layer = 1  # 与 Saint/黏菌同层互推
 
-    __slots__ = ("x", "y", "vx", "vy", "last_x", "last_y",
-                 "rad", "mass", "gravity", "air_friction", "bounce", "surface_friction",
-                 "buoyancy", "water_friction", "water_y", "room_gravity",
-                 "bites", "state", "rotation", "stalk", "held_by_hand",
-                 "collide_with_objects",
-                 "_id", "_contact_floor", "_contact_x", "_impact_cb")
+    __slots__ = (
+        "x",
+        "y",
+        "vx",
+        "vy",
+        "last_x",
+        "last_y",
+        "rad",
+        "mass",
+        "gravity",
+        "air_friction",
+        "bounce",
+        "surface_friction",
+        "buoyancy",
+        "water_friction",
+        "water_y",
+        "room_gravity",
+        "bites",
+        "state",
+        "rotation",
+        "stalk",
+        "held_by_hand",
+        "collide_with_objects",
+        "_id",
+        "_contact_floor",
+        "_contact_x",
+        "_impact_cb",
+    )
 
     def __init__(self, x: float, y: float, seed: int = 0):
         self.x = self.last_x = float(x)
@@ -56,7 +79,7 @@ class Fruit:
         self.surface_friction = SURFACE_FRICTION
         self.buoyancy = BUOYANCY
         self.water_friction = WATER_FRICTION
-        self.water_y = None            # 外部每 tick 注入水面高；None=无水
+        self.water_y = None  # 外部每 tick 注入水面高；None=无水
         self.room_gravity = 1.0
         self.bites = BITES
         self.state = ItemState.FREE
@@ -67,8 +90,8 @@ class Fruit:
         self.collide_with_objects = True
         self._id = int(seed)
         self._contact_floor = False
-        self._contact_x = 0           # batfly 用，本体不读
-        self._impact_cb = None        # 窗口抖动回调；None=不触发
+        self._contact_x = 0  # batfly 用，本体不读
+        self._impact_cb = None  # 窗口抖动回调；None=不触发
 
     @property
     def pos(self):
@@ -77,7 +100,8 @@ class Fruit:
     def collision_chunks(self):
         self.collide_with_objects = not (
             self.state in (ItemState.CARRIED, ItemState.MOUSE, ItemState.EATEN, ItemState.GONE)
-            or self.held_by_hand is not None)
+            or self.held_by_hand is not None
+        )
         return (self,)
 
     def set_rotation_to_grabber(self, gx: float, gy: float) -> None:
@@ -105,8 +129,9 @@ class Fruit:
                     self.state = ItemState.FREE
 
         self.vy += self.gravity * self.room_gravity
-        apply_water(self, self.water_y, self.buoyancy, self.water_friction,
-                    self.room_gravity, self.air_friction)
+        apply_water(
+            self, self.water_y, self.buoyancy, self.water_friction, self.room_gravity, self.air_friction
+        )
         self.x += self.vx
         self.y += self.vy
 
@@ -128,8 +153,8 @@ class Fruit:
 
 class Stalk:
     """Verlet 软绳；拴住吊着的果子。step 返回 True=已 detach。"""
-    __slots__ = ("stuck_pos", "rope_length", "segs", "conn_rad",
-                 "displacements", "release_counter", "_n")
+
+    __slots__ = ("stuck_pos", "rope_length", "segs", "conn_rad", "displacements", "release_counter", "_n")
 
     def __init__(self, fruit: Fruit):
         fx, fy = fruit.x, fruit.y
@@ -145,7 +170,7 @@ class Stalk:
             px = sx + (fx - sx) * t
             py = sy + (fy - sy) * t
             self.segs.append([px, py, px, py, 0.0, 0.0])
-        self.conn_rad = self.rope_length / (n ** STALK_CONN_POW)
+        self.conn_rad = self.rope_length / (n**STALK_CONN_POW)
         rng = _random.Random(fruit._id)
         self.displacements = []
         for _ in range(n):
@@ -183,9 +208,11 @@ class Stalk:
 
         # 释放判定：拉锚过远/bites<3/counter==1
         sx, sy = self.stuck_pos
-        if (not _dist(fruit.x, fruit.y, sx, sy) < self.rope_length * STALK_RELEASE_FACTOR + STALK_RELEASE_PAD
-                or fruit.bites < BITES
-                or self.release_counter == 1):
+        if (
+            not _dist(fruit.x, fruit.y, sx, sy) < self.rope_length * STALK_RELEASE_FACTOR + STALK_RELEASE_PAD
+            or fruit.bites < BITES
+            or self.release_counter == 1
+        ):
             return True
         return False
 

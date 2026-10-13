@@ -1,4 +1,5 @@
 """走够能力：沿地面走到目标 x。"""
+
 from __future__ import annotations
 import math
 
@@ -20,8 +21,7 @@ class WalkReach(Reach):
         fx = clampf(gx, xmin, xmax)
         if abs(gx - fx) > tuning.PLAN_WALK_X_PAD:
             return None
-        t = (abs(pet.body.chunk1.x - fx) / tuning.PLAN_WALK_SPEED
-             + tuning.PLAN_STARTUP_TICKS)
+        t = abs(pet.body.chunk1.x - fx) / tuning.PLAN_WALK_SPEED + tuning.PLAN_STARTUP_TICKS
         return Estimate(t, t * tuning.PLAN_EN_RATE_LIGHT)
 
     def can_touch(self, goal):
@@ -44,8 +44,7 @@ class WalkReach(Reach):
         fx = clampf(gx, xmin, xmax)
         if abs(gx - fx) > half:
             return None
-        t = (abs(pet.body.chunk1.x - fx) / tuning.PLAN_WALK_SPEED
-             + tuning.PLAN_STARTUP_TICKS)
+        t = abs(pet.body.chunk1.x - fx) / tuning.PLAN_WALK_SPEED + tuning.PLAN_STARTUP_TICKS
         return Estimate(t, t * tuning.PLAN_EN_RATE_LIGHT)
 
     def make_controller(self, goal):
@@ -53,7 +52,6 @@ class WalkReach(Reach):
 
 
 class WalkReachController:
-
     def __init__(self, pet, goal):
         self.pet = pet
         self.goal = goal

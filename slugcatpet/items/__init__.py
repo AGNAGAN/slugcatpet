@@ -1,4 +1,5 @@
 """物品注册表：顺序决定侧边栏按钮、推进与同层绘制的先后。"""
+
 from __future__ import annotations
 
 from .base import ItemKind

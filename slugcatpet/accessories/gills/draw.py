@@ -1,4 +1,5 @@
 """鳃绘制（槽位 under_face）。"""
+
 from __future__ import annotations
 
 import math
@@ -38,7 +39,7 @@ def draw_gills(gfx, g, p, atlas, ts, acc):
     for k in range(n):
         sc = g.scales[k]
         bx = _lerp(sc.lx, sc.x, ts)
-        by = -_lerp(sc.ly, sc.y, ts)          # 鳞内部 y↑ → pet y↓
+        by = -_lerp(sc.ly, sc.y, ts)  # 鳞内部 y↑ → pet y↓
         if k < half:
             off, rot_off, scale_x = -5.0, 0.0, -sc.width
         else:

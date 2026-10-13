@@ -1,4 +1,5 @@
 """场景配乐：启动和无重力时放从游戏里提取的曲子。"""
+
 from __future__ import annotations
 
 INTRO_TRACK = "RW_8 - Sundown"
@@ -6,8 +7,12 @@ ZEROG_TRACK = "NA_41 - Random Gods"
 SCENE_TRACKS = (INTRO_TRACK, ZEROG_TRACK)
 # 提取并列进「游戏配乐」的曲子，按列表顺序
 GAME_TRACKS = (*SCENE_TRACKS, "RW_42 - Kayava", "RW_92 - Reclaiming Entropy")
-_TITLES = {INTRO_TRACK: "Sundown", ZEROG_TRACK: "Random Gods",
-           "RW_42 - Kayava": "Kayava", "RW_92 - Reclaiming Entropy": "Reclaiming Entropy"}
+_TITLES = {
+    INTRO_TRACK: "Sundown",
+    ZEROG_TRACK: "Random Gods",
+    "RW_42 - Kayava": "Kayava",
+    "RW_92 - Reclaiming Entropy": "Reclaiming Entropy",
+}
 ZEROG_GAIN = 0.4
 
 

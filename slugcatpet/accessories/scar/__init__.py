@@ -1,4 +1,5 @@
 """面罩疤：贴在脸下、头上的一张图。"""
+
 from __future__ import annotations
 
 import math
@@ -24,7 +25,7 @@ class ScarAccessory(Accessory):
         element, fx, fy, rot = gfx.face_pose
         scale_x = 1.0
         if getattr(gfx.body, "animation", None) == "Flip":
-            r = math.radians(rot)    # Flip 前移 4，y↓
+            r = math.radians(rot)  # Flip 前移 4，y↓
             x = fx + math.sin(r) * 4.0
             y = fy - math.cos(r) * 4.0
         else:
@@ -38,5 +39,4 @@ class ScarAccessory(Accessory):
             else:
                 x = fx + 3.0
             y = fy - 3.0
-        blit(p, atlas, FRAME, x, y, rot, scale_x, 1.0,
-             accessory_color(self, gfx._gcol), ax=0.5, ay=0.5)
+        blit(p, atlas, FRAME, x, y, rot, scale_x, 1.0, accessory_color(self, gfx._gcol), ax=0.5, ay=0.5)

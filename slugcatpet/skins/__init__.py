@@ -1,4 +1,5 @@
 """皮肤注册中心。"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -11,9 +12,9 @@ from .resolver import SkinAtlasSet
 _state = {
     "loaded": False,
     "scan_external": True,
-    "packs": {},          # id → SkinPack（可用）
-    "failed": [],         # SkinPack（error 非空）或重复 id
-    "zip_errors": [],     # (zip 解压目录, 错误)
+    "packs": {},  # id → SkinPack（可用）
+    "failed": [],  # SkinPack（error 非空）或重复 id
+    "zip_errors": [],  # (zip 解压目录, 错误)
     "signature": None,
 }
 
@@ -61,8 +62,9 @@ def reload() -> None:
     for root, src in roots:
         for d in sources.pack_dirs(root):
             pack = load_pack(d, src)
-            pack.collection = (root.name.rsplit("-", 1)[0] if root in zip_roots
-                               else sources.collection_of(d, root, src))
+            pack.collection = (
+                root.name.rsplit("-", 1)[0] if root in zip_roots else sources.collection_of(d, root, src)
+            )
             if not pack.ok:
                 failed.append(pack)
             elif pack.id in packs:
@@ -76,6 +78,7 @@ def reload() -> None:
     _state["failed"] = failed
     _state["loaded"] = True
     from .folder import write_report
+
     write_report()
     _state["signature"] = sources.signature(_watched_roots())
 
@@ -87,8 +90,10 @@ def _is_dms_template(p: SkinPack) -> bool:
 
 def packs() -> list[SkinPack]:
     _ensure()
-    return sorted((p for p in _state["packs"].values() if not _is_dms_template(p)),
-                  key=lambda p: (p.source != "local", p.name.lower()))
+    return sorted(
+        (p for p in _state["packs"].values() if not _is_dms_template(p)),
+        key=lambda p: (p.source != "local", p.name.lower()),
+    )
 
 
 def get(skin_id: str | None) -> SkinPack | None:
@@ -107,8 +112,9 @@ def problems() -> list[str]:
         out.append(t("skin_zip_fail", name=d.name, e=e))
     for p in packs():
         for grp, miss in sorted(p.missing.items()):
-            out.append(f"{p.name} ({p.path}): " + t("skin_missing_group", group=grp, n=len(miss),
-                                                    first=miss[0]))
+            out.append(
+                f"{p.name} ({p.path}): " + t("skin_missing_group", group=grp, n=len(miss), first=miss[0])
+            )
         for w in p.warnings:
             out.append(f"{p.name} ({p.path}): {w}")
     return out

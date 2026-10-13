@@ -1,4 +1,5 @@
 """挡路几何纯函数：判断 blocker 是否挡在 walker 去路上。"""
+
 from __future__ import annotations
 
 from ...core.creature import WALK_STOP_EPS
@@ -17,4 +18,3 @@ def blocks_path(blocker_x, walker_x, walker_target_x, contact_dist) -> bool:
         return False
     rel = (blocker_x - walker_x) * _sign(d)
     return 0.0 < rel <= contact_dist
-

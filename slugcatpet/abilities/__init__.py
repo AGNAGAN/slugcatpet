@@ -1,4 +1,5 @@
 """能力注册表：能力 key → Ability 子类。"""
+
 from __future__ import annotations
 
 from .acrobat import AcrobatAbility
@@ -29,9 +30,11 @@ def instantiate(cat) -> dict[str, Ability]:
     """按注册顺序（非角色定义书写顺序）建能力实例。"""
     abilities = cat.abilities
     validate(abilities, f"角色 {cat.key!r}")
-    return {cls.key: cls(resolve_params(cls.params, abilities[cls.key],
-                                        f"{cat.key} 能力 {cls.key}"))
-            for cls in BUILTIN if cls.key in abilities}
+    return {
+        cls.key: cls(resolve_params(cls.params, abilities[cls.key], f"{cat.key} 能力 {cls.key}"))
+        for cls in BUILTIN
+        if cls.key in abilities
+    }
 
 
 __all__ = ["Ability", "Param", "REGISTRY", "instantiate", "validate", "resolve_params"]

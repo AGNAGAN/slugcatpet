@@ -1,4 +1,5 @@
 """生气扔石头。"""
+
 from __future__ import annotations
 
 from ...items.base import THROWABLE
@@ -9,9 +10,13 @@ ANGRY_STATES = ("PostThrowWander", "PostThrowStand", "AngryStone")
 
 
 def grounded_stone_available(fsm) -> bool:
-    return any(s.state == "free" and not s.unfetchable and s.at_rest_on_ground(fsm.HL)
-               and fsm.social.free_for(fsm.win, s)
-               for s in fsm.items(THROWABLE))
+    return any(
+        s.state == "free"
+        and not s.unfetchable
+        and s.at_rest_on_ground(fsm.HL)
+        and fsm.social.free_for(fsm.win, s)
+        for s in fsm.items(THROWABLE)
+    )
 
 
 class Anger(Behavior):
@@ -26,8 +31,12 @@ class Anger(Behavior):
         throw = fsm.add_state(AngryStone)
 
         def pick_up(cursor):
-            if (fsm.state in ANGRY_STATES[:2] and fsm.anger > 0
-                    and not fsm.grab.active and grounded_stone_available(fsm)):
+            if (
+                fsm.state in ANGRY_STATES[:2]
+                and fsm.anger > 0
+                and not fsm.grab.active
+                and grounded_stone_available(fsm)
+            ):
                 fsm._transition("AngryStone")
 
         def cool_down(cursor):

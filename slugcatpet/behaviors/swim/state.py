@@ -1,4 +1,5 @@
 """内置行为状态：游泳。"""
+
 from __future__ import annotations
 
 import math
@@ -12,7 +13,7 @@ from ...items.base import EDIBLE
 
 class Swimming(State):
     name = "Swimming"
-    depth_max = 0.0              # 漂游最大深度（挂载时按性格设）
+    depth_max = 0.0  # 漂游最大深度（挂载时按性格设）
     tier = T_BODY
     energy = VIGOROUS
 
@@ -125,8 +126,7 @@ class Swimming(State):
             return (float(cursor[0]), float(cursor[1]))
         x = fsm.rng.uniform(WALL_MARGIN, fsm.WL - WALL_MARGIN)
         if ws is not None:
-            y = ws.level_at(x) + fsm.rng.uniform(tuning.SWIM_DRIFT_DEPTH_MIN,
-                                                  self.depth_max)
+            y = ws.level_at(x) + fsm.rng.uniform(tuning.SWIM_DRIFT_DEPTH_MIN, self.depth_max)
             y = min(y, fsm.HL - WALL_MARGIN)
         else:
             y = fsm.rng.uniform(WALL_MARGIN, fsm.HL - WALL_MARGIN)

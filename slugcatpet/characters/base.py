@@ -1,4 +1,5 @@
 """CatDef：猫种族的静态定义。"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -20,5 +21,4 @@ class CatDef:
     stats: SlugStats = DEFAULT_STATS
     personality: CatPersonality = DEFAULT_PERSONALITY
     wip: bool = True
-    names: dict | None = None                      # {"zh":..., "en":...} 显示名，None=用 i18n
-
+    names: dict | None = None  # {"zh":..., "en":...} 显示名，None=用 i18n

@@ -1,4 +1,5 @@
 """后空翻劫持光标：掠过光标时劫持，贴身携带 5~10 秒后释放。"""
+
 from __future__ import annotations
 
 import math
@@ -8,8 +9,7 @@ from ...abilities.base import Param
 from ...brain import maneuver
 from ... import tuning
 from ...planning.reach import walk_band
-from ...planning.backflip_reach import (best_launch_hit, sweep_hit_topsafe,
-                                        takeoff_c0_h)
+from ...planning.backflip_reach import best_launch_hit, sweep_hit_topsafe, takeoff_c0_h
 from ...planning.jump_reach import SETTLE_MAX, SETTLE_VX
 from ...planning.jump_arc import get_backflip_arc
 from ...brain.state import T_ACTIVITY, VIGOROUS
@@ -27,7 +27,7 @@ LAUNCH_TIMEOUT = 80
 # 光标离地面的高度在这个范围内才去够
 SNATCH_MIN_ABOVE = 35.0
 SNATCH_MAX_ABOVE = 180.0
-MIN_LAUNCH_DX = 25.0     # 起跳点至少离光标这么远，免得原地直上
+MIN_LAUNCH_DX = 25.0  # 起跳点至少离光标这么远，免得原地直上
 # 携带期异常态即提前释放
 _CARRY_BREAK = frozenset(("Dragged", "Stunned", "Dead", "Swimming"))
 
@@ -56,7 +56,7 @@ def _mount(fsm, p):
     snatch.dirty = False
     snatch.plan = None
     snatch.carry = 0
-    snatch.dwell = 0                  # 光标在本行为高度带内静止的 tick 数
+    snatch.dwell = 0  # 光标在本行为高度带内静止的 tick 数
 
     def in_band(cursor):
         return cursor is not None and SNATCH_MIN_ABOVE <= fsm.HL - cursor[1] <= SNATCH_MAX_ABOVE
@@ -72,20 +72,27 @@ def _mount(fsm, p):
         hipx = fsm.body.chunk1.x
         best = None
         for d in (1, -1):
-            r = best_launch_hit(get_backflip_arc(stats, d, boosted=True), cx, cy,
-                                launch_y, xmin, xmax, PLAN_R, hipx)
-            if (r is not None and abs(r[0] - cx) >= MIN_LAUNCH_DX
-                    and (best is None or r[2] < best[2])):
+            r = best_launch_hit(
+                get_backflip_arc(stats, d, boosted=True), cx, cy, launch_y, xmin, xmax, PLAN_R, hipx
+            )
+            if r is not None and abs(r[0] - cx) >= MIN_LAUNCH_DX and (best is None or r[2] < best[2]):
                 best = (r[0], d, r[2])
         return None if best is None else (best[0], best[1])
 
     def can_snatch():
         b = fsm.body
-        return (fsm.state == "IdleStand" and fsm.cursor is not None
-                and not fsm.grab.active and not fsm._exhausted
-                and not fsm._zerog() and not b.swimming
-                and fsm.win.cursor_hijack is None and in_band(fsm.cursor)
-                and snatch.cooldown <= 0 and snatch.dwell >= p.dwell_ticks)
+        return (
+            fsm.state == "IdleStand"
+            and fsm.cursor is not None
+            and not fsm.grab.active
+            and not fsm._exhausted
+            and not fsm._zerog()
+            and not b.swimming
+            and fsm.win.cursor_hijack is None
+            and in_band(fsm.cursor)
+            and snatch.cooldown <= 0
+            and snatch.dwell >= p.dwell_ticks
+        )
 
     def body_mid():
         c0, c1 = fsm.body.chunk0, fsm.body.chunk1
@@ -93,9 +100,16 @@ def _mount(fsm, p):
 
     def carry_tick():
         hj = snatch.hj
-        bad = (hj is None or fsm.win.cursor_hijack is not hj or not hj.active
-               or fsm.grab.active or fsm.body.dead or fsm.body.swimming
-               or fsm._zerog() or fsm.state in _CARRY_BREAK)
+        bad = (
+            hj is None
+            or fsm.win.cursor_hijack is not hj
+            or not hj.active
+            or fsm.grab.active
+            or fsm.body.dead
+            or fsm.body.swimming
+            or fsm._zerog()
+            or fsm.state in _CARRY_BREAK
+        )
         snatch.carry -= 1
         if bad or snatch.carry <= 0:
             snatch.carry = 0
@@ -146,9 +160,12 @@ def _mount(fsm, p):
         stats = fsm.win.cat.stats
         first = 1 if cursor[0] >= c0.x else -1
         for d in (first, -first):
-            if sweep_hit_topsafe(get_backflip_arc(stats, d, boosted=True),
-                                 cursor[0] - c0.x, cursor[1] - c0.y,
-                                 PLAN_R, c0.y) is not None:
+            if (
+                sweep_hit_topsafe(
+                    get_backflip_arc(stats, d, boosted=True), cursor[0] - c0.x, cursor[1] - c0.y, PLAN_R, c0.y
+                )
+                is not None
+            ):
                 return d
         return None
 
@@ -162,14 +179,19 @@ def _mount(fsm, p):
             return
         ph = snatch.phase
         if ph == "walk":
-            if (cursor is None or not in_band(cursor)
-                    or fsm._cursor_speed > SPEED_RELEASE or fsm.timer > WALK_TIMEOUT):
+            if (
+                cursor is None
+                or not in_band(cursor)
+                or fsm._cursor_speed > SPEED_RELEASE
+                or fsm.timer > WALK_TIMEOUT
+            ):
                 finish(b, ok=False)
                 return
             fsm.gfx.look_at = cursor
             dx = abs(b.chunk1.x - snatch.x)
-            overshot = ((b.chunk1.vx > 0 and b.chunk1.x >= snatch.x)
-                        or (b.chunk1.vx < 0 and b.chunk1.x <= snatch.x))
+            overshot = (b.chunk1.vx > 0 and b.chunk1.x >= snatch.x) or (
+                b.chunk1.vx < 0 and b.chunk1.x <= snatch.x
+            )
             if b.on_floor() and (not b.is_moving() or dx < ARRIVE_X or overshot):
                 b.stop_walk()
                 b.walk_speed_target = None
@@ -202,8 +224,9 @@ def _mount(fsm, p):
             if snatch.hj is None and cursor is not None and fsm.win.cursor_hijack is None:
                 mx, my = body_mid()
                 c0 = b.chunk0
-                near = min(math.hypot(cursor[0] - mx, cursor[1] - my),
-                           math.hypot(cursor[0] - c0.x, cursor[1] - c0.y))
+                near = min(
+                    math.hypot(cursor[0] - mx, cursor[1] - my), math.hypot(cursor[0] - c0.x, cursor[1] - c0.y)
+                )
                 if near <= CATCH_R:
                     snatch.hj = fsm.win.start_cursor_hold(mx, my, HOLD_MAX)
             if snatch.hj is not None:
@@ -233,5 +256,6 @@ def _mount(fsm, p):
         snatch.cooldown = cooldown
 
     fsm.register_ticker(watch)
-    fsm.register_state("RivSnatch", enter=enter, tick=st_rivsnatch,
-                       brk=brk, kill_break=brk, tier=T_ACTIVITY, energy=VIGOROUS)
+    fsm.register_state(
+        "RivSnatch", enter=enter, tick=st_rivsnatch, brk=brk, kill_break=brk, tier=T_ACTIVITY, energy=VIGOROUS
+    )

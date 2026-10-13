@@ -1,12 +1,23 @@
 """设置页「皮肤」区块与单只猫的外观弹窗。"""
+
 from __future__ import annotations
 
 from types import SimpleNamespace
 
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QColor, QDesktopServices, QFont
-from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QColorDialog, QHBoxLayout, QLabel,
-                               QListWidget, QListWidgetItem, QPushButton, QRadioButton, QWidget)
+from PySide6.QtWidgets import (
+    QButtonGroup,
+    QCheckBox,
+    QColorDialog,
+    QHBoxLayout,
+    QLabel,
+    QListWidget,
+    QListWidgetItem,
+    QPushButton,
+    QRadioButton,
+    QWidget,
+)
 
 from ... import i18n, skins
 from ...accessories import BUILTIN as ACCESSORIES
@@ -36,6 +47,7 @@ def build_skin_section(settings, v):
         settings._window.reload_skins()
         settings._write_state()
         settings._rebuild()
+
     chk.toggled.connect(on_scan)
     v.addWidget(chk)
 
@@ -81,7 +93,10 @@ class AppearanceDialog(CardDialog):
         groups = {}
         for p in skins.packs():
             groups.setdefault(p.collection, []).append(p)
-        key = (lambda p: (species[:4] not in (p.name + p.id).lower(), p.name.lower()))
+
+        def key(p):
+            return (species[:4] not in (p.name + p.id).lower(), p.name.lower())
+
         loose = groups.pop("", [])
         for name in [n for n in groups if len(groups[n]) == 1]:
             loose += groups.pop(name)
@@ -195,8 +210,9 @@ class AppearanceDialog(CardDialog):
         self._apply()
 
     def _acc_now(self, cls):
-        probe = SimpleNamespace(color=self._look.acc_color(cls.key), color_group=cls.color_group,
-                                default_color=cls.default_color)
+        probe = SimpleNamespace(
+            color=self._look.acc_color(cls.key), color_group=cls.color_group, default_color=cls.default_color
+        )
         return accessory_color(probe, self._pet.gfx._skin_colors)
 
     def _paint_acc(self, cls):

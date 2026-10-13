@@ -1,10 +1,11 @@
 """多猫协调：互相感知、目标占用、让路裁决、杆顶挤人。行为只经这里了解别的猫。"""
+
 from __future__ import annotations
 
 import math
 
-STEAL_FRAC = 0.5          # 比占用者近到一半以内才抢目标
-PAIR_YIELD_CD = 600       # 同一对猫让路后，这么久内不再互相让
+STEAL_FRAC = 0.5  # 比占用者近到一半以内才抢目标
+PAIR_YIELD_CD = 600  # 同一对猫让路后，这么久内不再互相让
 
 
 class Claim:
@@ -33,11 +34,11 @@ class Social:
     def __init__(self, win):
         self.win = win
         self.now = 0
-        self._claims = {}        # id(target) → Claim
-        self._held = {}          # (owner, slot) → Claim
+        self._claims = {}  # id(target) → Claim
+        self._held = {}  # (owner, slot) → Claim
         self._crowd = {}
         self._pair_yield = {}
-        self._tip = {}           # id(pole) → 站在杆顶的猫们
+        self._tip = {}  # id(pole) → 站在杆顶的猫们
         self._evicted = set()
 
     def tick(self):
@@ -61,8 +62,7 @@ class Social:
         c = self._claims.get(id(target))
         if c is None or c.target is not target:
             return None
-        if c.owner not in self.win.pets or (c.state is not None
-                                           and self.state_of(c.owner) != c.state):
+        if c.owner not in self.win.pets or (c.state is not None and self.state_of(c.owner) != c.state):
             self._drop(c)
             return None
         return c
@@ -123,7 +123,7 @@ class Social:
         self._pair_yield[frozenset((id(me), id(other)))] = self.now
 
     def yielding_to(self, me):
-        if hasattr(me, "win"):          # 传入的是状态机
+        if hasattr(me, "win"):  # 传入的是状态机
             me = me.win
         c = self._crowd.get(me)
         return None if c is None else c.yield_to
@@ -143,8 +143,7 @@ class Social:
         s = self._tip.get(id(pole))
         if not s:
             return []
-        return [p for p in self.win.pets if p is not me and p in s
-                and self.state_of(p) == "PoleClimb"]
+        return [p for p in self.win.pets if p is not me and p in s and self.state_of(p) == "PoleClimb"]
 
     def push_off(self, pet):
         self._evicted.add(pet)

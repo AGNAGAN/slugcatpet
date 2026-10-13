@@ -1,4 +1,5 @@
 """竖杆攀爬控制器；每 tick 调 update(want_dismount)，返回 True=结束。"""
+
 from __future__ import annotations
 import math
 
@@ -13,9 +14,9 @@ TIP_ENTER_PAD = 3.0
 TIP_TIMEOUT = 1200
 DESCEND_TIMEOUT = 400
 ARC_R = 17.0
-PUSH_EVICT_DIST = 40.0     # 爬到离杆顶这么近时，把站在顶上的猫顶下去
-TIP_OCCUPY_PAD = 22.0      # 他猫臀部离杆顶这么近算占着顶
-POLE_SAME_EPS = 8.0        # 同一根杆的 x 容差
+PUSH_EVICT_DIST = 40.0  # 爬到离杆顶这么近时，把站在顶上的猫顶下去
+TIP_OCCUPY_PAD = 22.0  # 他猫臀部离杆顶这么近算占着顶
+POLE_SAME_EPS = 8.0  # 同一根杆的 x 容差
 
 
 class PoleClimber:
@@ -81,8 +82,10 @@ class PoleClimber:
             return None
         for op in self.social.tip_holders(self.pole, self.win):
             ob = op.body
-            if (abs(getattr(ob, "pole_x", 1e9) - self.pole.x) <= POLE_SAME_EPS
-                    and ob.chunk1.y <= top + TIP_OCCUPY_PAD):
+            if (
+                abs(getattr(ob, "pole_x", 1e9) - self.pole.x) <= POLE_SAME_EPS
+                and ob.chunk1.y <= top + TIP_OCCUPY_PAD
+            ):
                 return op
         return None
 
@@ -106,9 +109,9 @@ class PoleClimber:
         c0.x = (c0.x + tx) / 2.0
         c1.x = (c1.x * 7.0 + tx) / 8.0
         c0.vy *= 0.5
-        c0.vy += -1.0 * b.stats.pole_fac    # 爬升推进×种族因子，抗重力项不缩放
+        c0.vy += -1.0 * b.stats.pole_fac  # 爬升推进×种族因子，抗重力项不缩放
         c0.vy += -(1.0 + GRAV)
-        c1.vy += (1.0 - GRAV)
+        c1.vy += 1.0 - GRAV
 
     def _enter_tip(self):
         b = self.body
@@ -158,9 +161,9 @@ class PoleClimber:
                 return False
             self._jump_down()
             return True
-        if ((self.disbalance >= tuning.TIP_FALL_DISBALANCE
-             and self._roll() < tuning.TIP_FALL_PROB)
-                or self.tip_ticks > TIP_TIMEOUT):
+        if (
+            self.disbalance >= tuning.TIP_FALL_DISBALANCE and self._roll() < tuning.TIP_FALL_PROB
+        ) or self.tip_ticks > TIP_TIMEOUT:
             self._fall(lean)
             return True
         return False

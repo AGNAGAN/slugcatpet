@@ -1,4 +1,5 @@
 """水里两只猫迎面或贴身时上下错开：一只小跳到水面、一只往下潜，交错游过去。"""
+
 from __future__ import annotations
 
 import math
@@ -14,12 +15,12 @@ class Neighbor(NamedTuple):
     x: float
     y: float
     vx: float
-    ix: float           # 想游的方向
+    ix: float  # 想游的方向
     iy: float
-    yielding: bool      # 正在错开或刚错开完
-    dive: bool          # 这一轮它负责下潜
-    rank: int           # 猫的序号，双方对冲时据此分工
-    detouring: bool     # 被夹住正在绕路
+    yielding: bool  # 正在错开或刚错开完
+    dive: bool  # 这一轮它负责下潜
+    rank: int  # 猫的序号，双方对冲时据此分工
+    detouring: bool  # 被夹住正在绕路
 
 
 class SwimPass:
@@ -52,8 +53,9 @@ class SwimPass:
     def as_neighbor(self):
         b = self.body
         ix, iy = b._swim_dir()
-        return Neighbor(b.chunk0.x, b.chunk0.y, b.chunk0.vx, ix, iy, self.cd > 0,
-                        self.dive, self.rank, self.detouring)
+        return Neighbor(
+            b.chunk0.x, b.chunk0.y, b.chunk0.vx, ix, iy, self.cd > 0, self.dive, self.rank, self.detouring
+        )
 
     def step(self, ws):
         b = self.body
@@ -98,8 +100,9 @@ class SwimPass:
                 continue
             if (mx * dx + my * dy) / d <= tuning.SWIM_INTENT_DOT:
                 continue
-            toward = (abs(o.ix) > 1e-3 or abs(o.iy) > 1e-3) and \
-                -(o.ix * dx + o.iy * dy) / d > tuning.SWIM_INTENT_DOT
+            toward = (abs(o.ix) > 1e-3 or abs(o.iy) > 1e-3) and -(
+                o.ix * dx + o.iy * dy
+            ) / d > tuning.SWIM_INTENT_DOT
             if toward:
                 self._start(ws, dive=self.rank < o.rank, ovx=o.vx, ox=o.x)
                 return
@@ -167,11 +170,15 @@ class SwimPass:
         if self.dive:
             if self.target_y is None:
                 lvl = ws.level_at(c0.x) if ws is not None else c0.y
-                self.target_y = lvl + lerp(tuning.SWIM_PASS_DIVE_MIN, tuning.SWIM_PASS_DIVE_MAX,
-                                           random.random())
+                self.target_y = lvl + lerp(
+                    tuning.SWIM_PASS_DIVE_MIN, tuning.SWIM_PASS_DIVE_MAX, random.random()
+                )
             for c in (c0, c1):
-                c.vy += clampf((self.target_y - c.y) * tuning.SWIM_PASS_SINK_GAIN,
-                               -tuning.SWIM_PASS_SINK_ACCEL_CAP, tuning.SWIM_PASS_SINK_ACCEL_CAP)
+                c.vy += clampf(
+                    (self.target_y - c.y) * tuning.SWIM_PASS_SINK_GAIN,
+                    -tuning.SWIM_PASS_SINK_ACCEL_CAP,
+                    tuning.SWIM_PASS_SINK_ACCEL_CAP,
+                )
                 c.vy = min(c.vy, tuning.SWIM_PASS_DIVE_CAP)
             evade = tuning.SWIM_PASS_EVADE_VX
         else:

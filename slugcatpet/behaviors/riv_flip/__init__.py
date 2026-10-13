@@ -1,4 +1,5 @@
 """后空翻上横杆：走到杆下起跳点后空翻抓杆，抓住转 HPole。"""
+
 from __future__ import annotations
 
 import math
@@ -12,11 +13,11 @@ from ...items.base import CLIMBABLE
 from ...brain.state import T_ACTIVITY, VIGOROUS
 from ..base import Behavior, mood_candidate, mood_params
 
-ARRIVE_X = 8.0           # px
-LAUNCH_TIMEOUT = 80      # 起跳未腾空兜底 tick
-FLIP_TIMEOUT = 1200      # tick
-POLE_X_MARGIN = 10.0     # 离杆端余量 px
-AIM_BAND = GRIP_DIST - 4.0   # 贴杆瞄准带，留 sim 残差余量
+ARRIVE_X = 8.0  # px
+LAUNCH_TIMEOUT = 80  # 起跳未腾空兜底 tick
+FLIP_TIMEOUT = 1200  # tick
+POLE_X_MARGIN = 10.0  # 离杆端余量 px
+AIM_BAND = GRIP_DIST - 4.0  # 贴杆瞄准带，留 sim 残差余量
 
 
 class RivFlip(Behavior):
@@ -33,8 +34,7 @@ class RivFlip(Behavior):
 
 def _walk_band(fsm):
     b = fsm.body
-    return (0.0 if b.walk_min is None else b.walk_min,
-            fsm.WL if b.walk_max is None else b.walk_max)
+    return (0.0 if b.walk_min is None else b.walk_min, fsm.WL if b.walk_max is None else b.walk_max)
 
 
 def _pole_reachable(fsm):
@@ -67,12 +67,12 @@ def _pole_plan(fsm):
         if hi <= lo:
             continue
         for ax_t in (max(lo, min(hi, b.chunk1.x)), (lo + hi) * 0.5):
-            for d in ((1, -1) if ax_t >= b.chunk1.x else (-1, 1)):
+            for d in (1, -1) if ax_t >= b.chunk1.x else (-1, 1):
                 arc = get_backflip_arc(stats, d)
                 if arc.apex + GRIP_DIST < rise:
                     continue
                 for px, py in arc.points:
-                    if launch_y + py < TOP_CLEAR:   # 越窗顶余量：其后命中被 clamp 失真，弃该弧
+                    if launch_y + py < TOP_CLEAR:  # 越窗顶余量：其后命中被 clamp 失真，弃该弧
                         break
                     if abs(launch_y + py - pole.ay) <= AIM_BAND:
                         lx = ax_t - px
@@ -119,15 +119,14 @@ def _mount(fsm, p):
             finish(b)
             return
         pole = flip.pole
-        if pole is not None and pole not in fsm.items(CLIMBABLE):   # 杆没了：空中顺势落地，未起跳直接收工
+        if pole is not None and pole not in fsm.items(CLIMBABLE):  # 杆没了：空中顺势落地，未起跳直接收工
             pole = flip.pole = None
         ph = flip.phase
         if pole is None and ph != "air":
             finish(b)
             return
         if ph == "walk":
-            if b.on_floor() and (not b.is_moving()
-                                 or abs(b.chunk1.x - flip.x) < ARRIVE_X):
+            if b.on_floor() and (not b.is_moving() or abs(b.chunk1.x - flip.x) < ARRIVE_X):
                 b.stop_walk()
                 flip.phase = "settle"
             return
@@ -145,7 +144,7 @@ def _mount(fsm, p):
             b.move_dir = flip.d
             if pole is not None and _near_pole(b, pole):
                 b.stop_walk()
-                flip.dirty = False        # animation 交 HPole 生命周期接管
+                flip.dirty = False  # animation 交 HPole 生命周期接管
                 fsm.social.claim(fsm.win, "hpole", pole)
                 fsm._transition("HPole")
             return
@@ -162,14 +161,25 @@ def _mount(fsm, p):
         maneuver.stand_facing(fsm.body, d)
 
     fsm.register_ticker(maneuver.leak_watch(fsm, "RivFlip", flip))
-    fsm.register_state("RivFlip", enter=enter, tick=st_rivflip,
-                       brk=brk, kill_break=brk, mood="riv_flip", tier=T_ACTIVITY,
-                       energy=VIGOROUS)
+    fsm.register_state(
+        "RivFlip",
+        enter=enter,
+        tick=st_rivflip,
+        brk=brk,
+        kill_break=brk,
+        mood="riv_flip",
+        tier=T_ACTIVITY,
+        energy=VIGOROUS,
+    )
 
     energy_gate = fsm.traits.play_gate
 
     def gate(ctx):
-        return (not ctx.submerged and not getattr(fsm.body, "zerog", False)
-                and ctx.energy >= energy_gate and _pole_reachable(fsm))
+        return (
+            not ctx.submerged
+            and not getattr(fsm.body, "zerog", False)
+            and ctx.energy >= energy_gate
+            and _pole_reachable(fsm)
+        )
 
     mood_candidate(fsm, "riv_flip", p, gate)

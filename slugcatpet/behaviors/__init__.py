@@ -1,4 +1,5 @@
 """行为注册表。"""
+
 from __future__ import annotations
 
 from ..abilities.base import resolve_params
@@ -22,9 +23,25 @@ from .wall_climb import WallClimb
 from .warmth import Warmth
 
 # 顺序即挂载顺序（影响心情抽签、规则与砸晕收尾的先后）；新模块加在末尾
-BUILTIN = (Fetch, Anger, Poles, Idle, Warmth, Rest, Swim, MakeWayBehavior,
-           SeekHPoleBehavior, WallClimb, CursorLick, Ascend, DodgeKill,
-           RivFlip, RivSnatch, PyroRomp, PyroMaul)
+BUILTIN = (
+    Fetch,
+    Anger,
+    Poles,
+    Idle,
+    Warmth,
+    Rest,
+    Swim,
+    MakeWayBehavior,
+    SeekHPoleBehavior,
+    WallClimb,
+    CursorLick,
+    Ascend,
+    DodgeKill,
+    RivFlip,
+    RivSnatch,
+    PyroRomp,
+    PyroMaul,
+)
 
 REGISTRY: dict[str, type[Behavior]] = {cls.key: cls for cls in BUILTIN}
 
@@ -41,15 +58,17 @@ def validate(behaviors: dict, abilities: dict, where: str) -> None:
         missing = [r for r in needed_abilities(cls) if r not in abilities]
         if missing:
             raise ValueError(f"{where}: 行为 {key!r} 需要能力 {', '.join(missing)}")
-        resolve_params(cls.params, over if isinstance(over, dict) else None,
-                       f"{where} 行为 {key}")
+        resolve_params(cls.params, over if isinstance(over, dict) else None, f"{where} 行为 {key}")
 
 
 def enabled(cat) -> list[type[Behavior]]:
     over = cat.behaviors
-    return [cls for cls in BUILTIN
-            if (cls.essential or over.get(cls.key, True) is not False)
-            and all(r in cat.abilities for r in needed_abilities(cls))]
+    return [
+        cls
+        for cls in BUILTIN
+        if (cls.essential or over.get(cls.key, True) is not False)
+        and all(r in cat.abilities for r in needed_abilities(cls))
+    ]
 
 
 def mount_all(fsm) -> None:
@@ -57,10 +76,8 @@ def mount_all(fsm) -> None:
     validate(cat.behaviors, cat.abilities, f"角色 {cat.key!r}")
     for cls in enabled(cat):
         over = cat.behaviors.get(cls.key)
-        p = resolve_params(cls.params, over if isinstance(over, dict) else None,
-                           f"{cat.key} 行为 {cls.key}")
+        p = resolve_params(cls.params, over if isinstance(over, dict) else None, f"{cat.key} 行为 {cls.key}")
         cls(p).mount(fsm)
 
 
-__all__ = ["Behavior", "REGISTRY", "enabled", "mount_all", "mood_candidate", "mood_params",
-           "validate"]
+__all__ = ["Behavior", "REGISTRY", "enabled", "mount_all", "mood_candidate", "mood_params", "validate"]

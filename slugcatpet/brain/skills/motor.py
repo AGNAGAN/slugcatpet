@@ -1,4 +1,5 @@
 """多个行为共用的动作：指光标、走位、啃食。"""
+
 from __future__ import annotations
 
 import math
@@ -13,9 +14,9 @@ EAT_INTERVAL = 15
 EAT_APPROACH = 12
 EAT_HOLD_POSE = 0.25
 EAT_CHOMP_POSE = 1.0
-EAT_STRIKE_POW = 3.0       # 举起 / 放下曲线指数，越大越快
-EAT_PLATEAU = 0.34         # 嘴边停留占一次咀嚼的比例
-EAT_PEAK_PHASE = 0.5       # 在脉冲峰值咬下
+EAT_STRIKE_POW = 3.0  # 举起 / 放下曲线指数，越大越快
+EAT_PLATEAU = 0.34  # 嘴边停留占一次咀嚼的比例
+EAT_PEAK_PHASE = 0.5  # 在脉冲峰值咬下
 BITE_HEAD_NUDGE = 2.0
 
 
@@ -80,24 +81,42 @@ def pick_open_x(fsm, margin=120.0):
     return fsm.rng.uniform(lo, hi)
 
 
-def pick_social_wander_x(lo, hi, self_x, others_x, sociability, rng, sigma, samples,
-                         lo_thresh, hi_thresh, move_w, cross_w, stay_gain, stay_span):
+def pick_social_wander_x(
+    lo,
+    hi,
+    self_x,
+    others_x,
+    sociability,
+    rng,
+    sigma,
+    samples,
+    lo_thresh,
+    hi_thresh,
+    move_w,
+    cross_w,
+    stay_gain,
+    stay_span,
+):
     if not others_x or lo_thresh <= sociability <= hi_thresh:
         return rng.uniform(lo, hi)
     span = max(1.0, hi - lo)
     inv = -1.0 / (2.0 * sigma * sigma)
     avoid = sociability < lo_thresh
     sign = 1.0 if avoid else -1.0
+
     def density(x):
         return sum(math.exp(inv * (x - ox) ** 2) for ox in others_x)
+
     def crosses(x):
         a, b = (self_x, x) if self_x <= x else (x, self_x)
         return any(a < ox < b for ox in others_x)
+
     def cost(x):
         c = sign * density(x) + move_w * abs(x - self_x) / span
         if avoid and crosses(x):
             c += cross_w
         return c
+
     n = max(1, samples)
     step = span / n
     best = min((lo + step * (i + rng.random()) for i in range(n)), key=cost)
@@ -113,14 +132,22 @@ def wander(fsm):
     if hi <= lo:
         lo, hi = WALL_MARGIN, fsm.WL - WALL_MARGIN
     others_x = fsm.social.others_x(fsm.win)
-    x = pick_social_wander_x(lo, hi, b.chunk1.x, others_x,
-                             fsm.traits.sociability, fsm.rng,
-                             fsm.WL * tuning.SOCIAL_WANDER_SIGMA_FRAC,
-                             tuning.SOCIAL_WANDER_SAMPLES,
-                             tuning.SOCIAL_WANDER_LO, tuning.SOCIAL_WANDER_HI,
-                             tuning.SOCIAL_WANDER_MOVE_W, tuning.SOCIAL_WANDER_CROSS_W,
-                             tuning.SOCIAL_WANDER_STAY_GAIN,
-                             fsm.WL * tuning.SOCIAL_WANDER_STAY_SPAN_FRAC)
+    x = pick_social_wander_x(
+        lo,
+        hi,
+        b.chunk1.x,
+        others_x,
+        fsm.traits.sociability,
+        fsm.rng,
+        fsm.WL * tuning.SOCIAL_WANDER_SIGMA_FRAC,
+        tuning.SOCIAL_WANDER_SAMPLES,
+        tuning.SOCIAL_WANDER_LO,
+        tuning.SOCIAL_WANDER_HI,
+        tuning.SOCIAL_WANDER_MOVE_W,
+        tuning.SOCIAL_WANDER_CROSS_W,
+        tuning.SOCIAL_WANDER_STAY_GAIN,
+        fsm.WL * tuning.SOCIAL_WANDER_STAY_SPAN_FRAC,
+    )
     b.walk_to(x)
 
 

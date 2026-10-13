@@ -1,4 +1,5 @@
 """雪花粒子 + 边缘霜冻 vignette，强度随 cycle_prog。"""
+
 from __future__ import annotations
 import math
 import random
@@ -28,14 +29,13 @@ class _Flake:
 
 
 class Snowfall:
-
     def __init__(self, max_flakes, vignette_max, seed=0):
         self.max_flakes = int(max_flakes)
         self.vignette_max = int(vignette_max)
         self._rng = random.Random(0x5170 ^ (int(seed) * 2654435761 & 0xFFFFFFFF))
         self._flakes = []
         self.intensity = 0.0
-        self._vignette_pm = None   # 满强度预渲染缓存，尺寸变自动重建
+        self._vignette_pm = None  # 满强度预渲染缓存，尺寸变自动重建
         self._vignette_key = None
 
     @property

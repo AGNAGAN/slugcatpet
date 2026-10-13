@@ -1,4 +1,5 @@
 """横杆借力控制器：swing→reel→grip→pullup→stand 状态机；update() 返回 True=结束。"""
+
 from __future__ import annotations
 
 import math
@@ -166,8 +167,7 @@ class HPoleController:
         feet_y = ay - STAND_HOVER
         lo, hi = ax_lo + WALK_MARGIN, ax_hi - WALK_MARGIN
         can_walk = hi > lo
-        if (can_walk and self._pause <= 0 and self.rng is not None
-                and self.rng.random() < tuning.HP_HANG_PROB):
+        if can_walk and self._pause <= 0 and self.rng is not None and self.rng.random() < tuning.HP_HANG_PROB:
             self._enter_swing_under()
             return False
         if self._pause > 0:
@@ -175,13 +175,11 @@ class HPoleController:
             walking = False
         else:
             walking = can_walk
-            if (can_walk and self.rng is not None
-                    and self.rng.random() < tuning.HP_PAUSE_PROB):
+            if can_walk and self.rng is not None and self.rng.random() < tuning.HP_PAUSE_PROB:
                 self._pause = self.rng.randint(tuning.HP_PAUSE_MIN, tuning.HP_PAUSE_MAX)
                 walking = False
         if walking:
-            if (self._stand_t % TURN_PERIOD == 0 and self.rng is not None
-                    and self.rng.random() < TURN_PROB):
+            if self._stand_t % TURN_PERIOD == 0 and self.rng is not None and self.rng.random() < TURN_PROB:
                 self._walk_dir = -self._walk_dir
             nx = c1.x + WALK_SPEED * self._walk_dir
             if nx <= lo:

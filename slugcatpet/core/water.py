@@ -1,4 +1,5 @@
 """水面波形内核：一维阻尼波方程点链，坐标 y↓。"""
+
 from __future__ import annotations
 import random
 
@@ -16,8 +17,7 @@ TRIANGLE_WIDTH = 20.0
 class _RippleRing:
     __slots__ = ("x", "rad", "speed", "width", "intensity", "life", "life_dec")
 
-    def __init__(self, x: float, rad: float, speed: float, width: float,
-                 life_time: float, intensity: float):
+    def __init__(self, x: float, rad: float, speed: float, width: float, life_time: float, intensity: float):
         self.x = x
         self.rad = rad
         self.speed = speed
@@ -28,14 +28,19 @@ class _RippleRing:
 
 
 class WaterSurface:
-
-    def __init__(self, width: float, base_y: float, spacing: float = TRIANGLE_WIDTH,
-                 wave_amp: float = 0.0, seed: int | None = None):
+    def __init__(
+        self,
+        width: float,
+        base_y: float,
+        spacing: float = TRIANGLE_WIDTH,
+        wave_amp: float = 0.0,
+        seed: int | None = None,
+    ):
         self.width = float(width)
         self.base_y = float(base_y)
         self.spacing = float(spacing)
         self.n = max(3, int(round(self.width / self.spacing)) + 1)
-        self.spacing = self.width / (self.n - 1)   # 均分到末点正好落在右边界
+        self.spacing = self.width / (self.n - 1)  # 均分到末点正好落在右边界
         # Courant 数，须 R<1 保稳定
         dx = DX_FACTOR * self.spacing
         self.r = WAVE_SPEED_C * DT / dx
@@ -117,8 +122,7 @@ class WaterSurface:
         for i in range(i_first, i_last + 1):
             if self._rng.random() < flow:
                 edge = -1.0 if (i == i_first or i == i_last) else 1.0
-                self.height[i] += (1.9 * lerp(-1.0, 0.5, self._rng.random())
-                                   * edge * lerp(0.6, 1.0, flow))
+                self.height[i] += 1.9 * lerp(-1.0, 0.5, self._rng.random()) * edge * lerp(0.6, 1.0, flow)
 
     def drain_affect(self, left: float, right: float, flow: float) -> None:
         i_first = self._prev_point(left)
@@ -138,8 +142,15 @@ class WaterSurface:
         if c < self.n - 1:
             self.height[c + 1] += impulse / 6.0
 
-    def ripple_ring(self, x: float, rad: float = 5.0, speed: float = 17.0,
-                    width: float = 70.0, life_time: float = 20.0, intensity: float = 1.0) -> None:
+    def ripple_ring(
+        self,
+        x: float,
+        rad: float = 5.0,
+        speed: float = 17.0,
+        width: float = 70.0,
+        life_time: float = 20.0,
+        intensity: float = 1.0,
+    ) -> None:
         self._rings.append(_RippleRing(x, rad, speed, width, life_time, intensity))
 
     def _step_rings(self):

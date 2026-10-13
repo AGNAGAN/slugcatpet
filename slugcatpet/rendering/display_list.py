@@ -1,13 +1,26 @@
 """帧显示列表：tick 里记录绘制调用与精确范围，paintEvent 回放。"""
+
 from __future__ import annotations
 
 from numbers import Real
 
 from PySide6.QtCore import QLineF, QPoint, QPointF, QRect, QRectF, Qt
-from PySide6.QtGui import (QBrush, QColor, QFont, QImage, QPainter, QPainterPath, QPen,
-                           QPixmap, QPolygon, QPolygonF, QRegion, QTransform)
+from PySide6.QtGui import (
+    QBrush,
+    QColor,
+    QFont,
+    QImage,
+    QPainter,
+    QPainterPath,
+    QPen,
+    QPixmap,
+    QPolygon,
+    QPolygonF,
+    QRegion,
+    QTransform,
+)
 
-_AA = 2.0                 # 抗锯齿 / 取整外扩（设备 px）
+_AA = 2.0  # 抗锯齿 / 取整外扩（设备 px）
 _EVERYTHING = QRectF(-1e7, -1e7, 2e7, 2e7)
 
 
@@ -27,7 +40,7 @@ def _image_rect(args):
     k = next((i for i, a in enumerate(args) if isinstance(a, (QPixmap, QImage))), None)
     if k is None:
         return None
-    img, rest = args[k], args[k + 1:]
+    img, rest = args[k], args[k + 1 :]
     src = rest[0] if rest and isinstance(rest[0], (QRect, QRectF)) else None
     if src is None and len(rest) >= 4 and all(_num(v) for v in rest[:4]):
         src = QRectF(*rest[:4])
@@ -89,7 +102,6 @@ def _freeze(a):
 
 
 class FrameRecorder(QPainter):
-
     _dummy = None
 
     def __init__(self, font=None):
@@ -97,9 +109,9 @@ class FrameRecorder(QPainter):
             FrameRecorder._dummy = QImage(1, 1, QImage.Format.Format_ARGB32_Premultiplied)
         super().__init__(FrameRecorder._dummy)
         if font is not None:
-            QPainter.setFont(self, font)       # 与窗口 painter 初始字体一致，不入列表
+            QPainter.setFont(self, font)  # 与窗口 painter 初始字体一致，不入列表
         self.ops = []
-        self._b = None                         # 已映射到设备坐标的范围（未含 AA 外扩）
+        self._b = None  # 已映射到设备坐标的范围（未含 AA 外扩）
         self._everything = False
 
     def _add(self, r, stroke=True):
@@ -140,6 +152,7 @@ def _plain(name):
     def f(self, *a):
         self.ops.append((m, a))
         m(self, *a)
+
     f.__name__ = name
     return f
 
@@ -151,6 +164,7 @@ def _copying(name):
         a = _freeze(a)
         self.ops.append((m, a))
         m(self, *a)
+
     f.__name__ = name
     return f
 
@@ -161,26 +175,59 @@ def _draw(name, extract, stroke=True):
     def f(self, *a):
         self._add(extract(a) if extract else None, stroke)
         self.ops.append((m, _freeze(a)))
+
     f.__name__ = name
     return f
 
 
 # 参数都是不可变标量/枚举/QPointF 的状态调用：不拷贝
-for _n in ("save", "restore", "translate", "rotate", "scale", "shear", "setOpacity",
-           "setRenderHint", "setRenderHints", "setCompositionMode", "setClipRect", "setClipping",
-           "resetTransform", "setBrushOrigin", "setBackgroundMode", "setLayoutDirection",
-           "setViewport", "setWindow", "setViewTransformEnabled", "setWorldMatrixEnabled"):
+for _n in (
+    "save",
+    "restore",
+    "translate",
+    "rotate",
+    "scale",
+    "shear",
+    "setOpacity",
+    "setRenderHint",
+    "setRenderHints",
+    "setCompositionMode",
+    "setClipRect",
+    "setClipping",
+    "resetTransform",
+    "setBrushOrigin",
+    "setBackgroundMode",
+    "setLayoutDirection",
+    "setViewport",
+    "setWindow",
+    "setViewTransformEnabled",
+    "setWorldMatrixEnabled",
+):
     setattr(FrameRecorder, _n, _plain(_n))
 # 可能传入可变 Qt 值对象的状态调用：拷贝
-for _n in ("setPen", "setBrush", "setFont", "setTransform", "setWorldTransform", "setClipPath",
-           "setClipRegion", "setBackground"):
+for _n in (
+    "setPen",
+    "setBrush",
+    "setFont",
+    "setTransform",
+    "setWorldTransform",
+    "setClipPath",
+    "setClipRegion",
+    "setBackground",
+):
     setattr(FrameRecorder, _n, _copying(_n))
 
-for _n, _ex, _st in (("drawImage", _image_rect, False),
-                     ("drawEllipse", _ellipse_rect, True), ("drawLine", _line_rect, True),
-                     ("drawPolygon", _poly_rect, True), ("drawPolyline", _poly_rect, True),
-                     ("drawConvexPolygon", _poly_rect, True), ("drawRect", _rect_arg, True),
-                     ("drawRoundedRect", _rect_arg, True), ("fillRect", _rect_arg, False)):
+for _n, _ex, _st in (
+    ("drawImage", _image_rect, False),
+    ("drawEllipse", _ellipse_rect, True),
+    ("drawLine", _line_rect, True),
+    ("drawPolygon", _poly_rect, True),
+    ("drawPolyline", _poly_rect, True),
+    ("drawConvexPolygon", _poly_rect, True),
+    ("drawRect", _rect_arg, True),
+    ("drawRoundedRect", _rect_arg, True),
+    ("fillRect", _rect_arg, False),
+):
     setattr(FrameRecorder, _n, _draw(_n, _ex, _st))
 
 
@@ -211,9 +258,21 @@ FrameRecorder.strokePath = _strokePath
 FrameRecorder.drawText = _drawText
 
 # 其余绘制方法算不准范围：记为整窗
-for _n in ("drawArc", "drawChord", "drawPie", "drawPoint", "drawPoints", "drawLines", "drawRects",
-           "drawTiledPixmap", "drawStaticText", "drawGlyphRun", "drawPicture",
-           "drawPixmapFragments", "eraseRect"):
+for _n in (
+    "drawArc",
+    "drawChord",
+    "drawPie",
+    "drawPoint",
+    "drawPoints",
+    "drawLines",
+    "drawRects",
+    "drawTiledPixmap",
+    "drawStaticText",
+    "drawGlyphRun",
+    "drawPicture",
+    "drawPixmapFragments",
+    "eraseRect",
+):
     setattr(FrameRecorder, _n, _draw(_n, None))
 
 

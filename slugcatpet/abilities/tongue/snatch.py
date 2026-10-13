@@ -1,4 +1,5 @@
 """机会主义舌头补救层：空中掠果时抢射舌粘住收绳，消费方每 tick 驱动。"""
+
 from __future__ import annotations
 import math
 
@@ -7,7 +8,6 @@ from .reach import FETCH_IDEAL, FETCH_REEL, mouth_pos
 
 
 class TongueSnatch:
-
     def __init__(self, pet):
         self.pet = pet
         self._prev_dist = None

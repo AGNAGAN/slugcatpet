@@ -1,4 +1,5 @@
 """HUD 单猫行：体征 + 左键弹菜单/拖动移 HUD。"""
+
 from __future__ import annotations
 from PySide6.QtWidgets import QWidget, QLabel, QGridLayout, QFrame
 from PySide6.QtCore import Qt
@@ -13,7 +14,7 @@ from ..theme import palette
 KARMA_ICON = 22
 BAR_W, BAR_H = 88, 10
 PIP = 12
-_DRAG_THRESH = 3         # 小于此判定点击而非拖动
+_DRAG_THRESH = 3  # 小于此判定点击而非拖动
 
 _BAR_BG = palette.BAR_BG
 _BAR_FG = palette.BAR_FG
@@ -93,9 +94,9 @@ class PetRow(QFrame):
         grid.setVerticalSpacing(6)
 
         def name_lbl(text):
-            l = QLabel(text)
-            l.setObjectName("hudName")
-            return l
+            lbl = QLabel(text)
+            lbl.setObjectName("hudName")
+            return lbl
 
         self.name = QLabel()
         self.name.setObjectName("hudRowName")
@@ -127,11 +128,11 @@ class PetRow(QFrame):
         grid.addWidget(self.cold_lbl, 5, 0)
         grid.addWidget(self.cold_bar, 5, 1)
         self._cold_visible = False
-        self._karma_frame = None    # 已显示帧名，去重防重复渲染
+        self._karma_frame = None  # 已显示帧名，去重防重复渲染
         self.cold_lbl.setVisible(False)
         self.cold_bar.setVisible(False)
 
-        self.air_lbl = name_lbl(t("hud_air"))         # 有水时才显示
+        self.air_lbl = name_lbl(t("hud_air"))  # 有水时才显示
         self.air_bar = _Bar(fg=_OXY)
         grid.addWidget(self.air_lbl, 6, 0)
         grid.addWidget(self.air_bar, 6, 1)
@@ -200,9 +201,12 @@ class PetRow(QFrame):
         if pm.isNull():
             return pm
         if pm.width() > KARMA_ICON or pm.height() > KARMA_ICON:
-            pm = pm.scaled(KARMA_ICON, KARMA_ICON,
-                           Qt.AspectRatioMode.KeepAspectRatio,
-                           Qt.TransformationMode.SmoothTransformation)
+            pm = pm.scaled(
+                KARMA_ICON,
+                KARMA_ICON,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
         return pm
 
     def mousePressEvent(self, ev):

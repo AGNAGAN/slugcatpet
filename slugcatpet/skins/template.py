@@ -1,4 +1,5 @@
 """从原版图集导出 DMS 格式的皮肤绘制模板。"""
+
 from __future__ import annotations
 
 import json
@@ -13,8 +14,13 @@ from . import groups as G
 
 # 输出文件 → 部件组（TAILSPECKLES/PIXEL 桌宠不画，不导出）
 FILES = {
-    "head": ("HEAD",), "face": ("FACE",), "body": ("BODY",), "hips": ("HIPS",),
-    "arm": ("ARMS",), "legs": ("LEGS",), "tail": ("TAIL",),
+    "head": ("HEAD",),
+    "face": ("FACE",),
+    "body": ("BODY",),
+    "hips": ("HIPS",),
+    "arm": ("ARMS",),
+    "legs": ("LEGS",),
+    "tail": ("TAIL",),
     "extras": ("FACESCAR", "GILLS", "ASCENSION"),
 }
 TAIL_SIZE = (150, 75)
@@ -33,8 +39,8 @@ def _extra(v: int, anchor: float) -> int:
 
 def _species_frame(frame: str, species: str) -> str:
     for specific, generic in G.SPECIES_ALIASES.get(species, {}).items():
-        if frame.startswith(generic) and frame[len(generic):].isdigit():
-            return specific + frame[len(generic):]
+        if frame.startswith(generic) and frame[len(generic) :].isdigit():
+            return specific + frame[len(generic) :]
     return frame
 
 
@@ -96,20 +102,29 @@ def _write_atlas(dest: Path, stem: str, frames: list[tuple[str, QImage]]):
         p.drawImage(fx, fy, img)
         p.setPen(GUIDE)
         p.drawRect(QRect(fx - 1, fy - 1, fw + 1, fh + 1))
-        p.drawText(QRect(fx - 1, fy - LABEL_H - 1, max(fw + 2, 60), LABEL_H),
-                   int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom), name)
+        p.drawText(
+            QRect(fx - 1, fy - LABEL_H - 1, max(fw + 2, 60), LABEL_H),
+            int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom),
+            name,
+        )
         data[f"{name}.png"] = {
             "frame": {"x": fx, "y": fy, "w": fw, "h": fh},
-            "rotated": False, "trimmed": False,
+            "rotated": False,
+            "trimmed": False,
             "spriteSourceSize": {"x": 0, "y": 0, "w": fw, "h": fh},
             "sourceSize": {"w": fw, "h": fh},
         }
     p.end()
     sheet.save(str(dest / f"{stem}.png"))
-    meta = {"app": "slugcatpet", "version": "1.0", "image": f"{stem}.png",
-            "format": "RGBA8888", "size": {"w": w, "h": h}, "scale": "1"}
-    (dest / f"{stem}.txt").write_text(json.dumps({"frames": data, "meta": meta}, indent=1),
-                                      encoding="utf-8")
+    meta = {
+        "app": "slugcatpet",
+        "version": "1.0",
+        "image": f"{stem}.png",
+        "format": "RGBA8888",
+        "size": {"w": w, "h": h},
+        "scale": "1",
+    }
+    (dest / f"{stem}.txt").write_text(json.dumps({"frames": data, "meta": meta}, indent=1), encoding="utf-8")
 
 
 def export_template(dest: Path, base, species: str = "survivor") -> list[str]:
@@ -125,6 +140,5 @@ def export_template(dest: Path, base, species: str = "survivor") -> list[str]:
                 frames.append((f, img))
         _write_atlas(dest, file_stem, frames)
     meta = {"id": f"template.{species}", "name": f"Template ({species})", "author": "me"}
-    (dest / "metadata.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False),
-                                        encoding="utf-8")
+    (dest / "metadata.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
     return missing

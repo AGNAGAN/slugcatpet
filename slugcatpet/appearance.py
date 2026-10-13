@@ -1,4 +1,5 @@
 """一只猫的外观：皮肤、颜色、配件，以及取色优先级。"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -15,9 +16,9 @@ def _hex(c) -> str:
 
 @dataclass
 class Look:
-    skin: str | None = None                       # 皮肤 id，None=原皮
-    colors: dict | None = None                    # {"body": rgb, "face": rgb}，None=默认颜色
-    accessories: dict = field(default_factory=dict)   # key → {"on": bool, "color": rgb | None}
+    skin: str | None = None  # 皮肤 id，None=原皮
+    colors: dict | None = None  # {"body": rgb, "face": rgb}，None=默认颜色
+    accessories: dict = field(default_factory=dict)  # key → {"on": bool, "color": rgb | None}
 
     @classmethod
     def from_state(cls, state: dict) -> Look:
@@ -68,8 +69,11 @@ class Look:
         return out or None
 
     def copy(self) -> Look:
-        return Look(self.skin, dict(self.colors) if self.colors else None,
-                    {k: dict(v) for k, v in self.accessories.items()})
+        return Look(
+            self.skin,
+            dict(self.colors) if self.colors else None,
+            {k: dict(v) for k, v in self.accessories.items()},
+        )
 
     def wears(self, acc_cls, species: str) -> bool:
         e = self.accessories.get(acc_cls.key, {})

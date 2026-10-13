@@ -1,4 +1,5 @@
 """石头：猫生气时捡起来扔；被扔中的猫会晕，光标会被弹开。"""
+
 from __future__ import annotations
 
 import math
@@ -24,7 +25,7 @@ STONE_TRAIL_HALFW = 3.0
 STONE_TRAIL_ALPHA = 90
 CURSOR_STUN_PAD = 8.0
 CURSOR_STUN_LOCK = 80
-CURSOR_KNOCK_SPEED = 26.0     # 光标被石头砸中后的弹开初速（逻辑 px/tick）
+CURSOR_KNOCK_SPEED = 26.0  # 光标被石头砸中后的弹开初速（逻辑 px/tick）
 
 _ICON_FACET = QColor(70, 76, 66, 160)
 
@@ -74,8 +75,17 @@ class StoneKind(ItemKind):
                 sp = math.hypot(s.vx, s.vy)
                 if sp > STONE_TRAIL_MIN_SPEED:
                     length = min(sp * STONE_TRAIL_LEN_K, STONE_TRAIL_LEN_MAX)
-                    draw_stone_trail(p, x, y, s.vx / sp, s.vy / sp, length,
-                                     STONE_TRAIL_HALFW, STONE_COLOR, STONE_TRAIL_ALPHA)
+                    draw_stone_trail(
+                        p,
+                        x,
+                        y,
+                        s.vx / sp,
+                        s.vy / sp,
+                        length,
+                        STONE_TRAIL_HALFW,
+                        STONE_COLOR,
+                        STONE_TRAIL_ALPHA,
+                    )
             if s.vibrate > 0:
                 x += (s.vibrate % 3) - 1.0
                 y += ((s.vibrate // 2) % 3) - 1.0
@@ -84,17 +94,25 @@ class StoneKind(ItemKind):
     def draw_hint(self, win, p, cx, cy):
         p.save()
         p.setOpacity(0.5)
-        draw_stone(p, win.atlas, cx, cy, 0.0, "Pebble" + str(1 + win.item_seed(self) % 14),
-                   color=STONE_COLOR, scale=STONE_DRAW_SCALE)
+        draw_stone(
+            p,
+            win.atlas,
+            cx,
+            cy,
+            0.0,
+            "Pebble" + str(1 + win.item_seed(self) % 14),
+            color=STONE_COLOR,
+            scale=STONE_DRAW_SCALE,
+        )
         p.restore()
 
     def paint_icon(self, p, r, atlas):
         from ...ui.widgets.iconkit import ICON_GREY, pen
+
         cx, cy = r.center().x(), r.center().y()
         w, h = r.width(), r.height()
         ox, oy = cx, cy + h * 0.04
-        pts = [(-0.54, 0.12), (-0.30, -0.40), (0.10, -0.46),
-               (0.54, -0.12), (0.46, 0.34), (-0.12, 0.46)]
+        pts = [(-0.54, 0.12), (-0.30, -0.40), (0.10, -0.46), (0.54, -0.12), (0.46, 0.34), (-0.12, 0.46)]
         poly = [QPointF(ox + dx * w * 0.56, oy + dy * h * 0.50) for dx, dy in pts]
         p.setPen(pen(ICON_GREY, max(1.8, w * 0.13), cap=False))
         p.setBrush(ICON_GREY)

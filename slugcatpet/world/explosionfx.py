@@ -1,4 +1,5 @@
 """爆炸特效族粒子推进；y↓，40Hz。"""
+
 from __future__ import annotations
 
 import math
@@ -26,6 +27,7 @@ def rnv():
 
 class ExplosionSmoke:
     """爆炸烟：vel*=0.9，向牵引点吸引。"""
+
     LAYER = 1
     # 取舍：无调色板，固定暖灰替代
     COLOR_A = (92, 78, 70)
@@ -48,14 +50,18 @@ class ExplosionSmoke:
         self.lifetime = lerp(40.0, 55.0, random.random())
         self.floor_y = floor_y
         # draw_lobes[i] = (基准角,轨道偏移比,半径比,相位,波动频率,rotation耦合,侵蚀速率)
-        self.draw_lobes = [(random.random() * 360.0,
-                            lerp(0.35, 0.7, random.random()),
-                            lerp(0.4, 0.68, random.random()),
-                            random.random() * 2.0 * math.pi,
-                            lerp(2.0, 5.0, random.random()),
-                            lerp(-1.0, 1.0, random.random()),
-                            lerp(0.15, 0.55, random.random()))
-                           for _ in range(random.randrange(2, 4))]
+        self.draw_lobes = [
+            (
+                random.random() * 360.0,
+                lerp(0.35, 0.7, random.random()),
+                lerp(0.4, 0.68, random.random()),
+                random.random() * 2.0 * math.pi,
+                lerp(2.0, 5.0, random.random()),
+                lerp(-1.0, 1.0, random.random()),
+                lerp(0.15, 0.55, random.random()),
+            )
+            for _ in range(random.randrange(2, 4))
+        ]
 
     def update(self):
         self.vx *= 0.9
@@ -79,8 +85,7 @@ class ExplosionSmoke:
 class FlashingSmoke(ExplosionSmoke):
     """白闪烟：出生白闪，color_fade_time 帧内衰减回烟色。"""
 
-    def __init__(self, x, y, vx, vy, size, white_color, effect_color,
-                 color_fade_time, floor_y=None):
+    def __init__(self, x, y, vx, vy, size, white_color, effect_color, color_fade_time, floor_y=None):
         super().__init__(x, y, vx, vy, size, floor_y)
         self.white_color = white_color
         self.effect_color = effect_color
@@ -107,7 +112,7 @@ class ExplosionLight:
         self.color = color
         self.life = 1.0
         self.last_life = 0.0
-        self._rng = random.Random(int(x) * 7919 + int(y))   # 闪白独立随机，不动全局 random
+        self._rng = random.Random(int(x) * 7919 + int(y))  # 闪白独立随机，不动全局 random
         self.white = 0.0
 
     def update(self):
@@ -132,15 +137,18 @@ class ExplosionSpikes:
         self.spikes = int(spikes * lerp(0.8, 1.2, random.random()))
         base = random.random() * 360.0
         self.dirs = []
-        self.values = []   # values[i] = [length, width, lifetime]
+        self.values = []  # values[i] = [length, width, lifetime]
         for i in range(self.spikes):
-            deg = (i / self.spikes * 360.0 + base
-                   + lerp(-0.5, 0.5, random.random()) * 360.0 / self.spikes)
+            deg = i / self.spikes * 360.0 + base + lerp(-0.5, 0.5, random.random()) * 360.0 / self.spikes
             r = math.radians(deg)
             self.dirs.append((math.sin(r), math.cos(r)))
-            self.values.append([length * lerp(0.6, 1.4, random.random()),
-                                width * lerp(0.6, 1.4, random.random()),
-                                lifetime * lerp(0.5, 1.5, random.random())])
+            self.values.append(
+                [
+                    length * lerp(0.6, 1.4, random.random()),
+                    width * lerp(0.6, 1.4, random.random()),
+                    lifetime * lerp(0.5, 1.5, random.random()),
+                ]
+            )
 
     def update(self):
         self.time += 1
@@ -169,17 +177,17 @@ class ExplosionSpikes:
 
 class Spark:
     """Spark：拖尾三角火花，gravity=Lerp(0.4,0.9)、10% 长寿命。"""
+
     LAYER = 3
 
-    def __init__(self, x, y, vx, vy, color, standard_lifetime, exceptional_lifetime,
-                 floor_y=None):
+    def __init__(self, x, y, vx, vy, color, standard_lifetime, exceptional_lifetime, floor_y=None):
         self.life = 1.0
         self.color = color
         nx, ny = _dirvec(0.0, 0.0, vx, vy)
         self.x = x + nx * (30.0 * random.random())
         self.y = y + ny * (30.0 * random.random())
         self.last_x, self.last_y = x, y
-        self.ll_x, self.ll_y = x, y      # 上上帧位置（拖尾端）
+        self.ll_x, self.ll_y = x, y  # 上上帧位置（拖尾端）
         self.vx, self.vy = vx, vy
         self.gravity = lerp(0.4, 0.9, random.random())
         self.lifetime = random.randrange(0, standard_lifetime) if standard_lifetime > 0 else 0
@@ -195,7 +203,7 @@ class Spark:
         self.x += self.vx
         self.y += self.vy
         if self.floor_y is not None and self.y >= self.floor_y:
-            if self.vy > 0.0:            # 落向地板反弹（无 tile 地形，近似）
+            if self.vy > 0.0:  # 落向地板反弹（无 tile 地形，近似）
                 self.y = self.floor_y
                 self.vy *= -0.5
                 if abs(self.vy) < 3.0:
@@ -207,6 +215,7 @@ class Spark:
 
 class ShockWave:
     """ShockWave：屏幕扭曲用双环高光+Plus 近似替代。"""
+
     LAYER = 5
 
     def __init__(self, x, y, size, intensity, lifetime):
@@ -228,6 +237,7 @@ class ShockWave:
 
 class SootMark:
     """静态焦痕。取舍：固定近黑替代调色板，限时淡出替代永驻。"""
+
     LAYER = 0
     FADE_TICKS = 400
 
@@ -241,9 +251,14 @@ class SootMark:
         near = floor_y is not None and y + min(30.0, rad * 0.3) >= floor_y
         self.fade = 1.0 if near else 0.85
         self.age = 0
-        self.lobes = [(lerp(-0.45, 0.45, random.random()) * rad,
-                       lerp(-0.45, 0.45, random.random()) * rad,
-                       lerp(0.35, 0.7, random.random()) * rad) for _ in range(5)]
+        self.lobes = [
+            (
+                lerp(-0.45, 0.45, random.random()) * rad,
+                lerp(-0.45, 0.45, random.random()) * rad,
+                lerp(0.35, 0.7, random.random()) * rad,
+            )
+            for _ in range(5)
+        ]
 
     def update(self):
         self.age += 1
@@ -289,22 +304,33 @@ def spawn_pyro_death_fx(win, x, y):
     win.fx.append(ShockWave(x, y, 430.0, 0.045, 5))
     for _ in range(25):
         dx, dy = rnv()
-        if fl is not None and y + dy * 20.0 > fl:   # 无 tile 地形，朝地束流翻向近似
+        if fl is not None and y + dy * 20.0 > fl:  # 无 tile 地形，朝地束流翻向近似
             dx, dy = -dx, -dy
         for _ in range(3):
             off = lerp(30.0, 60.0, random.random())
             m = lerp(7.0, 38.0, random.random())
             jx, jy = rnv()
             jm = 20.0 * random.random()
-            win.fx.append(Spark(x + dx * off, y + dy * off,
-                                dx * m + jx * jm, dy * m + jy * jm, WHITE, 11, 28, fl))
+            win.fx.append(
+                Spark(x + dx * off, y + dy * off, dx * m + jx * jm, dy * m + jy * jm, WHITE, 11, 28, fl)
+            )
         # 取舍：烟量减到 40% 概率一颗
         if random.random() < 0.4:
             off = 40.0 * random.random()
             m = lerp(4.0, 20.0, math.pow(random.random(), 2.0))
-            win.fx.append(FlashingSmoke(x + dx * off, y + dy * off, dx * m, dy * m,
-                                        1.0 + 0.05 * random.random(), WHITE, WHITE,
-                                        random.randrange(3, 11), fl))
+            win.fx.append(
+                FlashingSmoke(
+                    x + dx * off,
+                    y + dy * off,
+                    dx * m,
+                    dy * m,
+                    1.0 + 0.05 * random.random(),
+                    WHITE,
+                    WHITE,
+                    random.randrange(3, 11),
+                    fl,
+                )
+            )
 
 
 def spawn_overheat_smoke(win, x, y):

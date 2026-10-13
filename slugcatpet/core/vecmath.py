@@ -1,4 +1,5 @@
 """二维向量小工具（不依赖 Qt），坐标系 y↓。"""
+
 from __future__ import annotations
 import math
 

@@ -1,4 +1,5 @@
 """舌取能力：走进射程→射舌粘住→收绳/荡摆/flyby 拉近。"""
+
 from __future__ import annotations
 import math
 
@@ -9,7 +10,7 @@ from ...planning.reach import Reach, Estimate, RUNNING, GIVEUP, reach_assist, wa
 
 FETCH_IDEAL = 10.0
 FETCH_REEL = 3.0
-FLYBY_TRIGGER = 1.4          # 荡摆掠过阈值，触发断舌借势
+FLYBY_TRIGGER = 1.4  # 荡摆掠过阈值，触发断舌借势
 APPROACH_TIMEOUT = 240
 TONGUE_UNDER_TOL = 40.0
 
@@ -49,8 +50,11 @@ class TongueReach(Reach):
         fx = clampf(gx, xmin, xmax)
         d = math.hypot(gx - fx, gy - (pet._HL - consts.PLAN_MOUTH_H))
         if d <= rng:
-            t = (abs(pet.body.chunk1.x - fx) / tuning.PLAN_WALK_SPEED
-                 + d / consts.PLAN_TONGUE_SPEED + tuning.PLAN_STARTUP_TICKS)
+            t = (
+                abs(pet.body.chunk1.x - fx) / tuning.PLAN_WALK_SPEED
+                + d / consts.PLAN_TONGUE_SPEED
+                + tuning.PLAN_STARTUP_TICKS
+            )
             best = Estimate(t, t * tuning.PLAN_EN_RATE_LIGHT)
         mox, moy = mouth_pos(pet)
         dm = math.hypot(gx - mox, gy - moy)
@@ -65,12 +69,11 @@ class TongueReach(Reach):
 
 
 class TongueApproachController:
-
     def __init__(self, pet, goal):
         self.pet = pet
         self.goal = goal
         self.timer = 0
-        self._fired = False        # 本控制器是否已射过一发（单发，不原地狂射）
+        self._fired = False  # 本控制器是否已射过一发（单发，不原地狂射）
 
     def update(self):
         pet = self.pet

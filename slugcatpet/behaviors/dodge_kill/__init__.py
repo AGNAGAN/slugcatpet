@@ -1,4 +1,5 @@
 """舌头躲杀。"""
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -62,9 +63,16 @@ def _mount(fsm, p):
         fsm.gfx.hand_aim["l"] = None
         fsm.gfx.hand_aim["r"] = None
 
-    fsm.register_state("DodgeKill", enter=enter, tick=st_dodgekill,
-                       brk=brk, kill_break=brk, stun_break=release,
-                       tier=T_REFLEX, energy=VIGOROUS)
+    fsm.register_state(
+        "DodgeKill",
+        enter=enter,
+        tick=st_dodgekill,
+        brk=brk,
+        kill_break=brk,
+        stun_break=release,
+        tier=T_REFLEX,
+        energy=VIGOROUS,
+    )
 
     def respond():
         if fsm.body.swimming:

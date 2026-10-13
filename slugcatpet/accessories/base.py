@@ -1,4 +1,5 @@
 """配件（Accessory）基类：纯外观、会动的额外部件。"""
+
 from __future__ import annotations
 
 
