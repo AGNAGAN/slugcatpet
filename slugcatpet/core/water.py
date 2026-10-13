@@ -10,11 +10,10 @@ DT = 0.0045
 WAVE_SPEED_C = 1.0
 DAMPING = 0.99
 HEIGHT_CLAMP = 40.0
-TRIANGLE_WIDTH = 20.0     # 默认点间距
+TRIANGLE_WIDTH = 20.0
 
 
 class _RippleRing:
-    """扩散涟漪环状态。"""
     __slots__ = ("x", "rad", "speed", "width", "intensity", "life", "life_dec")
 
     def __init__(self, x: float, rad: float, speed: float, width: float,
@@ -29,14 +28,14 @@ class _RippleRing:
 
 
 class WaterSurface:
-    """一维阻尼波方程水面。"""
 
     def __init__(self, width: float, base_y: float, spacing: float = TRIANGLE_WIDTH,
                  wave_amp: float = 0.0, seed: int | None = None):
         self.width = float(width)
         self.base_y = float(base_y)
         self.spacing = float(spacing)
-        self.n = max(3, int(self.width / self.spacing) + 1)   # 点数
+        self.n = max(3, int(round(self.width / self.spacing)) + 1)
+        self.spacing = self.width / (self.n - 1)   # 均分到末点正好落在右边界
         # Courant 数，须 R<1 保稳定
         dx = DX_FACTOR * self.spacing
         self.r = WAVE_SPEED_C * DT / dx
@@ -48,42 +47,39 @@ class WaterSurface:
         self.last_height = [0.0] * self.n
         self.next_height = [0.0] * self.n
         self._rings: list[_RippleRing] = []
-        self.splash_stop = 0        # 入水溅冷却，防重复溅出
+        self.splash_stop = 0
 
     def point_x(self, i: int) -> float:
-        """第 i 点的 x 坐标。"""
         return i * self.spacing
 
     def step(self) -> None:
-        """跑一帧波方程。"""
         if self.splash_stop > 0:
             self.splash_stop -= 1
         h, lh, nh = self.height, self.last_height, self.next_height
         n, r, r2 = self.n, self.r, self.r2
         mean_acc = 0.0
         for i in range(n):
-            if i == 0:                                                    # 左边界
+            if i == 0:
                 nh[i] = (2.0 * h[i] + (r - 1.0) * lh[i] + 2.0 * r2 * (h[i + 1] - h[i])) / (1.0 + r)
-            elif i == n - 1:                                              # 右边界
+            elif i == n - 1:
                 nh[i] = (2.0 * h[i] + (r - 1.0) * lh[i] + 2.0 * r2 * (h[i - 1] - h[i])) / (1.0 + r)
-            else:                                                         # 内部点
+            else:
                 nh[i] = r2 * (h[i - 1] + h[i + 1]) + 2.0 * (1.0 - r2) * h[i] - lh[i]
-            if self.wave_amp > 0.0:                                       # 环境微扰
+            if self.wave_amp > 0.0:
                 nh[i] += lerp(-self.wave_amp, self.wave_amp, self._rng.random()) * 0.005
             nh[i] *= DAMPING
             mean_acc += h[i]
-        mean_acc /= n * 1.5                                              # 体积守恒
+        mean_acc /= n * 1.5
         for i in range(n):
             lh[i] = h[i]
             v = nh[i] - mean_acc
-            if 0 < i < n - 1:                                            # 邻点平滑
+            if 0 < i < n - 1:
                 v = lerp(v, lerp(nh[i - 1], nh[i + 1], 0.5), 0.01)
             h[i] = clampf(v, -HEIGHT_CLAMP, HEIGHT_CLAMP)
         if self._rings:
             self._step_rings()
 
     def _prev_point(self, x: float) -> int:
-        """x 左邻点索引，clamp 到 [0, n-2]。"""
         i = int(x / self.spacing)
         if i < 0:
             return 0
@@ -92,7 +88,6 @@ class WaterSurface:
         return i
 
     def _closest_point(self, x: float) -> int:
-        """x 最近点索引。"""
         i = int(x / self.spacing + 0.5)
         if i < 0:
             return 0
@@ -101,14 +96,12 @@ class WaterSurface:
         return i
 
     def level_at(self, x: float) -> float:
-        """相邻两点线插波面高 = base_y + 插值 height。"""
         i = self._prev_point(x)
         j = i + 1
         t = inv_lerp(self.point_x(i), self.point_x(j), x)
         return self.base_y + lerp(self.height[i], self.height[j], t)
 
     def energy(self) -> float:
-        """当前波面最大绝对位移。"""
         m = 0.0
         for v in self.height:
             a = v if v >= 0.0 else -v
@@ -117,7 +110,6 @@ class WaterSurface:
         return m
 
     def waterfall_hit(self, left: float, right: float, flow: float) -> None:
-        """注水口翻涌：段内点 rand<flow 加正负交替扰动。"""
         i_first = self._prev_point(left)
         i_last = self._prev_point(right) + 1
         if i_last > self.n - 1:
@@ -129,7 +121,6 @@ class WaterSurface:
                                    * edge * lerp(0.6, 1.0, flow))
 
     def drain_affect(self, left: float, right: float, flow: float) -> None:
-        """抽水吸面：段内点 rand<flow 向下拽。"""
         i_first = self._prev_point(left)
         i_last = self._prev_point(right) + 1
         if i_last > self.n - 1:
@@ -140,7 +131,6 @@ class WaterSurface:
                 self.height[i] -= 1.6 * lerp(0.5, 1.5, self._rng.random()) * edge * flow
 
     def splash(self, x: float, impulse: float) -> None:
-        """投物入水涟漪源。"""
         c = self._closest_point(x)
         self.height[c] += impulse / 2.0
         if c > 0:
@@ -150,11 +140,9 @@ class WaterSurface:
 
     def ripple_ring(self, x: float, rad: float = 5.0, speed: float = 17.0,
                     width: float = 70.0, life_time: float = 20.0, intensity: float = 1.0) -> None:
-        """加一个从 x 扩散的涟漪环。"""
         self._rings.append(_RippleRing(x, rad, speed, width, life_time, intensity))
 
     def _step_rings(self):
-        """推进涟漪环。"""
         alive = []
         for ring in self._rings:
             ring.rad += ring.speed

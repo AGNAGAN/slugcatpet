@@ -11,7 +11,6 @@ FULL_SIZE_MAX = 1.5
 
 
 class Bubble:
-    """单个气泡。"""
     __slots__ = ("x", "y", "last_x", "last_y", "vx", "vy", "full_size", "age")
 
     def __init__(self, x, y, vx, vy, rng):
@@ -23,11 +22,10 @@ class Bubble:
         self.age = 0
 
     def update(self, water_y, rng) -> bool:
-        """推进一帧，返回是否存活（False=销毁）。"""
         self.last_x, self.last_y = self.x, self.y
         self.vx *= DRAG
         self.vy *= DRAG
-        deg = math.radians(-90.0 + 180.0 * rng.random())    # 指向上半圆
+        deg = math.radians(-90.0 + 180.0 * rng.random())
         mag = rng.random() * BUOYANCY_MAG
         self.vx += math.sin(deg) * mag
         self.vy += -math.cos(deg) * mag                     # y↓ 取反

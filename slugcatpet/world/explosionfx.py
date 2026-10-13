@@ -5,6 +5,7 @@ import math
 import random
 
 from ..core.units import lerp, inv_lerp
+from ..core.vecmath import _dirvec
 
 WHITE = (255, 255, 255)
 
@@ -13,25 +14,14 @@ UNDER_LAYER_MAX = 1
 
 
 def split_fx_layers(fx):
-    """(under, over)：按 LAYER 分猫身下/上两组。"""
     under = [q for q in fx if q.LAYER <= UNDER_LAYER_MAX]
     over = [q for q in fx if q.LAYER > UNDER_LAYER_MAX]
     return under, over
 
 
 def rnv():
-    """随机单位方向向量。"""
     a = random.random() * 2.0 * math.pi
     return (math.sin(a), math.cos(a))
-
-
-def _dirvec(ax, ay, bx, by):
-    """a→b 单位方向；重合→(0,0)。"""
-    dx, dy = bx - ax, by - ay
-    d = math.hypot(dx, dy)
-    if d < 1e-9:
-        return (0.0, 0.0)
-    return (dx / d, dy / d)
 
 
 class ExplosionSmoke:
@@ -103,12 +93,10 @@ class FlashingSmoke(ExplosionSmoke):
         return alive
 
     def flash_t(self):
-        """白闪强度 0-1。"""
         return inv_lerp(self.color_fade_time, 0.5, self.col)
 
 
 class ExplosionLight:
-    """爆炸光：平坦暗盘+双层加色光晕。"""
     LAYER = 4
 
     def __init__(self, x, y, rad, alpha, lifetime, color):
@@ -119,10 +107,13 @@ class ExplosionLight:
         self.color = color
         self.life = 1.0
         self.last_life = 0.0
+        self._rng = random.Random(int(x) * 7919 + int(y))   # 闪白独立随机，不动全局 random
+        self.white = 0.0
 
     def update(self):
         self.last_life = self.life
         self.life -= 1.0 / self.lifetime
+        self.white = self._rng.random()
         return self.last_life >= 0.0
 
     def radius(self):
@@ -130,7 +121,6 @@ class ExplosionLight:
 
 
 class ExplosionSpikes:
-    """尖刺环三角网格。"""
     LAYER = 2
 
     def __init__(self, x, y, spikes, inner_rad, lifetime, width, length, color):
@@ -157,12 +147,11 @@ class ExplosionSpikes:
         return self.time <= self.lifetime * 2.0
 
     def vertices(self):
-        """每刺 (tip, base1, base2, tip_alpha, 白化 t)。"""
         out = []
         for i in range(self.spikes):
             length, width, lt = self.values[i]
-            progress = inv_lerp(0.0, lt, float(self.time))     # 0→1 生长进度
-            remain = inv_lerp(lt, 0.0, float(self.time))       # 1→0 余寿
+            progress = inv_lerp(0.0, lt, float(self.time))
+            remain = inv_lerp(lt, 0.0, float(self.time))
             ln = lerp(length * 0.1, length, math.pow(progress, 0.45))
             wd = width * (0.5 + 0.5 * math.sin(progress * math.pi)) * math.pow(remain, 0.3)
             dx, dy = self.dirs[i]
@@ -200,7 +189,7 @@ class Spark:
 
     def update(self):
         self.ll_x, self.ll_y = self.last_x, self.last_y
-        self.vy += self.gravity          # y↓ 取加
+        self.vy += self.gravity
         self.life -= (1.0 / self.lifetime) if self.lifetime > 0 else 2.0
         self.last_x, self.last_y = self.x, self.y
         self.x += self.vx
@@ -240,7 +229,7 @@ class ShockWave:
 class SootMark:
     """静态焦痕。取舍：固定近黑替代调色板，限时淡出替代永驻。"""
     LAYER = 0
-    FADE_TICKS = 400     # 淡出总寿命
+    FADE_TICKS = 400
 
     def __init__(self, x, y, rad, floor_y=None):
         self.x, self.y = x, y
@@ -252,7 +241,6 @@ class SootMark:
         near = floor_y is not None and y + min(30.0, rad * 0.3) >= floor_y
         self.fade = 1.0 if near else 0.85
         self.age = 0
-        # 不规则焦痕 lobes，一次生成
         self.lobes = [(lerp(-0.45, 0.45, random.random()) * rad,
                        lerp(-0.45, 0.45, random.random()) * rad,
                        lerp(0.35, 0.7, random.random()) * rad) for _ in range(5)]
@@ -273,7 +261,7 @@ def _floor(win):
 
 
 def spawn_pyro_jump_fx(win, x, y, direction=0):
-    """火箭跳特效：8 烟+光+10 火花；direction 未使用。"""
+    """火箭跳特效；direction 未使用。"""
     fl = _floor(win)
     for _ in range(8):
         dx, dy = rnv()
@@ -288,13 +276,11 @@ def spawn_pyro_jump_fx(win, x, y, direction=0):
 
 
 def spawn_parry_fx(win, x, y):
-    """地面爆炸/parry 特效：同火箭跳 + ShockWave(200,0.2,6)。"""
     spawn_pyro_jump_fx(win, x, y)
     win.fx.append(ShockWave(x, y, 200.0, 0.2, 6))
 
 
 def spawn_pyro_death_fx(win, x, y):
-    """自爆特效：焦痕+双层光+尖刺+冲击环+25×火花/烟。"""
     fl = _floor(win)
     win.fx.append(SootMark(x, y, 80.0, fl))
     win.fx.append(ExplosionLight(x, y, 280.0, 1.0, 7, WHITE))

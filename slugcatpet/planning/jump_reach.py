@@ -1,9 +1,9 @@
-"""跳跃够取能力（全员）：走到起跳点→驻停→按档起跳，竖直或持向横弧；空中探身+持向漂移，落地报 done。"""
+"""跳跃够取：走到起跳点→驻停→按档起跳，空中持向漂移。"""
 from __future__ import annotations
 
-from ..behavior import tuning
+from .. import tuning
 from ..core.units import clampf
-from .ability import Ability, Estimate, RUNNING, DONE, GIVEUP, reach_assist, walk_band
+from .reach import Reach, Estimate, RUNNING, DONE, GIVEUP, reach_assist, walk_band
 from .jump_arc import get_arc, sweep_hit
 
 SETTLE_VX = 0.3
@@ -13,7 +13,7 @@ PLAN_HIT_RADIUS = tuning.GRAB_REACH - tuning.PLAN_JUMP_TAKEOFF_EPS
 
 
 def _free_launch_hit(arc, gx, gy, launch_y, xmin, xmax, radius):
-    """定 launch_y、自由 launch_x∈[xmin,xmax]：找弧上某点命中 (gx,gy) 的 (launch_x, tick)；无则 None。"""
+    """定 launch_y、自由 launch_x∈[xmin,xmax]：找命中 (gx,gy) 的 (launch_x, tick)；无则 None。"""
     for i, (px, py) in enumerate(arc.points):
         lx = gx - px
         if xmin <= lx <= xmax and abs((launch_y + py) - gy) <= radius:
@@ -21,11 +21,10 @@ def _free_launch_hit(arc, gx, gy, launch_y, xmin, xmax, radius):
     return None
 
 
-class JumpReach(Ability):
+class JumpReach(Reach):
     key = "jump"
 
     def _plan(self, goal):
-        # 枚举 档×{竖直,右,左}，取耗时最省
         pet = self.pet
         gx, gy = goal.pos()
         xmin, xmax = walk_band(pet)
@@ -74,7 +73,7 @@ class JumpReach(Ability):
 
 
 class JumpReachController:
-    """走到起跳 x（紧到位判定）→ 驻停 → 起跳时刻以实际 chunk0 重选 (档,横向) 起跳，持向探身，落地报 done。"""
+    """走到起跳 x → 驻停 → 起跳时以实际 chunk0 重选 (档,横向)。"""
 
     def __init__(self, pet, goal):
         self.pet = pet
@@ -118,7 +117,6 @@ class JumpReachController:
                 self._move_dir = md
                 self.phase = "air"
             return RUNNING
-        # air
         if not body.on_floor():
             self._airborne = True
             body.move_dir = self._move_dir
@@ -128,7 +126,6 @@ class JumpReachController:
         return RUNNING
 
     def _pick_at_launch(self, gx, gy):
-        # 起跳时以实际位置重选：先竖直后横弧
         c0 = self.pet.body.chunk0
         stats = self.pet.cat.stats
         for hold in tuning.PLAN_JUMP_HOLD_GEARS:

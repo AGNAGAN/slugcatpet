@@ -1,9 +1,9 @@
-"""后空翻够取（caps.acrobat）：走到起跳点→驻停→boosted backflip_launch 高后空翻弧命中普通跳够不到的高/远目标；落地报 done。"""
+"""后空翻够取：走到起跳点→驻停→高后空翻。"""
 from __future__ import annotations
 
-from ..behavior import tuning
+from .. import tuning
 from ..core.units import clampf
-from .ability import Ability, Estimate, RUNNING, DONE, GIVEUP, reach_assist, walk_band
+from .reach import Reach, Estimate, RUNNING, DONE, GIVEUP, reach_assist, walk_band
 from .jump_arc import get_arc, get_backflip_arc
 from .jump_reach import JumpReach, PLAN_HIT_RADIUS, SETTLE_MAX, SETTLE_VX
 
@@ -11,12 +11,12 @@ TOP_CLEAR = 20.0     # 窗顶余量：高于此线视为被 clamp，弃解
 
 
 def takeoff_c0_h(stats):
-    """站立起跳瞬间 chunk0 距地高（各弧线 sim 同源 settle，取 JumpArc 缓存值）。"""
+    """站立起跳瞬间 chunk0 距地高。"""
     return get_arc(stats, 0, 0).takeoff_h
 
 
 def best_launch_hit(arc, gx, gy, launch_y, xmin, xmax, radius, hipx):
-    """定 launch_y，扫掠自由 launch_x 取走+飞最省解；越窗顶余量弃整弧；无解 None。"""
+    """定 launch_y，扫掠 launch_x 取走+飞最省解；越窗顶余量弃整弧。"""
     best = None
     best_t = None
     for i, (px, py) in enumerate(arc.points):
@@ -34,7 +34,7 @@ def best_launch_hit(arc, gx, gy, launch_y, xmin, xmax, radius, hipx):
 
 
 def sweep_hit_topsafe(arc, dx, dy, radius, c0y):
-    """扫掠命中 + 窗顶过滤，命中回 tick(1 起)。"""
+    """扫掠命中 + 窗顶过滤，回 tick（1 起）。"""
     r2 = radius * radius
     for i, (px, py) in enumerate(arc.points):
         if c0y + py < TOP_CLEAR:
@@ -45,7 +45,7 @@ def sweep_hit_topsafe(arc, dx, dy, radius, c0y):
     return None
 
 
-class BackflipReach(Ability):
+class BackflipReach(Reach):
     key = "backflip"
 
     def _plan(self, goal):
@@ -83,7 +83,7 @@ class BackflipReach(Ability):
 
 
 class BackflipReachController:
-    """走到起跳 x → 驻停 → 起跳瞬间以实际 chunk0 重选方向 → backflip_launch 持向漂移，落地清态报 done。"""
+    """走到起跳 x → 驻停 → 起跳瞬间以实际 chunk0 重选方向。"""
 
     def __init__(self, pet, goal):
         self.pet = pet
@@ -125,7 +125,6 @@ class BackflipReachController:
                 self._d = d
                 self.phase = "air"
             return RUNNING
-        # air
         if not body.on_floor():
             self._airborne = True
             body.move_dir = self._d
@@ -135,7 +134,6 @@ class BackflipReachController:
         return RUNNING
 
     def _pick_at_launch(self, gx, gy):
-        # 起跳时以实际位置重选方向
         c0 = self.pet.body.chunk0
         stats = self.pet.cat.stats
         first = 1 if gx >= c0.x else -1

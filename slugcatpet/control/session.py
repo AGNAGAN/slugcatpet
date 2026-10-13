@@ -10,10 +10,9 @@ RESET_TABLE: dict[str, object] = {
     "_ctrl_input": None,             # 防跨会话陈旧边沿
     "_ctrl_want_jump": 0,            # 防再入首帧误跳
     "_ctrl_can_jump": 0,
-    "_ctrl_roll_direction": 0,       # 双保险
+    "_ctrl_roll_direction": 0,
     "_ctrl_roll_counter": 0,
     "_ctrl_whiplash": False,         # 退出后无人清
-    "_ctrl_flip_from_slide": False,
     "_ctrl_rocket_from_belly": False,
     "_ctrl_exit_belly": 0,
     "_ctrl_stop_rolling": 0,
@@ -23,6 +22,7 @@ RESET_TABLE: dict[str, object] = {
     "_ctrl_slide_direction": 0,      # 防下次误走 flip_skid_jump
     "_ctrl_init_slide_counter": 0,
     "_ctrl_slide_counter": 0,
+    "_ctrl_skid_cooldown": 0,
     "_ctrl_allow_roll": 0,           # 防再入首帧误触落地滚
     "_ctrl_consistent_dd": 0,
     "_ctrl_fall_speed": 0.0,
@@ -43,13 +43,11 @@ ANIM_RESET = frozenset(("Roll", "Flip", "BellySlide", "RocketJump",
 
 
 def reset_ctrl_state(body) -> None:
-    """按复位表把控制态字段全部归默认（进入/退出共用）。"""
     for k, v in RESET_TABLE.items():
         setattr(body, k, v)
 
 
 def enter_control(pet, provider) -> None:
-    """接管一只猫，FSM 冻结于 IdleStand。"""
     body = pet.body
     beh = pet.behavior
     if beh is not None:
@@ -76,14 +74,11 @@ def enter_control(pet, provider) -> None:
 
 
 def _mount_species_ctrl(pet, body) -> None:
-    """种族专属控制器挂载，非命中种族保持 None。"""
-    if getattr(pet.cat, "key", None) == "artificer":
-        from ..cats.artificer.pyro import PyroController
-        body._ctrl_pyro = PyroController(pet)
+    for ab in getattr(pet, "abilities", {}).values():
+        ab.control(pet, body)
 
 
 def exit_control(pet) -> None:
-    """交还一只猫（幂等）。"""
     if not getattr(pet, "controlled", False):
         return
     body = pet.body
@@ -97,7 +92,7 @@ def exit_control(pet) -> None:
     beh = pet.behavior
     if beh is not None:
         if body.dead:
-            pass                       # 留 Dead
+            pass
         elif body.stun > 0:
             # 留 Stunned，强制进以防未在此态
             beh.state = "Stunned"

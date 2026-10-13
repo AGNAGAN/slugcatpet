@@ -1,17 +1,16 @@
-"""走够能力：沿地面走到目标 x；站立臂展内可碰，地面带落 radius 圆内可驻留。"""
+"""走够能力：沿地面走到目标 x。"""
 from __future__ import annotations
 import math
 
-from ..behavior import tuning
+from .. import tuning
 from ..core.units import clampf
-from .ability import Ability, Estimate, RUNNING, DONE, reach_assist, walk_band
+from .reach import Reach, Estimate, RUNNING, DONE, reach_assist, walk_band
 
 
-class WalkReach(Ability):
+class WalkReach(Reach):
     key = "walk"
 
     def _plan(self, goal, max_h):
-        # 地面带内且高度不超限才可走
         pet = self.pet
         gx, gy = goal.pos()
         floor = pet._HL
@@ -35,7 +34,6 @@ class WalkReach(Ability):
         return self._plan_radius(goal, r)
 
     def _plan_radius(self, goal, r):
-        # 地面带上找落在 radius 圆内的落脚点
         pet = self.pet
         gx, gy = goal.pos()
         dy = abs(gy - pet._HL)
@@ -55,7 +53,6 @@ class WalkReach(Ability):
 
 
 class WalkReachController:
-    """走到目标 x，到位驻留后报 done；近距用 reach_for 探身。"""
 
     def __init__(self, pet, goal):
         self.pet = pet

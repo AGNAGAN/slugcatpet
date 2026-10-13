@@ -1,17 +1,11 @@
-"""重力域规划内核：能力按每猫能力清单（CatCaps）门禁，枚举→体力门槛过滤→耗时升序。"""
+"""重力域规划内核：枚举够取方式，按体力过滤、耗时排序。"""
 from __future__ import annotations
 import time
 
-from .ability import Candidate
+from .reach import Candidate
 from .cooldown import CooldownRegistry
-from .backflip_reach import BackflipReach
-from .ceiling_reach import CeilingDropReach
-from .climb_reach import ClimbReach
 from .jump_reach import JumpReach
-from .pole_reach import PoleDropReach, PoleJumpReach, PoleTongueReach
-from .pyro_reach import PyroJumpReach
-from .tongue_hang_stay import TongueHangStay
-from .tongue_reach import TongueReach
+from .pole_reach import PoleDropReach, PoleJumpReach
 from .walk_reach import WalkReach
 
 
@@ -24,21 +18,12 @@ class Planner:
         self._ability_cache = None    # 能力实例无状态，懒建后复用
 
     def _abilities(self):
-        # 能力集按 caps 装配
         if self._ability_cache is not None:
             return self._ability_cache
-        caps = self.pet.cat.caps
         out = [WalkReach(self.pet), JumpReach(self.pet),
                PoleJumpReach(self.pet), PoleDropReach(self.pet)]
-        if caps.tongue:
-            out += [TongueReach(self.pet), ClimbReach(self.pet),
-                    PoleTongueReach(self.pet), TongueHangStay(self.pet)]
-            if caps.ascension:
-                out.append(CeilingDropReach(self.pet))
-        if caps.pyro:
-            out.append(PyroJumpReach(self.pet))
-        if caps.acrobat:
-            out.append(BackflipReach(self.pet))
+        for ab in getattr(self.pet, "abilities", {}).values():
+            out += ab.reaches(self.pet)
         self._ability_cache = out
         return out
 
@@ -61,7 +46,6 @@ class Planner:
         return self._candidates(goal, "can_stay")
 
     def any_touch(self, goal):
-        """存在性早退版 _candidates，不建 Candidate 不排序。"""
         energy = self.pet.body.energy
         for ab in self._abilities():
             est = ab.can_touch(goal)

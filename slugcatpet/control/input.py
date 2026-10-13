@@ -7,9 +7,8 @@ BUFFER_LEN = 10
 
 @dataclass
 class InputPackage:
-    """一帧操控输入。"""
     x: int = 0                    # ∈{-1,0,1}
-    y: int = 0                    # ∈{-1,0,1}
+    y: int = 0
     jmp: bool = False
     thrw: bool = False
     pckp: bool = False
@@ -19,7 +18,6 @@ class InputPackage:
     downDiagonal: int = 0         # 下斜横向符号，派生自 x,y
 
     def __post_init__(self):
-        # 建包即算，(x,y) 纯函数
         self.downDiagonal = self.x if (self.y < 0 and self.x != 0) else 0
 
 

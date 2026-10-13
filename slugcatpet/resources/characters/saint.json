@@ -1,0 +1,35 @@
+{
+  "format": 1,
+  "key": "saint",
+  "order": 0,
+  "notes": "慈悲孱弱纯素：偏静易累最耐寒，爱舌钩荡跃。头用 msc 图集的 HeadB，平时闭眼（FaceB），超度时睁眼（face_open）。",
+  "body_color": "#AAF156",
+  "eye_color": "#161E10",
+  "layout": "saint.json",
+  "atlases": ["base", "msc", "ui", "uimsc"],
+  "frames": {
+    "head": "msc/HeadB",
+    "face": "base/FaceB",
+    "face_blink": "base/FaceB",
+    "face_open": "base/FaceA",
+    "legs_walk": "base/LegsA",
+    "legs_crawl": "base/LegsACrawling",
+    "legs_air": "base/LegsAAir0"
+  },
+  "abilities": {
+    "tongue": {},
+    "ascension": {}
+  },
+  "behaviors": {},
+  "stats": {},
+  "personality": {
+    "activity": 0.4,
+    "stamina": 0.8,
+    "cold_gain_fac": 0.5,
+    "sociability": 0.3,
+    "diet": "vegetarian",
+    "toy_pref": {
+      "ceiling_play": 1.4
+    }
+  }
+}

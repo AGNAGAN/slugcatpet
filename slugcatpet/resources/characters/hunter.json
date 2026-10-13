@@ -1,0 +1,32 @@
+{
+  "format": 1,
+  "key": "hunter",
+  "order": 4,
+  "body_color": "#FF7373",
+  "eye_color": "#161E10",
+  "layout": "hunter.json",
+  "atlases": ["base"],
+  "frames": {
+    "head": "base/HeadA",
+    "face": "base/FaceA",
+    "face_blink": "base/FaceB",
+    "legs_walk": "base/LegsA",
+    "legs_crawl": "base/LegsACrawling",
+    "legs_air": "base/LegsAAir0"
+  },
+  "abilities": {},
+  "behaviors": {},
+  "stats": {
+    "runspeed_fac": 1.2,
+    "pole_fac": 1.25,
+    "weight_fac": 1.12,
+    "max_food": 9,
+    "food_hibernate": 6
+  },
+  "personality": {
+    "activity": 0.65,
+    "stamina": 1.05,
+    "sociability": 0.3,
+    "diet": "carnivore"
+  }
+}

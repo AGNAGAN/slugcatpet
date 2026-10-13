@@ -1,0 +1,43 @@
+{
+  "format": 1,
+  "key": "artificer",
+  "order": 5,
+  "notes": "复仇爆破手：快而重、好动强健、极不亲人；憋气极短（drown_threshold 提前留逃生时间）；业力锁 1 级（karma_cap 0）。脸用疤脸 FaceC/FaceD（镜像朝向用 FaceD，疤不随翻转换边），eye_color 白色 = 脸不染暗色。",
+  "body_color": "#70233C",
+  "eye_color": "#FFFFFF",
+  "layout": "artificer.json",
+  "atlases": ["base", "msc"],
+  "frames": {
+    "head": "base/HeadA",
+    "face": "msc/FaceC",
+    "face_mirror": "msc/FaceD",
+    "face_blink": "base/FaceB",
+    "legs_walk": "base/LegsA",
+    "legs_crawl": "base/LegsACrawling",
+    "legs_air": "base/LegsAAir0"
+  },
+  "abilities": {
+    "pyro": {}
+  },
+  "behaviors": {},
+  "stats": {
+    "runspeed_fac": 1.2,
+    "pole_fac": 1.25,
+    "weight_fac": 1.12,
+    "max_food": 9,
+    "food_hibernate": 6,
+    "swim_boost_force": 6.0,
+    "swim_boost_cost": 0.015,
+    "drown_threshold": 0.5,
+    "karma_cap": 0
+  },
+  "personality": {
+    "activity": 0.75,
+    "stamina": 1.1,
+    "sociability": 0.2,
+    "diet": "carnivore",
+    "toy_pref": {
+      "pyro_romp": 1.4
+    }
+  }
+}

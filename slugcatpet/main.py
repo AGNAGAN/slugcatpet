@@ -8,14 +8,14 @@ import time
 from pathlib import Path
 
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
-from PySide6.QtGui import QIcon, QPixmap, QAction, QColor, QPainter
+from PySide6.QtGui import QIcon, QPixmap, QColor, QPainter
 from PySide6.QtCore import QTimer
 
-from .cats import default_def
+from .characters import default_def
 from .window import PetWindow
-from .ui.tabbar import TabBar
-from .ui.hud import HudPanel
-from .ui.settings import SettingsWindow
+from .ui.panels.tabbar import TabBar
+from .ui.panels.hud import HudPanel
+from .ui.panels.settings import SettingsWindow
 from .control.hotkey import HotkeyFilter, MOD_CONTROL, MOD_ALT, HK_PLACE_ESC
 from .platform import cursorfx
 from ._paths import user_dir
@@ -44,10 +44,10 @@ def _tray_icon() -> QIcon:
 
 
 def _migrate_params(params: dict) -> dict:
-    """旧 schema 迁移为 v2 pets[] 格式。"""
+    """旧 schema 迁移为 v2。"""
     if params.get("schema_version") == SCHEMA_VERSION and isinstance(params.get("pets"), list):
         return params
-    from .behavior import tuning
+    from . import tuning
     old_keys = ("energy", "temper", "food", "karma", "cold", "dead")
     if any(k in params for k in old_keys) or not params.get("pets"):
         pet_state = {
@@ -65,12 +65,18 @@ def _migrate_params(params: dict) -> dict:
     return params
 
 
+_DROPPED_KEYS = ("music_water_enabled", "music_hud_enabled", "music_theme_loop",
+                 "music_hud_ambient_ms", "music_hud_ambient_ts")     # 不再读取的设置键，载入时丢弃
+
+
 def _load_params(path: Path | None = None) -> dict:
     p = path or _APP_PARAMS
     try:
         raw = json.loads(p.read_text(encoding="utf-8"))
     except Exception:
         raw = {}
+    for k in _DROPPED_KEYS:
+        raw.pop(k, None)
     return _migrate_params(raw)
 
 
@@ -104,16 +110,36 @@ def setup_signal_handling(app):
 
 
 def _ensure_assets_interactive() -> bool:
-    """确保图集就绪，引导用户导入，返回是否成功。"""
     from .gameassets import atlases_present
     from ._paths import assets_dir
     if atlases_present(assets_dir()):
         return True
-    from .ui.setup_panel import SetupPanel
+    from .ui.panels.setup_panel import SetupPanel
     return SetupPanel().run()
 
 
+def _extract_scene_music_later(names):
+    """缺游戏配乐且找得到游戏时在后台补提取；这次启动没赶上的下次就有。"""
+    from .gameassets import detect_install, extract_music, music_missing, prune_music
+    prune_music(names)
+    if not music_missing(names):
+        return
+
+    def run():
+        try:
+            install = detect_install()
+            if install is not None:
+                extract_music(install, names)
+        except Exception:
+            pass
+
+    import threading
+    threading.Thread(target=run, name="scene-music", daemon=True).start()
+
+
 def main():
+    from .platform.appid import set_app_id
+    set_app_id()                                   # 须在建任何窗口之前
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
 
@@ -127,9 +153,18 @@ def main():
     _sig = setup_signal_handling(app)            # noqa: 保持引用
 
     params = _load_params()
+    from . import i18n
+    i18n.set_lang(params.get("lang"))
+    params.setdefault("lang", i18n.LANG)           # 首次启动按系统语言定下，之后不随系统变
 
     if not _ensure_assets_interactive():
         return
+
+    from . import skins
+    skins.configure(params.get("skins_scan_external", True))
+    skins.reload()
+    from .skins.folder import ensure_folder
+    ensure_folder()                        # 不导出模板
 
     pet = PetWindow(params=params)
     pet.show()
@@ -142,52 +177,114 @@ def main():
     tab.show()
 
     def _write_state():
-        """序列化状态并写盘。"""
         params["tab_y"] = tab._y
         params["tab_expanded"] = tab.expanded
         params["hud_x"] = hud.x()
         params["hud_y"] = hud.y()
         params["pets"] = [
-            {"id": p.id, "variant": p.variant,
+            {"id": p.id, "variant": p.variant, **p.look_state(), "name": p.name,
+             "hidden": p.hidden,
              "energy": p.body.energy, "temper": p.body.temper,
              "food": p.body.food, "karma": p.body.karma, "cold": p.body.cold,
              "dead": p.behavior is not None and p.behavior.is_truly_dead()}
-            for p in pet.pets
+            for p in pet.all_pets()
         ]
+        params["skins_scan_external"] = skins.scan_external()
         params["schema_version"] = SCHEMA_VERSION
         _save_params(params)
 
     settings = SettingsWindow(pet, hud, _write_state)
     pet._hud = hud                       # 供增删猫后 rebuild_rows
-    pet._pets_changed_cb = _write_state  # 增删猫后写盘
-    pet._open_settings_cb = settings.open  # 设置入口共用
-    app._settings = settings             # 保持引用
+    pet._pets_changed_cb = _write_state
+    pet._open_settings_cb = settings.open
+    app._settings = settings
 
     if params.get("tab_expanded", True):
         tab.toggle()
 
+    def _watch_skins():
+        if pet.reload_skins(force=False) and settings.isVisible():
+            settings._rebuild()
+    skin_timer = QTimer()
+    skin_timer.timeout.connect(_watch_skins)
+    skin_timer.start(4000)
+    app._skin_timer = skin_timer
+
     tray = QSystemTrayIcon(_tray_icon())
-    tray.setToolTip(t("app_title"))
     menu = QMenu()
-    act_settings = QAction(t("tray_settings"))
-    act_settings.triggered.connect(settings.open)
-    act_hud = QAction(t("tray_hud"))
-    act_hud.triggered.connect(hud.toggle_visible)
-    act_quit = QAction(t("tray_quit"))
-    act_quit.triggered.connect(app.quit)
-    act_abort = QAction(t("tray_abort"))
-    act_abort.triggered.connect(cursorfx.abort_all)
-    menu.addAction(act_settings)
-    menu.addAction(act_hud)
-    menu.addAction(act_abort)
-    menu.addSeparator()
-    menu.addAction(act_quit)
+
+    # 音乐：播放列表 = 音乐目录 + 导入的歌；游戏配乐是从游戏里提取到 assets/music 的
+    from .audio import MusicDirector, MusicPlayer
+    from .audio.director import GAME_TRACKS
+    from .ui.panels.musicpanel import MusicPanel
+    from ._paths import music_asset_dirs, user_music_dir
+
+    def _save_music_state():
+        params["music_mode"] = player.mode
+        params["music_volume"] = player.volume
+        params["mute_all"] = player.muted
+        params["music_tracks"] = [str(tr.path) for tr in player.tracks]
+        params["music_hidden"] = player.hidden
+        params["music_sources"] = player.sources
+        cur = player.current()
+        if cur is not None:
+            params["music_last_track"] = str(cur.path)
+            params["music_last_ms"] = 0 if player.is_special_active else player.position()
+        _save_params(params)
+
+    player = MusicPlayer(params, on_change=_save_music_state, theme_dirs=music_asset_dirs())
+    _extract_scene_music_later(GAME_TRACKS)
+    saved_tracks = params.get("music_tracks")
+    if isinstance(saved_tracks, list):
+        player.add_paths([p for p in saved_tracks if Path(p).is_file()], record=False)
+    player.add_paths([user_music_dir()])
+    player.restore_state(params.get("music_last_track"), int(params.get("music_last_ms", 0) or 0))
+    director = MusicDirector(player, params)
+    pet.env_listeners.append(
+        lambda kind, on: kind == "zerog" and director.on_zerog(on))
+    music = MusicPanel(player, _write_state)
+    pet._open_music_cb = music.open
+    pet._music_player = player
+    app._music = (player, director, music)
+    QTimer.singleShot(300, director.play_intro)
+
+    def _build_tray_menu():
+        tray.setToolTip(t("app_title"))
+        menu.clear()
+        menu.addAction(t("tray_settings"), settings.open)
+        menu.addAction(t("tray_music"), music.open)
+        menu.addAction(t("tray_hud"), hud.toggle_visible)
+        menu.addAction(t("refresh_top"), pet.refresh_top)
+        menu.addAction(t("tray_abort"), cursorfx.abort_all)
+        menu.addSeparator()
+        other = "en" if i18n.LANG == "zh" else "zh"
+        menu.addAction(i18n.lang_name(other), lambda: _set_lang(other))
+        menu.addSeparator()
+        menu.addAction(t("tray_quit"), app.quit)
+
+    def _set_lang(lang):
+        if lang == i18n.LANG:
+            return
+        i18n.set_lang(lang)
+        params["lang"] = lang
+        tab.rebuild_ui()
+        hud.rebuild_rows()
+        settings._rebuild()
+        music._rebuild()
+        _build_tray_menu()
+        from .skins.folder import ensure_folder, write_report
+        ensure_folder()
+        write_report()
+        _write_state()
+
+    pet._set_lang_cb = _set_lang
+    _build_tray_menu()
     tray.setContextMenu(menu)
     tray.show()
     tray.showMessage(t("app_title"), t("tray_started"),
                      QSystemTrayIcon.MessageIcon.Information, 4000)
 
-    si.on_secondary_attempt = lambda: tray.showMessage(     # 后启实例触发提示
+    si.on_secondary_attempt = lambda: tray.showMessage(
         t("app_title"), t("already_running"),
         QSystemTrayIcon.MessageIcon.Information, 4000)
 
@@ -208,19 +305,21 @@ def main():
         else:
             cursorfx.abort_all()
     hotkey.triggered.connect(_on_hotkey)
-    app._hotkey = hotkey                          # 保持引用
+    app._hotkey = hotkey
 
     autosave = QTimer()
     autosave.timeout.connect(_write_state)
     autosave.start(AUTOSAVE_MS)
-    app._autosave = autosave                      # 保持引用
+    app._autosave = autosave
 
     from .platform.envwatch import EnvironmentWatcher
-    envwatch = EnvironmentWatcher([pet, tab, hud, settings], pet)
+    envwatch = EnvironmentWatcher([pet, tab, hud, settings, music], pet)
     envwatch.start()
-    app._envwatch = envwatch                       # 保持引用
+    pet._refresh_top_cb = envwatch.force_top
+    app._envwatch = envwatch
 
     def _cleanup():
+        pet.shutdown()
         app.removeNativeEventFilter(hotkey)   # 关停期需先摘 filter，防虚方法 dispatch 崩溃
         cursorfx.abort_all()
         try:

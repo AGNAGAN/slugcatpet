@@ -1,4 +1,4 @@
-"""环境守望：他人全屏让位 + 工作区/任务栏适应 + 置顶保持，单定时器 ≤2s 轮询。"""
+"""环境守望：别的程序全屏时收起或沉底 + 工作区/任务栏适应 + 置顶保持，单定时器 ≤2s 轮询。"""
 from __future__ import annotations
 import ctypes
 from ctypes import wintypes
@@ -6,12 +6,17 @@ from ctypes import wintypes
 from PySide6.QtCore import QObject, QTimer
 from PySide6.QtGui import QGuiApplication
 
-from ..platform.topmost import TopmostKeeper
+from .topmost import TopmostKeeper
 
 _TRUSTED_FULLSCREEN_STATES = {3, 4}   # D3D独占/演示态（SHQueryUserNotificationState）
-_SHELL_CLASSES = {"Progman", "WorkerW", "Shell_TrayWnd", "Button"}
-POLL_MS = 1000              # ≤2000ms
-_RECT_TOL = 2              # 矩形匹配容差(px)
+_DESKTOP_CLASSES = {"Progman", "WorkerW"}
+# 任务栏、开始菜单、搜索、多任务视图等浮层：拿到前台时保持原状态
+_HOLD_CLASSES = {"Shell_TrayWnd", "Shell_SecondaryTrayWnd", "Button", "Windows.UI.Core.CoreWindow",
+                 "XamlExplorerHostIslandWindow", "MultitaskingViewFrame", "ForegroundStaging",
+                 "NotifyIconOverflowWindow", "TopLevelWindowForOverflowXamlIsland"}
+POLL_MS = 1000
+_RECT_TOL = 2              # 矩形匹配容差(物理 px)
+DEBOUNCE_POLLS = 2         # 连续这么多次判断一致才切换
 
 
 def _default_state_provider() -> int:
@@ -43,17 +48,37 @@ def _default_foreground_provider():
         return None
 
 
-class EnvironmentWatcher(QObject):
-    """单定时器轮询全屏与工作区变化。"""
+class _MonitorInfo(ctypes.Structure):
+    _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT),
+                ("rcWork", wintypes.RECT), ("dwFlags", wintypes.DWORD)]
 
+
+def _default_monitor_provider(hwnd: int):
+    try:
+        user32 = ctypes.windll.user32
+        mon = user32.MonitorFromWindow(wintypes.HWND(hwnd), 2)     # MONITOR_DEFAULTTONEAREST
+        mi = _MonitorInfo()
+        mi.cbSize = ctypes.sizeof(mi)
+        if not user32.GetMonitorInfoW(mon, ctypes.byref(mi)):
+            return None
+        r = mi.rcMonitor
+        return r.left, r.top, r.right, r.bottom
+    except Exception:
+        return None
+
+
+class EnvironmentWatcher(QObject):
     def __init__(self, windows, pet, state_provider=None, foreground_provider=None,
-                 interval_ms: int = POLL_MS, parent=None, topmost=None):
+                 interval_ms: int = POLL_MS, parent=None, topmost=None, monitor_provider=None):
         super().__init__(parent)
         self._windows = list(windows)
         self._pet = pet
         self._state_provider = state_provider or _default_state_provider
         self._foreground_provider = foreground_provider or _default_foreground_provider
+        self._monitor_provider = monitor_provider or _default_monitor_provider
         self._fullscreen = False
+        self._mode = "normal"           # normal / hide / sink
+        self._streak = 0
         self._topmost = topmost or TopmostKeeper(self._windows, is_suspended=lambda: self._fullscreen)
         self._vis_snapshot: list[bool] | None = None
         self._area = None
@@ -64,7 +89,6 @@ class EnvironmentWatcher(QObject):
         self._timer.timeout.connect(self._on_poll)
 
     def start(self):
-        """初始化工作区缓存、接信号、启动轮询。"""
         screen = QGuiApplication.primaryScreen()
         if screen is not None:
             self._area = screen.availableGeometry()
@@ -82,47 +106,84 @@ class EnvironmentWatcher(QObject):
     def stop(self):
         self._timer.stop()
         self._topmost.stop()
+        app = QGuiApplication.instance()
+        try:
+            if app is not None:
+                app.primaryScreenChanged.disconnect(self._on_primary_changed)
+            if self._connected_screen is not None:
+                self._connected_screen.availableGeometryChanged.disconnect(self._on_screen_signal)
+        except (RuntimeError, TypeError):
+            pass
+        self._connected_screen = None
 
-    # ── 轮询入口 ──
+    def force_top(self):
+        self._topmost.force_top()
+
     def _on_poll(self):
         self._check_fullscreen()
         self._check_workspace()
-        self._topmost.reassert()
+        if self._mode == "sink":        # 全屏程序常自带置顶，要主动压到它上面
+            self._topmost.force_top()
+        else:
+            self._topmost.reassert()
 
-    # ── 全屏让位 ──
     def _check_fullscreen(self):
-        now_full = self._detect_fullscreen()
-        if now_full and not self._fullscreen:
-            self._enter_fullscreen()
-        elif not now_full and self._fullscreen:
-            self._exit_fullscreen()
-
-    def _detect_fullscreen(self) -> bool:
         try:
-            if self._state_provider() in _TRUSTED_FULLSCREEN_STATES:
-                return True
+            exclusive = self._state_provider() in _TRUSTED_FULLSCREEN_STATES
         except Exception:
-            pass
-        return self._foreground_is_fullscreen()
+            exclusive = False
+        if exclusive:                           # 独占全屏时置顶窗画不出来，只能收起
+            self._streak = 0
+            self._set_mode("hide")
+            return
+        full = self._foreground_fullscreen()
+        if full is None:
+            self._streak = 0
+            return
+        want = getattr(self._pet, "cfg_fullscreen_mode", "hide") if full else "normal"
+        if want == self._mode:
+            self._streak = 0
+            return
+        self._streak += 1
+        if self._streak >= DEBOUNCE_POLLS:
+            self._streak = 0
+            self._set_mode(want)
 
-    def _foreground_is_fullscreen(self) -> bool:
-        """前台窗非自身、非桌面壳且铺满主屏 → 判定他人全屏。"""
+    def _foreground_fullscreen(self):
+        """前台窗盖满桌宠所在的显示器 → True；桌面 → False；自己的窗口或系统浮层 → None（保持）。
+
+        两边都用物理像素比，缩放不是 100% 时也对得上。"""
         fg = self._foreground_provider()
         if fg is None:
+            return None
+        hwnd, (left, top, right, bottom), cls = fg
+        if hwnd in self._own_hwnds() or cls in _HOLD_CLASSES:
+            return None
+        if cls in _DESKTOP_CLASSES:
             return False
-        hwnd, rect, cls = fg
-        if hwnd in self._own_hwnds():          # 排除自身窗（防御性）
-            return False
-        if cls in _SHELL_CLASSES:              # 排除桌面/任务栏
-            return False
-        screen = QGuiApplication.primaryScreen()
-        if screen is None:
-            return False
-        g = screen.geometry()
-        left, top, right, bottom = rect
-        return (abs(left - g.x()) <= _RECT_TOL and abs(top - g.y()) <= _RECT_TOL
-                and abs((right - left) - g.width()) <= _RECT_TOL
-                and abs((bottom - top) - g.height()) <= _RECT_TOL)
+        try:
+            mon = self._monitor_provider(int(self._pet.winId()))
+        except Exception:
+            mon = None
+        if mon is None:
+            return None
+        ml, mt, mr, mb = mon
+        t = _RECT_TOL
+        return left <= ml + t and top <= mt + t and right >= mr - t and bottom >= mb - t
+
+    def _set_mode(self, mode):
+        if mode == self._mode:
+            return
+        if self._mode == "hide":
+            self._exit_fullscreen()
+        elif self._mode == "sink":
+            self._pet.set_floor_sink(False)
+        self._mode = mode
+        if mode == "hide":
+            self._enter_fullscreen()
+        elif mode == "sink":
+            self._pet.set_floor_sink(True)
+            self._topmost.force_top()
 
     def _own_hwnds(self) -> set[int]:
         hwnds = set()
@@ -134,7 +195,6 @@ class EnvironmentWatcher(QObject):
         return hwnds
 
     def _enter_fullscreen(self):
-        """进入全屏：隐藏窗口并冻结 tick。"""
         self._fullscreen = True
         self._vis_snapshot = [self._is_visible(w) for w in self._windows]
         for w in self._windows:
@@ -148,7 +208,6 @@ class EnvironmentWatcher(QObject):
             pass
 
     def _exit_fullscreen(self):
-        """解除全屏：恢复窗口可见态并解冻 tick。"""
         self._fullscreen = False
         try:
             self._pet.resume_tick()
@@ -171,7 +230,6 @@ class EnvironmentWatcher(QObject):
         except Exception:
             return True
 
-    # ── 工作区/任务栏适应 ──
     def _check_workspace(self):
         screen = QGuiApplication.primaryScreen()
         if screen is None:
@@ -188,7 +246,6 @@ class EnvironmentWatcher(QObject):
             pass
 
     def _connect_screen(self, screen):
-        """接主屏信号，换屏时重接。"""
         if self._connected_screen is not None:
             try:
                 self._connected_screen.availableGeometryChanged.disconnect(self._on_screen_signal)

@@ -4,11 +4,10 @@ import math
 import re
 
 from ..core.units import K_VEL, K_IMP, damp60, clampf, inv_lerp
-from ..core.gfxmath import (_hsl2rgb, _ang_from_up, _rot, _lerp, _catmull,
-                           SHOULDER_OFF_X, SHOULDER_OFF_Y, ARM_DIV, ARM_MAX,
-                           TAIL_RAD, TONGUE_WIDTH_SCALE)
+from ..core.vecmath import _ang_from_up, _rot
+from ..core.gfxmath import (_hsl2rgb, _lerp,
+                           SHOULDER_OFF_X, SHOULDER_OFF_Y, TAIL_RAD)
 
-# head 骨参数
 HEAD_AIR = damp60(0.99)
 HEAD_CONNECT_RAD = 3.0
 HEAD_ELASTIC = 0.2 * K_IMP
@@ -28,18 +27,14 @@ HUNT_SPEED = 7.0 * K_VEL
 HAND_QUICKNESS = 0.5
 SHOULDER_RAD = 20.0
 
-# Crawl 前进手
 CRAWL_HUNT_SPEED = 12.0
 CRAWL_QUICKNESS = 0.7
 
-# arm_aim 缺字段回退
 _NO_ARM_AIM = {"l": None, "r": None}
 
 SLEEP_CURL_RATE = 0.01 * K_VEL
-GILLS_FLAT_RATE = 0.08 * K_VEL
 BLINK_MIN, BLINK_MAX = 2, 1800   # 自驱 blink 间隔（tick）
 
-# 寒冷发白
 _COLD_ICY = (0.8, 0.8, 1.0)
 
 
@@ -51,21 +46,41 @@ def _lerp3(a, b, t):
 
 
 def _cold_blend(old01, hyp):
-    """冷度染色，上限不发紫。"""
     b = _lerp3(old01, _COLD_ICY, hyp)
     return _lerp3(old01, b, 0.92)
 
 LOOK_LEAN_VCAP = 0.10       # 竖直 body-lean 上限
+FACE_SIDE_DEADZONE = 0.18   # 朝向信号在死区内保持上一 tick
+FACE_SIDE_HYST = 0.30       # 反向信号超过此值才翻面
 
 
+def tail_profile(tail: dict):
+    """DMS 尾巴参数 → 每段视觉半径（段数即 length）与根宽。"""
+    if not any(tail.get(k) for k in ("length", "wideness", "roundness")):
+        return tuple(TAIL_RAD), 6.0
+    n = int(round(clampf(tail.get("length") or 4.0, 2.0, 15.0)))
+    w = tail.get("wideness") or 1.0
+    r = tail.get("roundness") or 0.0
+    rads = tuple((6.0 + (1.0 - 6.0) * ((i + 1.0) / n) ** w) * (1.0 + math.sin(i / n * math.pi) * r)
+                 for i in range(n))
+    return rads, rads[0]
 
-from ..rendering.graphics_draw import GraphicsDrawMixin
-from ..behavior import tuning
-from ..cats import default_def
+
+from .graphics_draw import GraphicsDrawMixin
+from .. import tuning
+from ..appearance import base_colors
+from ..characters import default_def
+
+
+def _latch(s, sig):
+    if sig > FACE_SIDE_DEADZONE and (s > 0.0 or sig > FACE_SIDE_HYST):
+        return 1.0
+    if sig < -FACE_SIDE_DEADZONE and (s < 0.0 or sig < -FACE_SIDE_HYST):
+        return -1.0
+    return s
 
 
 class GenericBone:
-    """质点骨。"""
     __slots__ = ("x", "y", "vx", "vy", "lx", "ly", "pinned")
 
     def __init__(self, x, y):
@@ -84,7 +99,6 @@ class GenericBone:
     def connect_to_point(self, px, py, host_vx, host_vy,
                          connect_rad=HEAD_CONNECT_RAD, elastic=HEAD_ELASTIC,
                          adapt_retain=HEAD_ADAPT_RETAIN, exaggerate=HEAD_EXAGGERATE):
-        # 弹性拉向点 + 阻尼拴绳
         dx, dy = px - self.x, py - self.y
         if elastic > 0:
             self.vx += dx * elastic
@@ -109,7 +123,6 @@ class HeadBone(GenericBone):
 
 
 class Hand:
-    """手：Retracted / HuntAbsolutePosition 两态机。"""
     __slots__ = ("x", "y", "lx", "ly", "vx", "vy", "j", "active",
                  "retract_counter", "mode", "reached")
 
@@ -188,23 +201,20 @@ class Hand:
 
 
 class SlugcatGraphics(GraphicsDrawMixin):
-    """sprites 由代码算位姿/帧/色，体色眼色来自 CatDef。"""
 
-    def __init__(self, body, layout=None, atlas=None, cat=None):
+    def __init__(self, body, layout=None, atlas=None, cat=None, look=None):
         self.body = body
-        self.L = layout
         self.atlas = atlas
         self.cat = cat or default_def()
+        self.look = look
         self.BODY = tuple(self.cat.body_color)
         self.EYE = tuple(self.cat.eye_color)
 
-        # petunit 构建后注入：tail_segs/tongue
         self.tail_segs = None
-        self.tongue = None
-        self.gills = None            # 仅 caps.gills 猫非空
-
-        self.tail_smooth = True
-        self.tail_smooth_subdiv = 4
+        # 绘制层：槽位 → [fn(gfx, painter, atlas, ts)]；能力用 layers，配件用 acc_layers（换配件时重建）
+        self.layers = {slot: [] for slot in self.LAYER_SLOTS}
+        self.acc_layers = {slot: [] for slot in self.LAYER_SLOTS}
+        self.face_pose = ("", 0.0, 0.0, 0.0)
 
         c0, c1 = body.chunk0, body.chunk1
         self.head = HeadBone(c0.x, c0.y - HEAD_PRELEAD)
@@ -222,12 +232,12 @@ class SlugcatGraphics(GraphicsDrawMixin):
         self.look_dir = (0.0, 0.0)
         self.sleeping = False
         self.sleep_curl = 0.0
-        self.gills_flat = 0.0          # 1=鳃锚退回世界水平（趴/睡）
         self.dead = False
-        self.stunned = False           # 晕脸 + 头帧0耷拉
+        self.stunned = False
         self.blink = 0
         self._blink_rng = _Rng(12345)
         self._shiver_rng = _Rng(0xC01D)        # 发抖用，独立于 blink
+        self._asc_rng = _Rng(0xA5C)            # 飞升彩脸，每 tick 抽一次
         self.anim_frame = 0
         self.disbalance = 0.0
         self.balance_counter = 0.0
@@ -236,6 +246,9 @@ class SlugcatGraphics(GraphicsDrawMixin):
         self.head_frame_override = None
         self.face_angle = 0.0
         self.face_scale_x = 1.0
+        self.head_scale_x = 1.0
+        self._face_side = 1.0
+        self._head_side = 1.0
         self.face_offset = (0.0, 2.0)
 
         fam = self.cat.frames
@@ -246,7 +259,6 @@ class SlugcatGraphics(GraphicsDrawMixin):
                                if "face_open" in fam else [])
         self._face_mirror_frames = (self._family_frames(*fam["face_mirror"])
                                     if "face_mirror" in fam else [])
-        self._face_scar_frame = fam["face_scar"][1] if "face_scar" in fam else None
         self._leg_walk_frames = self._family_frames(*fam["legs_walk"])
         self._leg_crawl_frames = self._family_frames(*fam["legs_crawl"])
         air_key, air_frame = fam["legs_air"]
@@ -258,14 +270,37 @@ class SlugcatGraphics(GraphicsDrawMixin):
         self.ascension = None
         self._asc_face_color = None
 
-        self._tongue_rope = None
-        self._tongue_rope_v = None
-
-        self._rope_damp = damp60(0.98)
-        self._rope_pull_vel = 0.2
-        self._rope_pull_pos = 0.4
-
         self._legs_scale_x = 1.0
+        self._gcol = {}                  # 皮肤组色（已叠寒冷）
+        self.apply_skin()
+
+    def apply_skin(self, atlas=None):
+        if atlas is not None:
+            self.atlas = atlas
+        a = self.atlas
+        self._body0, self.EYE, self._skin_colors = base_colors(
+            self.look, self.cat, dict(getattr(a, "colors", {}) or {}))
+        self._gcol = {}
+        self._tail_rad, self._tail_root = tail_profile(getattr(a, "tail", {}) or {})
+        has = getattr(a, "has_group", None)
+        self._tail_tex = bool(has and has("TAIL"))
+        self._tail_asym = bool(getattr(a, "tail_asym", False))
+
+    def _color(self, grp, default):
+        return self._gcol.get(grp, default)
+
+    def _update_asc_color(self):
+        """飞升时脸随机变色；色相、饱和、亮度量化存桶，tint 缓存有界。"""
+        if self.ascension is None or self.dead:
+            self._asc_face_color = None
+            return
+        r = self._asc_rng
+        rh = (min(int(r._next() / 0x7FFFFFFF * 6.0), 5) + 0.5) / 6.0
+        rs = (min(int(r._next() / 0x7FFFFFFF * 2.0), 1) + 0.5) / 2.0
+        rl = (min(int(r._next() / 0x7FFFFFFF * 3.0), 2) + 0.5) / 3.0
+        cr, cg, cb = _hsl2rgb(rh, rs, rl)
+        self._asc_face_color = (int(cr * 255), int(cg * 255), int(cb * 255))
+
     @property
     def facing(self):
         return self.body.facing
@@ -279,22 +314,32 @@ class SlugcatGraphics(GraphicsDrawMixin):
         return b.is_moving() or b.move_dir != 0
 
     def body_axis(self):
-        """体轴角。"""
         return _ang_from_up(self.draw0[0] - self.draw1[0], self.draw0[1] - self.draw1[1])
 
     def update(self):
         """每帧推进，在 body.step() 之后调用。"""
         b = self.body
         c0, c1 = b.chunk0, b.chunk1
+        self._update_asc_color()
 
         if b.cold > 0.0:
-            base = self.cat.body_color
+            base = self._body0
             base01 = (base[0] / 255.0, base[1] / 255.0, base[2] / 255.0)
-            cq = round(b.cold * 12) / 12   # 量化冷度，压缩 tint 缓存长尾
+            cq = round(b.cold * 12) / 12
             r, g, bl = _cold_blend(base01, cq)
             self.BODY = (int(r * 255), int(g * 255), int(bl * 255))
         else:
-            self.BODY = tuple(self.cat.body_color)
+            self.BODY = self._body0
+        if self._skin_colors:
+            if b.cold > 0.0:
+                cq = round(b.cold * 12) / 12
+                gc = {}
+                for grp, c in self._skin_colors.items():
+                    r, g, bl = _cold_blend((c[0] / 255.0, c[1] / 255.0, c[2] / 255.0), cq)
+                    gc[grp] = (int(r * 255), int(g * 255), int(bl * 255))
+                self._gcol = gc
+            else:
+                self._gcol = self._skin_colors
 
         self._last_draw0, self._last_draw1 = list(self.draw0), list(self.draw1)
         self.draw0 = [c0.x, c0.y]
@@ -372,11 +417,6 @@ class SlugcatGraphics(GraphicsDrawMixin):
         elif self.sleep_curl > target:
             self.sleep_curl = max(target, self.sleep_curl - SLEEP_CURL_RATE * 1.5)
 
-        gf = 1.0 if (self.sleeping or b.bodyMode == "Crawl") else 0.0
-        if self.gills_flat < gf:
-            self.gills_flat = min(gf, self.gills_flat + GILLS_FLAT_RATE)
-        elif self.gills_flat > gf:
-            self.gills_flat = max(gf, self.gills_flat - GILLS_FLAT_RATE)
         self._apply_sleep_curl_pose()
 
         self._update_face_pose()
@@ -384,7 +424,6 @@ class SlugcatGraphics(GraphicsDrawMixin):
         self._update_hands()
 
     def _apply_drawpos_offsets(self):
-        """每 bodyMode 的位姿偏移。"""
         b = self.body
         c0, c1 = b.chunk0, b.chunk1
         flip = b.facing
@@ -438,7 +477,7 @@ class SlugcatGraphics(GraphicsDrawMixin):
                 self.draw1[0] += px * sc * 5.0
                 self.draw1[1] += py * sc * 5.0
             if b.lungs_exhausted:
-                self.head.vy -= sc * 1.0                  # y↓ 取反
+                self.head.vy -= sc * 1.0
                 self.draw0[1] -= sc * 2.5
 
     def _update_blink(self):
@@ -454,7 +493,6 @@ class SlugcatGraphics(GraphicsDrawMixin):
             self.blink = max(self.blink, 1)
 
     def _apply_sleep_curl_pose(self):
-        """睡眠蜷曲：chunks / head 向体中心收拢。"""
         s = self.sleep_curl
         if s <= 0.0:
             return
@@ -507,7 +545,6 @@ class SlugcatGraphics(GraphicsDrawMixin):
         self.look_dir = (lx / d, ly / d)
 
     def _update_face_pose(self):
-        """计算 head_angle, face_angle, face_scale_x, face_offset。"""
         b = self.body
         body_x, body_y = self.draw0
         hip_x, hip_y = self.draw1
@@ -529,7 +566,7 @@ class SlugcatGraphics(GraphicsDrawMixin):
             self.head_frame_override = None
             self.head_angle = head_ang
             self.face_angle = head_ang
-            self.face_scale_x = -1.0 if head_ang < 0 else 1.0
+            self.face_scale_x = self._face_side
             look_x = look_y = 0.0
         elif b.bodyMode == "Crawl":
             self.head_frame_override = 7
@@ -541,12 +578,12 @@ class SlugcatGraphics(GraphicsDrawMixin):
             self.head_frame_override = None
             self.head_angle = head_ang
             self.face_angle = head_ang
-            self.face_scale_x = -1.0 if head_ang < 0.0 else 1.0
+            self.face_scale_x = self._latch_face(head_ang)
         elif b.bodyMode == "Swimming":
             self.head_frame_override = None
             self.head_angle = head_ang
             self.face_angle = head_ang
-            self.face_scale_x = -1.0 if head_ang < 0.0 else 1.0
+            self.face_scale_x = self._latch_face(head_ang)
         elif b.bodyMode == "Stand" and (b.is_moving() or b.move_dir != 0):
             self.head_frame_override = 6
             self.head_angle = head_ang
@@ -557,15 +594,17 @@ class SlugcatGraphics(GraphicsDrawMixin):
             self.head_frame_override = None
             self.head_angle = head_ang
             self.face_angle = 0.0
-            self.face_scale_x = (1.0 if look_x >= 0 else -1.0) if abs(look_x) >= 0.1 else (-1.0 if head_ang < 0 else 1.0)
+            self.face_scale_x = self._latch_face(look_x if abs(look_x) >= FACE_SIDE_DEADZONE
+                                                 else head_ang)
         self.face_offset = (look_x, look_y + 2.0)
-        if b.animation == "Flip":
-            r = math.radians(self.head_angle)
-            self.face_offset = (self.face_offset[0] + math.sin(r) * 4.0,
-                                self.face_offset[1] - math.cos(r) * 4.0)
+        self._head_side = _latch(self._head_side, head_ang)
+        self.head_scale_x = self._head_side
+
+    def _latch_face(self, sig):
+        self._face_side = _latch(self._face_side, sig)
+        return self._face_side
 
     def _update_legs(self):
-        """腿部弹性骨推进。"""
         b = self.body
         c1 = b.chunk1
         self.legs.update(LEGS_AIR)
@@ -652,7 +691,6 @@ class SlugcatGraphics(GraphicsDrawMixin):
         self.legs_dir[1] /= d
 
     def _update_hands(self):
-        """双手 IK：确定每手 target 后交给 Hand.update()。"""
         b = self.body
         spine_ang = self.body_axis()
         crawl_ground_y = getattr(b, "visual_floor_y", b.H) - 4.0
@@ -705,7 +743,6 @@ class SlugcatGraphics(GraphicsDrawMixin):
                     speed = 3.0
                     quickness = 0.3
                 elif b.bodyMode == "Swimming":
-                    # 潜水=扇形划桨（相对目标）；浮水=贴水面线划圆（绝对目标）
                     c0, c1 = b.chunk0, b.chunk1
                     sw = b.swim_cycle
                     paddle_t = sw / 3.0 if sw < 3.0 else (1.0 - (sw - 3.0))
@@ -717,7 +754,7 @@ class SlugcatGraphics(GraphicsDrawMixin):
                         if sw < 3.0:
                             rhx *= 0.5
                         spine_phys = _ang_from_up(c0.x - c1.x, c0.y - c1.y)
-                        ox, oy = _rot(rhx, -rhy, spine_phys)  # y↓ 取反
+                        ox, oy = _rot(rhx, -rhy, spine_phys)
                         aim = (c0.x + ox, c0.y + oy)
                     else:
                         ws = getattr(b, "water_surface", None)
@@ -726,14 +763,13 @@ class SlugcatGraphics(GraphicsDrawMixin):
                         ahy = (ws.level_at(ahx) + 7.0) if ws is not None else (c0.y + 7.0)
                         sang = math.radians(360.0 * paddle_t * (1.0 if ix == 0 else -ix))
                         srad = sh_local_sign * (5.0 if ix == 0 else 10.0)
-                        aim = (ahx + math.sin(sang) * srad, ahy - math.cos(sang) * srad)  # y↓ 取反
+                        aim = (ahx + math.sin(sang) * srad, ahy - math.cos(sang) * srad)
                     speed = 5.0
                     quickness = 0.5
 
             hand.update(sx, sy, aim, speed=speed, quickness=quickness)
 
     def _beam_hand_target(self, j, anim, axis):
-        """爬杆 / 站顶的手目标。"""
         b = self.body
         c0, c1 = b.chunk0, b.chunk1
         if anim == "ClimbOnBeam":
@@ -826,4 +862,4 @@ class _Rng:
         return lo + self._next() % (hi - lo)
 
     def random(self):
-        return self._next() / 2147483647.0   # [0,1]
+        return self._next() / 2147483647.0

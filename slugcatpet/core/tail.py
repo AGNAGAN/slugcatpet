@@ -1,4 +1,4 @@
-"""slugcat 尾巴：4 段显式速度质点，绳套约束+扇出力，坐标系 y↓。"""
+"""slugcat 尾巴：N 段（默认 4）显式速度质点，绳套约束+扇出力，坐标系 y↓。"""
 from __future__ import annotations
 import math
 
@@ -6,7 +6,6 @@ from .units import K_IMP, damp60, clampf
 
 
 class TailSeg:
-    """尾段（显式速度质点）。"""
     __slots__ = ("x", "y", "lx", "ly", "vx", "vy", "rad", "conn", "sfric", "affect", "stretched")
 
     def __init__(self, x, y, rad, conn, sfric, affect):
@@ -25,16 +24,15 @@ class TailSeg:
 
 
 class Tail:
-    """slugcat 尾巴：4 段 + 每帧驱动。"""
     RAD = (6.0, 4.0, 2.5, 1.0)
-    CONN = (4.0, 7.0, 7.0, 7.0)
     SFRIC = 0.85
-    AFFECT = (1.0, 0.5, 0.5, 0.5)
 
-    def __init__(self, root_x: float, root_y: float):
-        self.segs = [TailSeg(root_x, root_y + sum(Tail.CONN[:i + 1]),
-                             Tail.RAD[i], Tail.CONN[i], Tail.SFRIC, Tail.AFFECT[i])
-                     for i in range(4)]
+    def __init__(self, root_x: float, root_y: float, rads=None):
+        rads = tuple(rads) if rads else Tail.RAD
+        self.conn = tuple(4.0 if i == 0 else 7.0 for i in range(len(rads)))
+        self.segs = [TailSeg(root_x, root_y + sum(self.conn[:i + 1]),
+                             r, self.conn[i], Tail.SFRIC, 1.0 if i == 0 else 0.5)
+                     for i, r in enumerate(rads)]
         self.floor_y = None
         # 可调旋钮：存每 tick 原始量，施加时按需 ×K_IMP
         self.fan = 28.0                             # 扇出力，逐段 ÷2
@@ -43,20 +41,25 @@ class Tail:
         self.damp_taut, self.damp_loose = 0.75, 0.95
 
     def snap_to(self, root_x: float, root_y: float) -> None:
-        """整尾吸附到根部初始直线（重置）。"""
         for i, s in enumerate(self.segs):
             s.x = s.lx = root_x
-            s.y = s.ly = root_y + sum(Tail.CONN[:i + 1])
+            s.y = s.ly = root_y + sum(self.conn[:i + 1])
             s.vx = s.vy = 0.0
             s.stretched = 1.0
 
+    def adopt(self, old: "Tail") -> None:
+        self.floor_y = old.floor_y
+        for i, s in enumerate(self.segs):
+            o = old.segs[min(i, len(old.segs) - 1)]
+            s.x, s.y, s.lx, s.ly = o.x, o.y, o.lx, o.ly
+            s.vx, s.vy, s.stretched = o.vx, o.vy, o.stretched
+
     def step(self, root_x, root_y, hip_x, hip_y, head_x, head_y,
              loose_base: float, gravity_norm: float = 1.0) -> None:
-        """推进一帧。"""
         segs = self.segs
         loose = loose_base
-        rx, ry = head_x, head_y            # ref，初值=head
-        px, py = hip_x, hip_y             # prev2，初值=hip
+        rx, ry = head_x, head_y
+        px, py = hip_x, hip_y
         F = self.fan * K_IMP
         # 约束写 pos ×1，写 vel ×K_IMP
         KI = K_IMP
@@ -71,10 +74,10 @@ class Tail:
                     ux, uy = (root_x - s.x) / d, (root_y - s.y) / d
                     over = s.conn - d
                     cx, cy = ux * over, uy * over
-                    s.x -= cx; s.y -= cy                       # ×1
-                    s.vx -= cx * KI; s.vy -= cy * KI           # ×K_IMP
+                    s.x -= cx; s.y -= cy
+                    s.vx -= cx * KI; s.vy -= cy * KI
                     s.stretched = clampf((s.conn / (d * 0.5) + 2.0) / 3.0, 0.2, 1.0)
-            else:                                               # 段间按 affect 分给上一段
+            else:
                 prev = segs[l - 1]
                 d = math.hypot(prev.x - s.x, prev.y - s.y)
                 if d > s.conn and d > 1e-9:
@@ -83,10 +86,10 @@ class Tail:
                     a = s.affect
                     cs_x, cs_y = ux * over * (1.0 - a), uy * over * (1.0 - a)
                     cp_x, cp_y = ux * over * a, uy * over * a
-                    s.x -= cs_x; s.y -= cs_y                   # ×1
-                    s.vx -= cs_x * KI; s.vy -= cs_y * KI      # ×K_IMP
-                    prev.x += cp_x; prev.y += cp_y             # 回拉上一段 ×1
-                    prev.vx += cp_x * KI; prev.vy += cp_y * KI  # ×K_IMP
+                    s.x -= cs_x; s.y -= cs_y
+                    s.vx -= cs_x * KI; s.vy -= cs_y * KI
+                    prev.x += cp_x; prev.y += cp_y
+                    prev.vx += cp_x * KI; prev.vy += cp_y * KI
                     s.stretched = clampf((s.conn / (d * 0.5) + 2.0) / 3.0, 0.2, 1.0)
             # 地面碰撞，约束后扇出前
             if self.floor_y is not None:
@@ -100,15 +103,15 @@ class Tail:
             s.vx *= damp
             s.vy *= damp
             g = (self.grav_taut + (self.grav_loose - self.grav_taut) * loose) * gravity_norm
-            s.vy += g * K_IMP                              # y↓
+            s.vy += g * K_IMP
             loose = (loose * 10.0 + 1.0) / 11.0           # 尾尖比尾根更飘
-            ld = self.leash * (l + 1)                      # 长度量，不换算
+            ld = self.leash * (l + 1)
             dxh, dyh = s.x - hip_x, s.y - hip_y
             dh = math.hypot(dxh, dyh)
             if dh > ld and dh > 1e-9:
                 s.x = hip_x + dxh / dh * ld
                 s.y = hip_y + dyh / dh * ld
-            fdx, fdy = s.x - rx, s.y - ry                 # ref→seg 方向
+            fdx, fdy = s.x - rx, s.y - ry
             fd = math.hypot(fdx, fdy)
             if fd < 0.5:                                  # 防爆下限，勿改
                 fd = 0.5
@@ -116,5 +119,5 @@ class Tail:
             s.vx += fdx * inv
             s.vy += fdy * inv
             F *= 0.5
-            rx, ry = px, py                               # ref ← prev2
-            px, py = s.x, s.y                             # prev2 ← 本段
+            rx, ry = px, py
+            px, py = s.x, s.y

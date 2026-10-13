@@ -58,7 +58,7 @@ class GrabController:
         self.point = None
         self.chunk = None
         self.frames = 0
-        self._last = None          # 上帧光标位置
+        self._last = None
 
     @property
     def active(self):
@@ -84,6 +84,7 @@ class GrabController:
             vx = cx - self._last[0]
             vy = cy - self._last[1]
             sp = math.hypot(vx, vy)
+            self.body.drag_speed = sp          # 撞击伤害按真实速度算
             if sp > TETHER_VEL_CAP:
                 k = TETHER_VEL_CAP / sp
                 vx *= k
@@ -94,7 +95,6 @@ class GrabController:
         self._last = (cx, cy)
 
     def tick(self):
-        """每帧推进抓住计时（按住期间）。"""
         if self.chunk is not None:
             self.frames += 1
 
@@ -109,6 +109,7 @@ class GrabController:
             c.vx *= k
             c.vy *= k
         c.pinned = False
+        self.body.drag_speed = 0.0
         self.chunk = None
         self.point = None
         self._last = None
@@ -119,13 +120,13 @@ class GrabController:
         if self.chunk is not None:
             self.chunk.pinned = False
             self.chunk.vx = self.chunk.vy = 0.0
+        self.body.drag_speed = 0.0
         self.chunk = None
         self.point = None
         self._last = None
         self.frames = 0
 
 
-# Win32 动态穿透
 if _IS_WIN:
     import ctypes
     from ctypes import wintypes

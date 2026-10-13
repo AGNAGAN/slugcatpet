@@ -5,7 +5,6 @@ import math
 
 
 def ctrl_zerog_update(body) -> None:
-    """每零重力 ctrl tick：want 缓冲 → 意图划水/贴墙蹬 → 工匠钩子。"""
     inp = body._ctrl_input
     inp0, inp1 = inp[0], inp[1]
     # 跳跃预输入缓冲同主干；蹬墙窗口用 body.canJump（勿混 _ctrl_can_jump）
@@ -23,13 +22,12 @@ def ctrl_zerog_update(body) -> None:
         d = math.hypot(ix, iy)
         ux, uy = ix / d, iy / d
         body.zerog_swim(ux, uy, on_wall)
-        if on_wall and body._ctrl_want_jump > 0:    # 贴墙跳，消费 want
+        if on_wall and body._ctrl_want_jump > 0:
             body.request_zerog_kick(ux, uy)
             body._ctrl_want_jump = 0
-    elif on_wall and body._ctrl_want_jump > 0:      # 无方向蹬墙，退化为纯背离法向
+    elif on_wall and body._ctrl_want_jump > 0:
         body.request_zerog_kick()
         body._ctrl_want_jump = 0
-    # 工匠爆跳钩子
     pyro = getattr(body, "_ctrl_pyro", None)
     if pyro is not None:
         pyro.update(body, inp0, inp1, body._ctrl_want_jump, body.canJump)

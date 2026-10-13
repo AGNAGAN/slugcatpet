@@ -20,7 +20,6 @@ def _default_path() -> Path:
 
 
 def _to_qt_key(name: str) -> int | None:
-    """键名 → Qt Key 整数值；未知键名 None。"""
     key = getattr(Qt.Key, "Key_" + name, None)
     return None if key is None else int(key)
 
@@ -48,7 +47,6 @@ def load_key_names(path=None) -> dict[str, str]:
 
 
 def load_keymap(path=None) -> dict[str, int]:
-    """动作 → Qt Key 整数值表（HUD current_input 用）。"""
     names = load_key_names(path)
     return {action: _to_qt_key(name) for action, name in names.items()}
 

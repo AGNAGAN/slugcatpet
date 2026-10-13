@@ -1,1 +1,1 @@
-"""World objects and item interaction: pole/hpole/fruit/stone/lamp/slimemold/snow + items/effects/states."""
+"""环境：雪、气泡、爆炸与烟火特效。"""

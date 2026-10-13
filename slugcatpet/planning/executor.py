@@ -1,8 +1,8 @@
-"""计划执行器：驱动候选控制器；续跑优先（同方案仍最优则不打断），进展判失败，2+2 放弃进冷却。"""
+"""计划执行器：驱动候选控制器，续跑优先，进展判失败，2+2 放弃进冷却。"""
 from __future__ import annotations
 
-from ..behavior import tuning
-from .ability import DONE, GIVEUP, HOLD, HOLDING, MODE_STAY, MODE_TOUCH, RUNNING
+from .. import tuning
+from .reach import DONE, GIVEUP, HOLD, HOLDING, MODE_STAY, MODE_TOUCH, RUNNING
 
 
 class PlanExecutor:
@@ -20,8 +20,8 @@ class PlanExecutor:
         self._controller = None
         self._step_ticks = 0
         self._step_budget = 0.0
-        self._start_best = 0.0     # step 开始时的最优剩余耗时
-        self._replans = 0          # 世界性重规划累计
+        self._start_best = 0.0
+        self._replans = 0
         self._snap_wv = None
         self._snap_zerog = None
         self._given_up = False
@@ -35,7 +35,6 @@ class PlanExecutor:
             self._abort_controller()
             self._given_up = True
             return GIVEUP
-        # 路径几何变化才重规划，驻留中免检
         if (self._controller is not None and not self._holding
                 and self._structural_changed()):
             self._replans += 1
@@ -47,7 +46,6 @@ class PlanExecutor:
 
         status = self._controller.update()
         self._step_ticks += 1
-        # stay 语境：DONE 与 HOLD 同等对待为已到位
         if status == DONE and self.mode == MODE_STAY:
             status = HOLD
         self._holding = (status == HOLD)
@@ -59,7 +57,6 @@ class PlanExecutor:
         if status == RUNNING:
             if self._step_ticks < self._step_budget:
                 return RUNNING
-            # 单步预算到：仍最优则续跑，否则换方案
             if self._best_key() == self._active.ability_key:
                 self._step_ticks = 0
                 return RUNNING
@@ -70,7 +67,6 @@ class PlanExecutor:
                 return self._give_up()
             return RUNNING
 
-        # 结束后按剩余耗时降幅判进展
         self._abort_controller()
         remaining = self._filtered()
         new_best = remaining[0].time_est if remaining else None
@@ -83,11 +79,9 @@ class PlanExecutor:
         return RUNNING
 
     def cancel(self):
-        """消费方终止：清理在跑控制器，不入冷却。"""
         self._abort_controller()
         self._given_up = True
 
-    # 内部
     def _structural_changed(self):
         if self._geometry_version() != self._snap_wv:
             return True

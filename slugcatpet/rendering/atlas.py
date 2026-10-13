@@ -1,6 +1,7 @@
 """图集加载与裁切，支持 tint 着色。"""
 from __future__ import annotations
 import json
+import re
 from collections import OrderedDict
 from pathlib import Path
 from PySide6.QtGui import QImage, QPixmap, QColor, QPainter
@@ -24,16 +25,33 @@ def resolve_assets_dir() -> Path:
     )
 
 
-class Atlas:
-    _CACHE_CAP = 512   # LRU 上限
+_TRAILING_COMMA = re.compile(r",\s*([}\]])")
+# 换行分隔的成员之间漏了逗号（游戏里 DMS 的 MiniJSON 能容忍）
+_MISSING_COMMA = re.compile(r'(["}\]\d]|true|false|null)(\s*\n\s*)(")')
 
-    def __init__(self, name: str, base: Path):
-        """name 不带扩展名，如 'rainWorld'。base 目录下需有 name(映射) + name.png(图)。"""
-        self.image = QImage(str(base / f"{name}.png"))
+
+def load_json_lenient(path: Path):
+    """读 JSON，容忍 BOM、尾逗号、换行处漏写的逗号与字符串里的控制字符。"""
+    raw = Path(path).read_text(encoding="utf-8-sig")
+    try:
+        return json.loads(raw, strict=False)
+    except json.JSONDecodeError:
+        fixed = _TRAILING_COMMA.sub(r"\1", _MISSING_COMMA.sub(r"\1,\2\3", raw))
+        return json.loads(_TRAILING_COMMA.sub(r"\1", fixed), strict=False)
+
+
+class Atlas:
+    _CACHE_CAP = 512
+
+    def __init__(self, name: str, base: Path, image_path: Path | None = None,
+                 data_path: Path | None = None):
+        """name 不带扩展名，如 'rainWorld'；给出 image_path/data_path 时忽略 name/base。"""
+        image_path = image_path or (base / f"{name}.png")
+        data_path = data_path or (base / name)
+        self.image = QImage(str(image_path))
         if self.image.isNull():
-            raise FileNotFoundError(f"atlas image not found: {name}.png")
-        with open(base / name, "r", encoding="utf-8") as f:
-            self.frames = json.load(f)["frames"]
+            raise FileNotFoundError(f"atlas image not found: {image_path.name}")
+        self.frames = load_json_lenient(data_path)["frames"]
         self._cache: "OrderedDict[tuple, QPixmap]" = OrderedDict()
 
     def has(self, frame_name: str) -> bool:
@@ -45,7 +63,6 @@ class Atlas:
 
     def sprite(self, frame_name: str, tint: QColor | None = None,
                padded: bool = True) -> QPixmap:
-        """裁出某帧，tint 正片叠底着色；padded=True 还原原始画布。"""
         ck = (frame_name, tint.rgba() if tint else None, padded)
         if ck in self._cache:
             self._cache.move_to_end(ck)
@@ -69,7 +86,7 @@ class Atlas:
             sub = canvas
         pm = QPixmap.fromImage(sub)
         self._cache[ck] = pm
-        if len(self._cache) > self._CACHE_CAP:   # 超限淘汰最久未用
+        if len(self._cache) > self._CACHE_CAP:
             self._cache.popitem(last=False)
         return pm
 
@@ -81,7 +98,6 @@ class Atlas:
 
     @staticmethod
     def _apply_tint(img: QImage, color: QColor) -> QImage:
-        """正片叠底染色。"""
         out = img.convertToFormat(QImage.Format.Format_ARGB32_Premultiplied)
         p = QPainter(out)
         p.setCompositionMode(QPainter.CompositionMode.CompositionMode_Multiply)
@@ -100,7 +116,6 @@ class Atlas:
 
 
 class AtlasSet:
-    """统一管理多张图集，按 key 取图，并能反查帧在哪张图里。"""
 
     KEYS = {"base": "rainWorld", "msc": "rainworldmsc",
             "ui": "uiSprites", "uimsc": "uispritesmsc"}
@@ -108,7 +123,6 @@ class AtlasSet:
     def __init__(self, base: Path | None = None):
         base = base or resolve_assets_dir()
         self.atlases = {k: Atlas(name, base) for k, name in self.KEYS.items()}
-        # 帧表只读，查询缓存永不失效
         self._where: dict[str, str | None] = {}
         self._ssize: dict[tuple[str, str], tuple[int, int]] = {}
 

@@ -17,8 +17,7 @@ if _IS_WIN:
 
 
 class HotkeyFilter(QObject, QAbstractNativeEventFilter):
-    """装到 QApplication 上，命中热键 emit triggered(id)。
-    多继承需单一 super().__init__()，退出需 removeNativeEventFilter，否则报错。"""
+    """装到 QApplication 上，命中热键 emit triggered(id)；多继承需单一 super().__init__()，退出需 removeNativeEventFilter。"""
     triggered = Signal(int)
 
     def __init__(self):
@@ -26,7 +25,7 @@ class HotkeyFilter(QObject, QAbstractNativeEventFilter):
         self._ids: list[int] = []
 
     def register(self, hk_id: int, mods: int, vk: int) -> bool:
-        """注册系统级热键，组合键被占返回 False。"""
+        """组合键被占返回 False。"""
         if not _IS_WIN:
             return False
         if _user32.RegisterHotKey(None, hk_id, mods | MOD_NOREPEAT, vk):
@@ -35,7 +34,6 @@ class HotkeyFilter(QObject, QAbstractNativeEventFilter):
         return False
 
     def unregister(self, hk_id: int) -> None:
-        """注销单个热键；未注册的 id 忽略。"""
         if not _IS_WIN or hk_id not in self._ids:
             return
         _user32.UnregisterHotKey(None, hk_id)

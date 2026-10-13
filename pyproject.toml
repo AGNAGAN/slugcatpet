@@ -11,13 +11,15 @@ license = "MIT"
 authors = [
     { name = "patatachip8", email = "patatachip8@outlook.com" },
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Win32 (MS Windows)",
     "Operating System :: Microsoft :: Windows :: Windows 10",
     "Operating System :: Microsoft :: Windows :: Windows 11",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Games/Entertainment",
 ]
 dependencies = [
@@ -26,6 +28,9 @@ dependencies = [
     "numpy>=2.3.0",
     "Pillow>=12.0.0",
 ]
+
+[dependency-groups]
+dev = ["ruff==0.17.0"]
 
 [project.urls]
 Repository = "https://github.com/lingxiaojun/slugcatpet"
@@ -38,3 +43,10 @@ include = ["slugcatpet*"]
 
 [tool.setuptools.package-data]
 slugcatpet = ["resources/icons/*.svg", "resources/layouts/*.json"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]

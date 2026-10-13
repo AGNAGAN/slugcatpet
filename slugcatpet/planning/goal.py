@@ -1,4 +1,4 @@
-"""规划目标：点 / 物体统一封装为 pos()+valid()+key()；radius 为达成容差（仅 can_stay 采信）。"""
+"""规划目标：pos()/valid()/key()；radius 为达成容差（仅 can_stay 采信）。"""
 from __future__ import annotations
 
 
@@ -25,13 +25,12 @@ class Goal:
 
 
 def point_goal(x, y, radius=0.0, contact="body"):
-    """固定点目标。"""
     x, y = float(x), float(y)
     return Goal(lambda: (x, y), lambda: True, ("pt", x, y), radius=radius, contact=contact)
 
 
 def obj_goal(obj, valid=None, radius=0.0, contact="body"):
-    """物体目标：坐标随 obj.x/obj.y 每帧更新；valid 为接收 obj 的谓词，缺省恒真。"""
+    """物体目标：valid 为接收 obj 的谓词，缺省恒真。"""
     vf = (lambda: valid(obj)) if valid is not None else (lambda: True)
     return Goal(lambda: (obj.x, obj.y), vf, ("obj", id(obj)), obj=obj,
                 radius=radius, contact=contact)

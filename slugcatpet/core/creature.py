@@ -1,13 +1,15 @@
 """2 BodyChunk 物理体 + 连接 + 运动系统 + 程序化脚。"""
 from __future__ import annotations
 import math
-import random   # 溺水吐泡概率/散射用
+import random
 
-from ..behavior import tuning
-from ..cats.stats import DEFAULT_STATS
-from ..core import chunkphys as cp
-from ..core.chunkphys import BodyChunk, solve_conn
-from ..core.units import K_VEL, K_IMP, lerp, inv_lerp, clampf
+from .. import tuning
+from ..characters.stats import DEFAULT_STATS
+from . import chunkphys as cp
+from .chunkphys import BodyChunk, solve_conn
+from .swim_pass import SwimPass
+from .units import K_VEL, K_IMP, TICK_RATE, lerp, inv_lerp, clampf
+from .vecmath import _ang_from_up, _rot
 
 RUN_UPPER = 4.2 * K_VEL
 RUN_LOWER = 4.0 * K_VEL
@@ -23,7 +25,6 @@ DEF_STAND_FEET = +(4.0 * K_IMP)
 
 FEET_EASE = 0.5
 
-# 唤醒/抗议跳基准
 JUMP_STAND_HEAD = -(4.0 * K_IMP)
 JUMP_STAND_FEET = -(3.0 * K_IMP)
 PROTEST_HEAD = -(2.0 * K_IMP)
@@ -37,14 +38,13 @@ CONN_CRAWL = cp.DIST_CRAWL
 HIP_SINK_EASE = 0.06
 
 WALK_STOP_EPS = 2.0
+WALK_SLOW_DIST = 24.0      # 离走路目标这么近时开始减速
 
-# 零重力蹬窗边推力/速度上限
 ZEROG_KICK = 5.4 * K_VEL
 ZEROG_HIP_KICK = 5.0 * K_VEL
 ZEROG_HEAD_MAX = 5.4 * K_VEL
 ZEROG_HIP_MAX = 5.0 * K_VEL
 ZEROG_CANJUMP = 12
-# 零重力划水：head 沿意图推、hip 反拖
 ZEROG_SWIM_PUSH = 0.15 * K_VEL
 ZEROG_SWIM_WALL = 0.2 * K_VEL
 ZEROG_SWIM_HIP = 0.1 * K_VEL
@@ -52,7 +52,6 @@ ZEROG_SWIM_MAX = 2.5 * K_VEL
 ZEROG_KICK_LERP = 0.5
 ZEROG_KICK_BODYAXIS = 0.25
 
-# 零重力抓杆漂浮
 ZEROG_GRAB_DIST = 20.0
 ZEROG_POLE_PULL = 0.1
 ZEROG_POLE_CLIMB = 1.05 * K_VEL
@@ -63,7 +62,6 @@ CARRY_OFF_X = 20.0
 CARRY_OFF_Y = 12.0
 EAT_BITES_MIN = 1
 
-# 浅水浮沉常量
 WATER_FRICTION = 0.96
 
 class SlugcatBody:
@@ -71,7 +69,7 @@ class SlugcatBody:
 
     def __init__(self, hip_xy, world_w: float, world_h: float,
                  energy=1.0, temper=0.0, food=None, karma=None, stats=DEFAULT_STATS):
-        self.stats = stats               # 种族数值
+        self.stats = stats
         hx, hy = hip_xy
         self.W = float(world_w)
         self.H = float(world_h)
@@ -81,7 +79,7 @@ class SlugcatBody:
         self.conn_rest = float(CONN_STAND)
         self.conn_type = "Normal"
 
-        self.standing = True            # True=直立 / False=趴
+        self.standing = True
         self.move_dir = 0
         self.walk_target_x = None
         self.walk_speed_target = None
@@ -93,7 +91,8 @@ class SlugcatBody:
 
         self.feet_stuck = None          # 钉脚锚 (x,y) or None
         self.crawl_anchor = None
-        self.crawl_pose = 0.0           # 0→1 趴姿混合
+        self.crawl_pose = 0.0
+        self.prone_snap = 0             # >0 时趴姿快速贴合（让路趴下）
 
         self.crawl_sink = 0.0
         self.hip_sink = 0.0
@@ -127,7 +126,7 @@ class SlugcatBody:
         self.walk_bob_freq = 1.0
 
         self.breath = 0.0
-        self.last_breath = 0.0           # 上帧呼吸相位
+        self.last_breath = 0.0
         self.sleeping = False            # 睡眠态：呼吸周期恒 80
 
         # energy ∈[0,1]，1=满 0=耗尽
@@ -172,8 +171,12 @@ class SlugcatBody:
         self._wy0 = self._wy1 = None
         self._wyx0 = self._wyx1 = 0.0
 
-        # 游泳/憋气/淹死；air_frac 是死亡下界统一口径（工匠 0.65 即溺爆）
-        self.air_death = tuning.PYRO_DEATH_THRESH if stats.is_artificer else 0.0
+        # 游泳/憋气/淹死；air_frac 是死亡下界统一口径
+        self.air_death = 0.0
+        self.no_dive = False            # 憋气极短，从不主动潜水（爆破能力写入）
+        self.swim_resting = False       # 浮在水面歇着
+        self.swim_pass = SwimPass(self)
+        self.drown_burst_air = None  # 憋气降到此值即溺爆，None=不会（爆破能力写入）
         self.air_in_lungs = 1.0
         self.lungs_exhausted = False
         self.drown = 0.0
@@ -190,15 +193,23 @@ class SlugcatBody:
         self.water_jump_delay = 0
         self.swim_boost_dist = tuning.SWIM_BOOST_DIST
         self._swim_wf = WATER_FRICTION
-        self.pyro_drown = False
+        self.drown_burst = False     # 溺爆待触发，FSM 下一 tick 结算
+        self.aquatic = False         # 水生体质（鳃能力写入）：潜泳冲刺/冲刺后低水阻/浮泳拖臀
 
         # 手动控制：总闸 / 每 tick 输入源 / 10 帧历史环
         self._ctrl_on = False
         self._input_provider = None
         self._ctrl_input = None
 
-        self.impact_cb = None           # 地形撞击回调，None=不触发
-        self.bubble_cb = None           # 憋气吐泡回调，None=不吐
+        self.impact_cb = None
+        self.on_hurt = None             # 撞击伤害回调 (kind, ticks)：kind 为 "stun" / "die"
+        self.drag_speed = 0.0           # 拖拽时光标的真实速度（未限速）
+        self._edge_contact = (False, False, False)
+        self._spin_prev = None
+        self._spin_rate = 0.0
+        self._spin_hold = 0
+        self._spin_done = False
+        self.bubble_cb = None
         self.carried_fruit = None
         self.carry_hand = None
         self.carried_stone = None
@@ -209,11 +220,9 @@ class SlugcatBody:
 
     @property
     def total_mass(self):
-        """两 chunk 质量和。"""
         return self.chunk0.mass + self.chunk1.mass
 
     def collision_chunks(self):
-        """两 body chunk 恒可碰撞。"""
         return (self.chunk0, self.chunk1)
 
     def clamp_cold(self):
@@ -245,13 +254,14 @@ class SlugcatBody:
 
     def set_posture(self, standing: bool):
         self.standing = bool(standing)
+        if standing:
+            self.prone_snap = 0
 
     def request_jump(self, kind="stand", hold_ticks=None):
         self._jump_pending = kind
         self._jump_hold = hold_ticks
 
     def tip_launch(self, hold_ticks=None, move_dir=0):
-        """离地脉冲起跳（杆顶用）。"""
         c0, c1 = self.chunk0, self.chunk1
         c0.pinned = c1.pinned = False
         self.on_pole = False
@@ -269,7 +279,6 @@ class SlugcatBody:
         self.move_dir = int(move_dir)
 
     def pole_jump(self, direction, move_dir=None):
-        """竖杆跳：朝 direction 斜跳出杆。"""
         c0, c1 = self.chunk0, self.chunk1
         c0.pinned = c1.pinned = False
         self.on_pole = False
@@ -290,7 +299,6 @@ class SlugcatBody:
         self.move_dir = int(d if move_dir is None else move_dir)
 
     def backflip_launch(self, direction, boosted=False):
-        """站立位后空翻发射。"""
         c0, c1 = self.chunk0, self.chunk1
         c0.pinned = c1.pinned = False
         self.on_pole = False
@@ -317,12 +325,11 @@ class SlugcatBody:
         self.facing = -d
 
     def pyro_boost(self, ix, iy, overheat=False):
-        """工匠空中爆跳运动学。"""
         c0, c1 = self.chunk0, self.chunk1
         ix = int(ix)
         iy = int(iy)
         if ix != 0:
-            c0.vy = max(c0.vy, 0.0) - 8.0    # 清落速再给向上冲量
+            c0.vy = max(c0.vy, 0.0) - 8.0
             c1.vy = max(c1.vy, 0.0) - 7.0
             self.jump_boost = 6.0
         if ix == 0 or iy == 1:
@@ -338,13 +345,11 @@ class SlugcatBody:
             c1.vx = 13.0 * ix
         self._jump_hold_left = None
         self.animation = "Flip"
-        # 力矩键取飞行水平向
         self._flip_spin = ix if ix != 0 else self.facing
         self._flip_mult = 1.0           # 非滑铲源
         self.bodyMode = "Default"
 
     def release_to_air(self, move_dir=0):
-        """松杆/松舌转自由落体。"""
         c0, c1 = self.chunk0, self.chunk1
         c0.pinned = c1.pinned = False
         self.on_pole = False
@@ -354,20 +359,6 @@ class SlugcatBody:
         self.standing = True
         self.walk_target_x = None
         self.move_dir = int(move_dir)
-
-    def teleport(self, hx, hy, keep_vel=False):
-        """整体平移到 hip=(hx,hy)。"""
-        dx, dy = hx - self.chunk1.x, hy - self.chunk1.y
-        for c in (self.chunk0, self.chunk1):
-            c.x += dx; c.y += dy
-            c.last_x += dx; c.last_y += dy
-            c.last_last_x += dx; c.last_last_y += dy
-            if not keep_vel:
-                c.vx = c.vy = 0.0
-        for f in (self.lfoot, self.rfoot):
-            f[0] += dx
-        self.feet_stuck = None
-        self.crawl_pose = 0.0
 
     def die(self):
         self.dead = True
@@ -381,13 +372,7 @@ class SlugcatBody:
         self.hover = False
         self._jump_pending = None
         self._jump_hold = None
-        if self.carried_fruit is not None:
-            self.carried_fruit.stalk = None
-            self.carried_fruit.state = "free"
-            self.carried_fruit.held_by_hand = None
-            self.release_fruit()
-        if self.carried_stone is not None:
-            self.release_stone(to_free=True)
+        self.drop_carried()
         self.stun = 0
         self.zerog_pole = None
 
@@ -397,10 +382,9 @@ class SlugcatBody:
         self.drown = 0.0
         self.lungs_exhausted = False
         self.submerged = False
-        self.pyro_drown = False
+        self.drown_burst = False
 
     def set_control_input(self, pkg):
-        """push 当前帧进控制输入历史环。"""
         if self._ctrl_input is None:
             from ..control.input import InputBuffer
             self._ctrl_input = InputBuffer()
@@ -409,6 +393,7 @@ class SlugcatBody:
 
     def step(self):
         self._temper_update()
+        self._drag_impacts()
         if self._input_provider is not None:
             # 晕/死改推零包，防晕醒瞬间吃到晕期边沿
             pkg = self._input_provider()
@@ -420,10 +405,9 @@ class SlugcatBody:
         if self.dead:
             self._step_dead()
             return
-        # 无水时 no-op
         self._update_submersion()
         self._lung_update()
-        swimming = self._should_swim()      # 游泳压过 zerog
+        swimming = self._should_swim()
         self.swimming = swimming
         if self.hover:
             self._step_hover()
@@ -447,9 +431,9 @@ class SlugcatBody:
         ws = self.water_surface
         for c, wy, wx in ((self.chunk0, self._wy0, self._wyx0),
                           (self.chunk1, self._wy1, self._wyx1)):
-            if ws is not None and c.x != wx:      # x 变了缓存失键，现算
+            if ws is not None and c.x != wx:
                 wy = ws.level_at(c.x)
-            c.update(self.W, self._floor_h, impact=self.impact_cb,
+            c.update(self.W, self._floor_h, impact=self._impact,
                      room_gravity=self.room_gravity, water_y=wy,
                      buoyancy=self.stats.buoyancy, water_friction=WATER_FRICTION)
         self.conn_rest = CONN_STAND if self.standing else CONN_CRAWL
@@ -470,7 +454,7 @@ class SlugcatBody:
             if ws is not None and c.x != wx:
                 wy = ws.level_at(c.x)
             c.update(self.W, self.H, gravity=0.0, air_friction=self.hover_airfric,
-                     impact=self.impact_cb, room_gravity=self.room_gravity, water_y=wy,
+                     impact=self._impact, room_gravity=self.room_gravity, water_y=wy,
                      buoyancy=self.stats.buoyancy, water_friction=WATER_FRICTION)
         solve_conn(self.chunk0, self.chunk1, self.conn_rest, ctype="Normal")
         self.chunk0.clamp_inside(self.W, self.H)
@@ -479,7 +463,6 @@ class SlugcatBody:
 
     # 水浸没度/憋气/游泳（y↓）
     def _update_submersion(self):
-        """两 chunk 浸没度，无水全 0。"""
         ws = self.water_surface
         if ws is None:
             self.head_sub = self.hip_sub = self.submersion = 0.0
@@ -490,16 +473,22 @@ class SlugcatBody:
         self._wy1 = wy1 = ws.level_at(c1.x)
         self._wyx0 = c0.x
         self._wyx1 = c1.x
-        hs = (c0.y + c0.rad - wy0) / (2.0 * c0.rad)
-        ps = (c1.y + c1.rad - wy1) / (2.0 * c1.rad)
-        self.head_sub = 0.0 if hs < 0.0 else (1.0 if hs > 1.0 else hs)
-        self.hip_sub = 0.0 if ps < 0.0 else (1.0 if ps > 1.0 else ps)
+        hs = clampf((c0.y + c0.rad - wy0) / (2.0 * c0.rad), 0.0, 1.0)
+        ps = clampf((c1.y + c1.rad - wy1) / (2.0 * c1.rad), 0.0, 1.0)
+        if self.swimming:                    # 游泳时滤掉波面噪声
+            k = tuning.SWIM_SUB_FILTER
+            hs = self.head_sub + (hs - self.head_sub) * k
+            ps = self.hip_sub + (ps - self.hip_sub) * k
+        self.head_sub = hs
+        self.hip_sub = ps
         self.submersion = self.head_sub if self.head_sub > self.hip_sub else self.hip_sub
 
     def _should_swim(self) -> bool:
-        """进游泳判据：站浅水不算。"""
+        """进出游泳判据：站浅水不算，进出水位滞回。"""
         if self.water_surface is None or self.on_pole:
             return False
+        if self.swimming:
+            return self.submersion > tuning.SWIM_EXIT
         if self.submersion <= tuning.SWIM_ENTER:
             return False
         if self.on_floor() and self.head_sub < tuning.SWIM_ENTER:
@@ -507,7 +496,6 @@ class SlugcatBody:
         return True
 
     def _swim_dir(self):
-        """朝 swim_target 单位向量，无目标/晕 → (0,0)。"""
         t = self.swim_target
         if t is None or self.stun > 0:
             return 0.0, 0.0
@@ -518,7 +506,6 @@ class SlugcatBody:
         return dx / d, dy / d
 
     def _swim_up_still(self) -> bool:
-        """直上求生姿势 → 耗气变慢。"""
         t = self.swim_target
         if t is None:
             return False
@@ -530,29 +517,26 @@ class SlugcatBody:
 
     @property
     def air_frac(self) -> float:
-        """剩余气比例 [0,1]。"""
         d = self.air_death
         if d <= 0.0:
             return self.air_in_lungs
         return max(0.0, (self.air_in_lungs - d) / (1.0 - d))
 
     def _lung_update(self):
-        """憋气/淹死推进。"""
         if self.hover:                                    # 超度悬浮不耗气
             return
         s = self.stats
         c0 = self.chunk0
-        if self.head_sub > tuning.SWIM_LUNG_SUBMERGE:     # 头浸没 → 耗气
-            if not self.submerged:                        # 刚入水首帧
+        if self.head_sub > tuning.SWIM_LUNG_SUBMERGE:
+            if not self.submerged:
                 self.swim_force = inv_lerp(0.0, 8.0, abs(c0.vx))
                 self.swim_cycle = 0.0
             saver = 1.5 if (self.air_frac < s.drown_threshold and self._swim_up_still()) else 1.0
-            prev_frac = self.air_frac                      # 供吐泡判定 2/3 跨越
+            prev_frac = self.air_frac
             self.air_in_lungs -= (1.0 / (40.0 * (4.5 if self.lungs_exhausted else 9.0) * saver)) * s.lungs_fac
-            self._drown_bubbles(prev_frac)                 # 憋气吐泡
-            # 工匠溺爆待触发
-            if s.is_artificer and self.air_in_lungs <= tuning.PYRO_DEATH_THRESH:
-                self.pyro_drown = True
+            self._drown_bubbles(prev_frac)
+            if self.drown_burst_air is not None and self.air_in_lungs <= self.drown_burst_air:
+                self.drown_burst = True
             # 淹死判定；Rivulet 非溺水免疫但耗气极慢，实际难触发
             if (self.air_in_lungs <= 0.0 and self.head_sub >= 0.999
                     and self.hip_sub > tuning.SWIM_DROWN_SUB_HIP):
@@ -562,26 +546,27 @@ class SlugcatBody:
                 if self.drown >= 1.0:
                     self.die()
             self.submerged = True
-        else:                                             # 出水/浅水：换气回满
+        else:
             if self.submerged and self.air_frac < s.drown_threshold:
                 self.lungs_exhausted = True
             if not self.lungs_exhausted and self.air_in_lungs > 0.9:
                 self.air_in_lungs = 1.0
             if self.air_in_lungs < 0.0:
                 self.air_in_lungs = 0.0
-            self.air_in_lungs += 1.0 / (tuning.SWIM_LUNG_RECOVER_EXH if self.lungs_exhausted
-                                        else tuning.SWIM_LUNG_RECOVER)
+            rec = tuning.SWIM_LUNG_RECOVER_EXH if self.lungs_exhausted else tuning.SWIM_LUNG_RECOVER
+            if self.swim_resting:
+                rec *= tuning.SWIM_REST_RECOVER_MULT
+            self.air_in_lungs += 1.0 / rec
             if self.air_in_lungs >= 1.0:
                 self.air_in_lungs = 1.0
                 self.lungs_exhausted = False
                 self.drown = 0.0
             self.submerged = False
-            self.pyro_drown = False       # 撤销工匠溺爆待触发
+            self.drown_burst = False
         if self.air_in_lungs > 1.0:
             self.air_in_lungs = 1.0
 
     def _emit_bubble(self, x, y, vx, vy):
-        """吐泡统一出口，按种族概率门。"""
         if self.bubble_cb is None:
             return
         bf = self.stats.bubble_fac
@@ -590,14 +575,13 @@ class SlugcatBody:
         self.bubble_cb(x, y, vx, vy)
 
     def _drown_bubbles(self, prev_frac):
-        """憋气吐泡：跌破 2/3 冒首泡，缺氧区按概率连吐。"""
         c0 = self.chunk0
         air = self.air_frac
-        vx0 = c0.vx * tuning.BUBBLE_INHERIT_VEL            # 少量继承头速，防飞远
+        vx0 = c0.vx * tuning.BUBBLE_INHERIT_VEL
         vy0 = c0.vy * tuning.BUBBLE_INHERIT_VEL
         if prev_frac >= 2.0 / 3.0 > air:                   # 跌破 2/3 首泡
             self._emit_bubble(c0.x, c0.y, vx0, vy0)
-        if air < self.stats.drown_threshold:               # 缺氧挣扎区：概率/散射随缺氧加剧
+        if air < self.stats.drown_threshold:
             if (random.random() > air * 2.0 or self.lungs_exhausted) and random.random() > 0.5:
                 ang = random.random() * math.tau
                 kick = lerp(tuning.BUBBLE_SPAWN_KICK, 0.0, air)
@@ -606,10 +590,9 @@ class SlugcatBody:
                                   vy0 + math.sin(ang) * kick)
 
     def _step_swim(self):
-        """游泳分流：深泳/浮泳二分。"""
-        if self.stun > 0:                    # stun 早 return，此处递减自愈
+        if self.stun > 0:
             self.stun -= 1
-        if self.water_jump_delay > 0:        # 冲刺冷却递减
+        if self.water_jump_delay > 0:
             self.water_jump_delay -= 1
         self.bodyMode = "Swimming"
         self.feet_stuck = None
@@ -618,12 +601,17 @@ class SlugcatBody:
         ws = self.water_surface
         c0, c1 = self.chunk0, self.chunk1
         self._decide_swim_mode(ws)
-        sdx, _sdy = self._swim_dir()                 # 取泳向水平分量供动画
-        self.swim_input_x = 1 if sdx > 0.0 else (-1 if sdx < 0.0 else 0)   # 同 _surface_swim 横游意图阈值
-        if self.swim_mode == "deep":
-            self._deep_swim()
-        else:
-            self._surface_swim(ws)
+        self.swim_pass.step(ws)
+        if not self.swim_pass.active:
+            sdx, sdy = self._swim_dir()
+            if abs(sdx) > tuning.SWIM_TURN_DOT:
+                self.swim_input_x = 1 if sdx > 0.0 else -1
+            elif sdx == 0.0 and sdy == 0.0:
+                self.swim_input_x = 0
+            if self.swim_mode == "deep":
+                self._deep_swim()
+            else:
+                self._surface_swim(ws)
         wf = self._swim_wf
         vmax = tuning.SWIM_VEL_MAX               # 封顶游泳速度，防冲刺穿墙
         for c, wy, wx in ((c0, self._wy0, self._wyx0), (c1, self._wy1, self._wyx1)):
@@ -632,7 +620,7 @@ class SlugcatBody:
                 k = vmax / sp
                 c.vx *= k
                 c.vy *= k
-            c.update(self.W, self._floor_h, impact=self.impact_cb,
+            c.update(self.W, self._floor_h, impact=self._impact,
                      room_gravity=self.room_gravity,
                      water_y=wy if c.x == wx else ws.level_at(c.x),
                      buoyancy=self.stats.buoyancy, water_friction=wf)
@@ -641,16 +629,22 @@ class SlugcatBody:
         c0.clamp_inside(self.W, self._floor_h)
         c1.clamp_inside(self.W, self._floor_h)
         self._breath_update()
-        self._apply_carry()          # 游泳时也要跟手
+        self._apply_carry()
         self._apply_carry_stone()
 
     def _decide_swim_mode(self, ws):
-        """深泳/浮泳二分（y↓）。"""
+        if self.no_dive or self.swim_resting:
+            self.swim_mode = "surface"
+            return
+        m = self.swim_pass.mode()
+        if m is not None:
+            self.swim_mode = m
+            return
         c0 = self.chunk0
         wl0 = self._wy0 if c0.x == self._wyx0 else ws.level_at(c0.x)
         diving = self.swim_target is not None and (self.swim_target[1] - c0.y) > 5.0
         prev_surface = (self.swim_mode == "surface")
-        below_full = c0.y > wl0 + tuning.SWIM_DEEP_FULL     # y↓ 更深=更大
+        below_full = c0.y > wl0 + tuning.SWIM_DEEP_FULL
         depth = tuning.SWIM_DEEP_DIVE_DEPTH if diving else tuning.SWIM_DEEP_DEPTH
         below_entry = c0.y > wl0 + depth
         hip_req = -1.0 if diving else tuning.SWIM_DEEP_HIP_SUB
@@ -660,34 +654,32 @@ class SlugcatBody:
             self.swim_mode = "surface"
 
     def _deep_swim(self):
-        """深泳推进。"""
         s = self.stats
         c0, c1 = self.chunk0, self.chunk1
         self.standing = False
-        axx, axy = c0.x - c1.x, c0.y - c1.y                # hip→head 体轴
+        axx, axy = c0.x - c1.x, c0.y - c1.y
         axl = math.hypot(axx, axy) or 1.0
         ax_u, ay_u = axx / axl, axy / axl
         axis_align = (_dot_norm(c0.vx, c0.vy, ax_u, ay_u) + _dot_norm(c1.vx, c1.vy, ax_u, ay_u)) / 2.0
         swim_x, swim_y = self._swim_dir()
         have_dir = (swim_x != 0.0 or swim_y != 0.0)
-        # 冲刺 boost：气足+冷却完+目标远才触发
-        boost_ready = self.submerged if s.is_rivulet else (self.air_frac > tuning.SWIM_BOOST_MIN_AIR)
+        boost_ready = self.submerged if self.aquatic else (self.air_frac > tuning.SWIM_BOOST_MIN_AIR)
         dist = math.hypot(self.swim_target[0] - c0.x, self.swim_target[1] - c0.y) if self.swim_target else 0.0
         if have_dir and self.water_jump_delay == 0 and boost_ready and dist > self.swim_boost_dist:
             self.swim_cycle = 2.7
-            if s.is_rivulet:
+            if self.aquatic:
                 f = 300.0 if (-ay_u) > 0.5 else 50.0       # y↓ 取负为上
                 c0.vx += ax_u * f; c0.vy += ay_u * f
             else:
                 c0.vx += ax_u * s.swim_boost_force; c0.vy += ay_u * s.swim_boost_force
             self.air_in_lungs -= s.swim_boost_cost
             self.water_jump_delay = s.swim_boost_cd
-            self._emit_bubble(c0.x, c0.y,                  # 冲刺发力喷一个泡
+            self._emit_bubble(c0.x, c0.y,
                               c0.vx * tuning.BUBBLE_INHERIT_VEL,
                               c0.vy * tuning.BUBBLE_INHERIT_VEL)
         self.swim_cycle += 0.01
         if have_dir:
-            axis_turn = _angle_deg(c0.last_x - c1.last_x, c0.last_y - c1.last_y, axx, axy)  # 体轴转速
+            axis_turn = _angle_deg(c0.last_x - c1.last_x, c0.last_y - c1.last_y, axx, axy)
             force_target = 0.2 + inv_lerp(0.0, 12.0, axis_turn) * 0.8
             if force_target > self.swim_force:
                 self.swim_force = lerp(self.swim_force, force_target, 0.7)
@@ -696,41 +688,42 @@ class SlugcatBody:
             self.swim_cycle += lerp(self.swim_force, 1.0, 0.5) / 10.0
             if 1.0 / 6.0 < self.air_frac < 0.5:
                 self.swim_cycle += 0.05
-            if c0.cx or c0.cy:                              # 撞墙
+            if c0.cx or c0.cy:
                 self.swim_force *= 0.5
             stroke_kick = 0.7 * lerp(self.swim_force * s.swim_force_fac, 1.0, 0.5) * self.head_sub
-            if self.swim_cycle > 4.0:                       # 相位冲程窗口
+            if self.swim_cycle > 4.0:
                 self.swim_cycle = 0.0
             elif self.swim_cycle > 3.0:
                 c0.vx += ax_u * stroke_kick; c0.vy += ay_u * stroke_kick
             aim_x, aim_y = swim_x, swim_y                    # 缺氧自救：泳向球插向上
             if self.air_frac < s.drown_threshold:
                 t = inv_lerp(s.drown_threshold, 0.0, self.air_frac)
-                aim_x, aim_y = _slerp2(aim_x, aim_y, 0.0, -1.0, t)   # 向上 = pet (0,-1)
+                aim_x, aim_y = _slerp2(aim_x, aim_y, 0.0, -1.0, t)
             k = 0.5 * self.swim_force * lerp(axis_align, 1.0, 0.5) * self.head_sub * s.swim_force_fac
-            c0.vx += aim_x * k; c0.vy += aim_y * k          # 方向划水
+            c0.vx += aim_x * k; c0.vy += aim_y * k
             c1.vx -= aim_x * (0.1 * self.head_sub); c1.vy -= aim_y * (0.1 * self.head_sub)
             k2 = 0.4 * self.swim_force * axis_align * self.head_sub * s.swim_force_fac
             c0.vx += ax_u * k2; c0.vy += ay_u * k2
-            sp = math.hypot(c0.vx, c0.vy)                    # 低速补推
+            sp = math.hypot(c0.vx, c0.vy)
             if sp < 3.0:
                 add = 0.2 * inv_lerp(3.0, 1.5, sp)
                 c0.vx += aim_x * add; c0.vy += aim_y * add
                 sub = 0.1 * inv_lerp(3.0, 1.5, sp)
                 c1.vx -= aim_x * sub; c1.vy -= aim_y * sub
-        # 游泳水阻，随体轴对齐度插值
-        if s.is_rivulet and self.water_jump_delay >= 5:
+        if self.aquatic and self.water_jump_delay >= 5:
             self._swim_wf = 0.99
         else:
             self._swim_wf = lerp(0.92, 0.96, axis_align)
+        if self.swim_cycle >= 6.0:
+            self.swim_cycle %= 6.0
 
     def _surface_swim(self, ws):
         """浮泳推进。"""
         s = self.stats
         c0, c1 = self.chunk0, self.chunk1
         self.canJump = 0
-        self.swim_cycle += 0.025
-        if s.is_rivulet and self.water_jump_delay >= 5:
+        self.swim_cycle += 0.006 if self.swim_resting else 0.025
+        if self.aquatic and self.water_jump_delay >= 5:
             self._swim_wf = 0.999
         else:
             self._swim_wf = 0.96
@@ -743,27 +736,33 @@ class SlugcatBody:
                 iy = -1                                     # 目标在下(y↓)=潜
             elif swim_y < -0.5:
                 iy = 1                                      # 目标在上=浮
+        if iy == -1 and self.no_dive:
+            iy = 1
         wl0 = self._wy0 if c0.x == self._wyx0 else ws.level_at(c0.x)
         target_head_y = wl0 - tuning.SWIM_SURFACE_HEAD_ABOVE
-        if iy > -1 and (-3.0 < c0.vy < 5.0) and self.water_jump_delay == 0:  # 贴水面
+        if iy > -1 and (-3.0 < c0.vy < 5.0) and self.water_jump_delay == 0:
             c0.vy *= 0.8
             c1.vy *= 0.8
-            c0.vy += clampf((target_head_y - c0.y) * 0.1, -1.5, 0.5)  # 头钳水线上方
-            c1.vy += 0.5                                    # 臀略沉保直立浮姿
-        elif iy == -1:                                      # 潜
+            c0.vy += clampf((target_head_y - c0.y) * 0.1, -1.5, 0.5)
+            c1.vy += 0.5
+        elif iy == -1:
             c0.vy += 0.2
             c1.vy -= 0.1
-        elif iy == 1:                                       # 浮
+        elif iy == 1:
             c0.vy -= 0.5
-        ix = 1 if swim_x > 0.0 else (-1 if swim_x < 0.0 else 0)  # 横游意图
+        ix = 1 if swim_x > 0.0 else (-1 if swim_x < 0.0 else 0)
         if ix != 0:
             self._swim_accel_h(c0, ix, s.swim_surface_speed)
-            hip_drag_mult = 1.5 if s.is_rivulet else 1.0
+            hip_drag_mult = 1.5 if self.aquatic else 1.0
             c1.vx -= ix * 0.2 * hip_drag_mult
             self.swim_cycle += 1.0 / 30.0
+        else:
+            c0.vx *= tuning.SWIM_STOP_DAMP
+            c1.vx *= tuning.SWIM_STOP_DAMP
+        if self.swim_cycle >= 3.0:
+            self.swim_cycle %= 3.0
 
     def _swim_accel_h(self, c, dir_sign, dyn):
-        """浮泳横向加速，追顶速 dyn。"""
         if dir_sign < 0:
             step = H_ACCEL
             if c.vx - step < -dyn:
@@ -778,22 +777,20 @@ class SlugcatBody:
                 c.vx += step
 
     def _step_zerog(self):
-        """零重力漂浮推进。"""
-        if self.stun > 0:            # stun 早 return，此处递减自愈
+        if self.stun > 0:
             self.stun -= 1
         self.bodyMode = "ZeroG"
         self.feet_stuck = None
         self.crawl_anchor = None
         if self._ctrl_on and self.stun <= 0:
-            # 控制态覆盖口：手操输入接管
             from ..control.moves_zerog import ctrl_zerog_update
             ctrl_zerog_update(self)
         rg = self.room_gravity
         c0, c1 = self.chunk0, self.chunk1
-        grabbing = self._zerog_pole_grab()    # 贴杆则覆盖自由漂速度
+        grabbing = self._zerog_pole_grab()
         for c in (c0, c1):
             c.update(self.W, self.H, gravity=cp.GRAVITY * rg,
-                     air_friction=cp.AIR_FRICTION, impact=self.impact_cb)
+                     air_friction=cp.AIR_FRICTION, impact=self._impact)
         if not grabbing:
             # 贴窗边开 canJump 窗口，记背离法向
             nx, ny = self._zerog_wall_normal()
@@ -810,48 +807,43 @@ class SlugcatBody:
         c0.clamp_inside(self.W, self.H)
         c1.clamp_inside(self.W, self.H)
         self._breath_update()
-        self._apply_carry()          # 零重力叼持也要跟手
+        self._apply_carry()
         self._apply_carry_stone()
 
     def _zerog_pole_grab(self) -> bool:
-        """抓杆动力学。"""
         pole = self.zerog_pole
         if pole is None:
             self._zerog_release_pose()
             return False
         c0, c1 = self.chunk0, self.chunk1
-        if c0.pinned or c1.pinned:                       # 拖拽中不抓
+        if c0.pinned or c1.pinned:
             self.zerog_pole = None
             self._zerog_release_pose()
             return False
         cx, cy, perp = _closest_on_segment(c0.x, c0.y, pole.ax, pole.ay, pole.bx, pole.by)
-        if perp > ZEROG_GRAB_DIST:                       # 漂离超距 → 安全松杆
+        if perp > ZEROG_GRAB_DIST:
             self.zerog_pole = None
             self._zerog_release_pose()
             return False
-        lx, ly = pole.bx - pole.ax, pole.by - pole.ay    # 杆轴
+        lx, ly = pole.bx - pole.ax, pole.by - pole.ay
         ll = math.hypot(lx, ly) or 1.0
-        ax_u, ay_u = lx / ll, ly / ll                    # 沿轴单位
-        px_u, py_u = -ay_u, ax_u                         # 垂直单位
+        ax_u, ay_u = lx / ll, ly / ll
+        px_u, py_u = -ay_u, ax_u
         # 竖杆 standing=True，横杆 False
         self.animation = "ZeroGPoleGrab"
         self.standing = abs(ay_u) >= abs(ax_u)
         self.pole_x, self.pole_y = cx, cy
-        # 越快阻尼越强，粘住杆
         speed = math.hypot(c0.vx, c0.vy)
         damp = lerp(0.7, 0.3, inv_lerp(2.0, 5.0, speed))
         c0.vx *= damp
         c0.vy *= damp
-        # 拉向杆线 + 横向 lean
         ix, iy = self.zerog_pole_intent
         lean = ZEROG_POLE_LEAN * (ix * px_u + iy * py_u)
         c0.vx += (cx + px_u * lean - c0.x) * ZEROG_POLE_PULL
         c0.vy += (cy + py_u * lean - c0.y) * ZEROG_POLE_PULL
-        # 沿杆滑
         slide = ix * ax_u + iy * ay_u
         c0.vx += ax_u * slide * ZEROG_POLE_CLIMB * self.stats.pole_fac
         c0.vy += ay_u * slide * ZEROG_POLE_CLIMB * self.stats.pole_fac
-        # hip 阻尼收拢 + 朝自身杆线垂足回中拉
         c1.vx *= ZEROG_POLE_HIP
         c1.vy *= ZEROG_POLE_HIP
         hcx, hcy, _ = _closest_on_segment(c1.x, c1.y, pole.ax, pole.ay, pole.bx, pole.by)
@@ -860,27 +852,24 @@ class SlugcatBody:
         return True
 
     def _zerog_release_pose(self):
-        """松杆复位。"""
         self.animation = None
         self.standing = True
 
     def _zerog_wall_normal(self):
-        """贴墙背离法向 (nx,ny)，无接触 (0,0)。"""
         for c in (self.chunk0, self.chunk1):
             if c.cx or c.cy:
                 return (-c.cx, -c.cy)
         return (0, 0)
 
     def _do_zerog_kick(self):
-        """蹬窗边推进。"""
         nx, ny = self._zerog_wall
         d = math.hypot(nx, ny) or 1.0
-        ax, ay = nx / d, ny / d                          # 背离墙单位法向
-        ix, iy = self._zerog_kick_dir                    # AI 蹬向意图
+        ax, ay = nx / d, ny / d
+        ix, iy = self._zerog_kick_dir
         kick_x = ix + (ax - ix) * ZEROG_KICK_LERP
         kick_y = iy + (ay - iy) * ZEROG_KICK_LERP
         c0, c1 = self.chunk0, self.chunk1
-        hx, hy = c0.x - c1.x, c0.y - c1.y                # hip→head 体轴
+        hx, hy = c0.x - c1.x, c0.y - c1.y
         hd = math.hypot(hx, hy) or 1.0
         bx, by = hx / hd, hy / hd
         kick_x = kick_x + (bx - kick_x) * ZEROG_KICK_BODYAXIS
@@ -889,22 +878,20 @@ class SlugcatBody:
         c1.vx += kick_x * ZEROG_HIP_KICK; c1.vy += kick_y * ZEROG_HIP_KICK
         _clamp_vel_mag(c0, ZEROG_HEAD_MAX)
         _clamp_vel_mag(c1, ZEROG_HIP_MAX)
-        c0.vx += ax; c0.vy += ay                         # 脱墙冲量，仅 head
+        c0.vx += ax; c0.vy += ay
         self.canJump = 0
 
     def zerog_swim(self, ux, uy, on_wall):
-        """零重力划水：head 推、hip 反拖。"""
         c0, c1 = self.chunk0, self.chunk1
-        if c0.vx * ux + c0.vy * uy >= ZEROG_SWIM_MAX:    # 到软上限停推
+        if c0.vx * ux + c0.vy * uy >= ZEROG_SWIM_MAX:
             return
         push = ZEROG_SWIM_WALL if on_wall else ZEROG_SWIM_PUSH
         c0.vx += ux * push
         c0.vy += uy * push
-        c1.vx -= ux * ZEROG_SWIM_HIP                     # hip 反向摆动
+        c1.vx -= ux * ZEROG_SWIM_HIP
         c1.vy -= uy * ZEROG_SWIM_HIP
 
     def request_zerog_kick(self, ux: float = 0.0, uy: float = 0.0):
-        """请求下一 tick 蹬窗边。"""
         self._zerog_kick = True
         self._zerog_kick_dir = (ux, uy)
 
@@ -914,11 +901,81 @@ class SlugcatBody:
         ws = self.water_surface
         for c in (self.chunk0, self.chunk1):
             wy = ws.level_at(c.x) if ws is not None else None
-            c.update(self.W, self._floor_h, air_friction=cp.AIR_FRICTION, impact=self.impact_cb,
+            c.update(self.W, self._floor_h, air_friction=cp.AIR_FRICTION, impact=self._impact,
                      room_gravity=self.room_gravity, water_y=wy,
                      buoyancy=self.stats.buoyancy, water_friction=WATER_FRICTION)
             if c.on_floor:
                 c.vx *= 0.7
+
+    # ── 撞击伤害 ──
+    def _held_chunk(self):
+        c0, c1 = self.chunk0, self.chunk1
+        return c0 if c0.pinned else (c1 if c1.pinned else None)
+
+    def _drag_impacts(self):
+        ch = self._held_chunk()
+        k = 1.0
+        if ch is not None and self.drag_speed > 0.0:
+            sp = math.hypot(ch.vx, ch.vy)
+            if sp > 0.5:
+                k = clampf(self.drag_speed / sp, 1.0, tuning.DRAG_IMPACT_MAX_SCALE)
+        self.chunk0.impact_scale = self.chunk1.impact_scale = k
+        if ch is None or self.dead:
+            self._edge_contact = (False, False, False)
+            self._spin_reset()
+            return
+        # 被抓的那节不参与墙体碰撞，撞到屏幕边要单独判
+        r = ch.rad
+        now = (ch.y + r >= self._floor_h - 0.5 and ch.vy > 0.0,
+               ch.x + r >= self.W - 0.5 and ch.vx > 0.0,
+               ch.x - r <= 0.5 and ch.vx < 0.0)
+        for hit, was, d in zip(now, self._edge_contact, ((0, 1), (1, 0), (-1, 0))):
+            if hit and not was:
+                cp.fire_impact(ch, d, math.hypot(ch.vx, ch.vy), True, self._impact)
+        self._edge_contact = now
+        self._spin_check()
+
+    def _spin_reset(self):
+        self._spin_prev = None
+        self._spin_rate = 0.0
+        self._spin_hold = 0
+        self._spin_done = False
+
+    def _spin_check(self):
+        c0, c1 = self.chunk0, self.chunk1
+        ang = math.atan2(c0.y - c1.y, c0.x - c1.x)
+        if self._spin_prev is None:
+            self._spin_prev = ang
+            return
+        d = (ang - self._spin_prev + math.pi) % (2.0 * math.pi) - math.pi
+        self._spin_prev = ang
+        self._spin_rate += (math.degrees(d) * TICK_RATE - self._spin_rate) * 0.25
+        rate = abs(self._spin_rate)
+        if rate >= tuning.SPIN_STUN_DEG_PER_S:
+            self._spin_hold += 1
+            if self._spin_hold >= tuning.SPIN_STUN_TICKS:
+                self._spin_hold = 0
+                self._spin_rate = 0.0
+                if self.stun <= 0 and not self._spin_done and self.on_hurt is not None:
+                    self._spin_done = True
+                    self.on_hurt("stun", tuning.SPIN_STUN_DURATION)
+        else:
+            self._spin_hold = 0
+            if rate < tuning.SPIN_STUN_DEG_PER_S * 0.5:
+                self._spin_done = False
+
+    def _impact(self, chunk, direction, speed, strength, ix, iy):
+        if self.impact_cb is not None:
+            self.impact_cb(chunk, direction, speed, strength, ix, iy)
+        if (self.dead or self.stun > 0 or self.on_hurt is None
+                or speed <= tuning.FALL_STUN_SPEED):
+            return
+        if (speed > tuning.FALL_DEATH_SPEED and direction[1] > 0
+                and self._held_chunk() is None):
+            self.on_hurt("die", 0)
+            return
+        t = inv_lerp(tuning.FALL_STUN_SPEED, tuning.FALL_DEATH_SPEED, speed) ** 2.5
+        self.on_hurt("stun", int(lerp(tuning.FALL_STUN_MIN, tuning.FALL_STUN_MAX, t)))
 
     def _step_dead(self):
         self._settle_ragdoll_integrate()
@@ -1015,6 +1072,13 @@ class SlugcatBody:
                     and self._jump_pending is None):
                 self._crawl_pose()
 
+        if self.walk_target_x is not None:
+            dist = abs(self.walk_target_x - c1.x)
+            if dist < WALK_SLOW_DIST:
+                scale = max(CRAWL_SPEED / max(dyn1, 1.0), dist / WALK_SLOW_DIST)
+                dyn0 *= scale
+                dyn1 *= scale
+
         if self.walk_speed_target is not None:
             dyn0 = min(dyn0, self.walk_speed_target)
             dyn1 = min(dyn1, self.walk_speed_target)
@@ -1042,7 +1106,6 @@ class SlugcatBody:
             self._jump_pending = None
             self._jump_hold = None
 
-        # 持跳可变跳高，离地才逐档施力
         if on_ground:
             pass
         elif self.jump_boost > 0:
@@ -1107,7 +1170,7 @@ class SlugcatBody:
         if self.crawl_anchor is None:
             self.crawl_anchor = c1.x
         self.crawl_pose = min(1.0, self.crawl_pose + 0.025)
-        c1.x += (self.crawl_anchor - c1.x) * 0.06
+        c1.x += (self.crawl_anchor - c1.x) * (tuning.SLEEP_ANCHOR_EASE if self.sleeping else 0.06)
         c1.y = self._floor_h - c1.rad
         c1.vx *= 0.75
         c1.vy = 0.0
@@ -1118,15 +1181,20 @@ class SlugcatBody:
         ahead = math.sqrt(max(0.0, self.conn_rest * self.conn_rest - dy * dy)) * self.facing
         tx = c1.x + ahead
         ty = target_y
-        k = 0.045 + 0.035 * self.crawl_pose
+        if self.sleeping:
+            k = tuning.SLEEP_ANCHOR_EASE
+        elif self.prone_snap > 0:
+            k = 0.35
+            self.prone_snap -= 1
+        else:
+            k = 0.045 + 0.035 * self.crawl_pose
         c0.x += (tx - c0.x) * k
         c0.y += (ty - c0.y) * k
         c0.vx *= 0.82
         c0.vy *= 0.82
 
     def _breath_update(self):
-        # 呼吸周期：睡眠恒定，清醒随疲劳缩短
-        self.last_breath = self.breath          # 先存上帧相位再推进
+        self.last_breath = self.breath
         if self.sleeping:
             period = 80.0
         else:
@@ -1202,7 +1270,6 @@ class SlugcatBody:
             self.walk_bob_y *= 0.85
 
     def _carry_pos(self, side):
-        """Carry hand position in world coords."""
         c0 = self.chunk0
         sgn = -1.0 if side == "l" else 1.0
         ang = _ang_from_up(c0.x - self.chunk1.x, c0.y - self.chunk1.y)
@@ -1211,22 +1278,19 @@ class SlugcatBody:
         return c0.x + ox, c0.y + oy
 
     def reach_for(self, fruit, side):
-        """Aim hand at fruit; clear opposite side (only one hand reaches)."""
         self.arm_aim[side] = (fruit.x, fruit.y)
         self.arm_aim["l" if side == "r" else "r"] = None
 
     def grab_fruit(self, fruit, side):
-        """Grab fruit with one hand; convert to carried (kinematic)."""
         self.carried_fruit = fruit
         self.carry_hand = side
         fruit.state = "carried"
         fruit.held_by_hand = side
         self.eat_raise = 0.0
-        if fruit.stalk is not None:      # 抓取瞬即脆断果柄
+        if fruit.stalk is not None:
             fruit.stalk.release_counter = 2
 
     def release_fruit(self):
-        """Release grip; caller sets fruit.state."""
         side = self.carry_hand
         self.carried_fruit = None
         self.carry_hand = None
@@ -1235,7 +1299,6 @@ class SlugcatBody:
             self.arm_aim[side] = None
 
     def bite_carried(self):
-        """Consume one bite; return True if finished (bites < min). Caller handles state+release."""
         f = self.carried_fruit
         if f is None:
             return False
@@ -1257,7 +1320,6 @@ class SlugcatBody:
         return False
 
     def _apply_carry(self):
-        """Each tick: write carried fruit to hand position, aim arm, advance stalk detach."""
         f = self.carried_fruit
         if f is None:
             return
@@ -1272,15 +1334,27 @@ class SlugcatBody:
             if f.stalk.step(f):
                 f.stalk = None
 
+    @property
+    def carried(self):
+        return self.carried_fruit if self.carried_fruit is not None else self.carried_stone
+
+    def drop_carried(self):
+        f = self.carried_fruit
+        if f is not None:
+            f.stalk = None
+            f.state = "free"
+            f.held_by_hand = None
+            self.release_fruit()
+        if self.carried_stone is not None:
+            self.release_stone(to_free=True)
+
     def grab_stone(self, stone, side):
-        """Grab stone with one hand; convert to carried (kinematic)."""
         self.carried_stone = stone
         self.carry_hand = side
         stone.state = "carried"
         self.eat_raise = 0.0
 
     def release_stone(self, to_free=False):
-        """Release grip on stone; optionally convert to free."""
         side = self.carry_hand
         s = self.carried_stone
         self.carried_stone = None
@@ -1291,8 +1365,8 @@ class SlugcatBody:
         if side is not None:
             self.arm_aim[side] = None
 
-    def throw_stone(self, dir_x, base_speed, up=3.0, recoil=1.0):
-        """Throw carried stone; return stone (free + velocity) or None."""
+    def throw_stone(self, dir_x, base_speed, up=3.0, recoil=1.0, vy=None):
+        """抛出手中石头，返回石头或 None；vy 给定时覆盖竖直初速。"""
         s = self.carried_stone
         if s is None:
             return None
@@ -1304,10 +1378,10 @@ class SlugcatBody:
         s.x = sx + float(dir_x) * 10.0
         s.y = sy - 4.0
         s.vx = c0.vx * 0.2 + float(dir_x) * base_speed
-        s.vy = c0.vy * 0.5 - up
+        s.vy = c0.vy * 0.5 - up if vy is None else float(vy)
         s.spin = float(dir_x) * 8.0
         s.fling = False
-        s.thrown_by_saint = True
+        s.thrown_by_cat = True
         s.state = "free"
         self.release_stone(to_free=False)
         c0.vx += float(dir_x) * 8.0 * recoil
@@ -1315,7 +1389,6 @@ class SlugcatBody:
         return s
 
     def _apply_carry_stone(self):
-        """Each tick: write carried stone to hand position, aim arm."""
         s = self.carried_stone
         if s is None:
             return
@@ -1337,7 +1410,7 @@ def _dot_norm(vx, vy, ux, uy):
 
 
 def _angle_deg(ax, ay, bx, by):
-    """两向量夹角（度，[0,180]，Vector2.Angle 等价）。"""
+    """两向量夹角（度，[0,180]）。"""
     am = math.hypot(ax, ay)
     bm = math.hypot(bx, by)
     if am < 1e-9 or bm < 1e-9:
@@ -1348,7 +1421,7 @@ def _angle_deg(ax, ay, bx, by):
 
 
 def _slerp2(ax, ay, bx, by, t):
-    """两单位向量球插（Vector3.Slerp 2D 等价）；t∈[0,1]。"""
+    """两单位向量球插；t∈[0,1]。"""
     d = ax * bx + ay * by
     d = -1.0 if d < -1.0 else (1.0 if d > 1.0 else d)
     theta = math.acos(d) * (0.0 if t < 0.0 else (1.0 if t > 1.0 else t))
@@ -1371,7 +1444,6 @@ def _clamp_vel_mag(c, maxv):
 
 
 def _closest_on_segment(px, py, ax, ay, bx, by):
-    """点 (px,py) 到线段 a-b 的最近点 (cx,cy) 与距离。"""
     dx, dy = bx - ax, by - ay
     dd = dx * dx + dy * dy
     if dd < 1e-12:
@@ -1380,13 +1452,3 @@ def _closest_on_segment(px, py, ax, ay, bx, by):
     t = 0.0 if t < 0.0 else (1.0 if t > 1.0 else t)
     cx, cy = ax + dx * t, ay + dy * t
     return cx, cy, math.hypot(px - cx, py - cy)
-
-
-def _ang_from_up(dx, dy):
-    return math.degrees(math.atan2(dx, -dy))
-
-
-def _rot(lx, ly, deg):
-    t = math.radians(deg)
-    c, s = math.cos(t), math.sin(t)
-    return lx * c - ly * s, lx * s + ly * c

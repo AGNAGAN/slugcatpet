@@ -1,6 +1,7 @@
-"""光标劫持：落体→底边锁定，替换系统光标为"忙"样式。"""
+"""光标劫持：落体或被弹开→锁定，可替换系统光标为"忙"样式。"""
 from __future__ import annotations
 import sys
+import math
 import atexit
 
 _IS_WIN = sys.platform == "win32"
@@ -9,8 +10,11 @@ _IS_WIN = sys.platform == "win32"
 T_FALL_GRAV = 1.6
 T_CURSOR_LOCK = 200
 WATCHDOG_MAX = 400
+K_KNOCK = 0.88           # 被弹开：每 tick 速度衰减
+K_KNOCK_GRAV = 0.5
+K_KNOCK_LAND = 6         # 速度低于此即停下锁定
 
-_ACTIVE = []             # 活动劫持列表
+_ACTIVE = []
 
 if _IS_WIN:
     import ctypes
@@ -33,7 +37,7 @@ if _IS_WIN:
         _user32.SetCursorPos(int(x), int(y))
 
     _OCR_IDS = (32512, 32513, 32649)   # OCR_NORMAL/IBEAM/HAND
-    _IDC_APPSTARTING = 32650           # 系统"忙"光标
+    _IDC_APPSTARTING = 32650
     _SPI_SETCURSORS = 0x0057
 
     _user32.LoadCursorW.restype = ctypes.c_void_p
@@ -59,7 +63,6 @@ if _IS_WIN:
         return ok
 
     def _restore_cursors():
-        """从注册表重载全部系统光标恢复默认（幂等）。"""
         _user32.SystemParametersInfoW(_SPI_SETCURSORS, 0, None, 0)
 else:
     def _clip(x, y):
@@ -78,30 +81,45 @@ else:
         pass
 
 
+def restore_cursors():
+    try:
+        _restore_cursors()
+    except Exception:
+        pass
+
+
 class CursorHijack:
     """光标劫持。坐标 = Win32 物理像素（屏幕全局，已由 window 按 dpr 换算）。"""
 
     def __init__(self, dev_x, dev_y, screen_w, screen_h, screen_x=0, screen_y=0, mock=False,
-                 lock_ticks=T_CURSOR_LOCK, mode="fall", watchdog_max=WATCHDOG_MAX):
+                 lock_ticks=T_CURSOR_LOCK, mode="fall", watchdog_max=WATCHDOG_MAX,
+                 replace_cursor=True, knock_v=(0.0, 0.0)):
         self.mock = mock or not _IS_WIN
         self.x = float(dev_x)
         self.y = float(dev_y)
-        self.vy = 0.0
+        self.vx = float(knock_v[0])
+        self.vy = float(knock_v[1])
         self.W = screen_w
         self.H = screen_h
         self.x0 = screen_x
         self.y0 = screen_y
         self.bottom = screen_y + screen_h - 2
         self.mode = mode
-        self.phase = "hold" if mode == "hold" else "fall"   # fall → lock → done；hold → done
+        if mode == "hold":
+            self.phase = "hold"                     # hold → done
+        elif self.vx or self.vy:
+            self.phase = "knock"                    # knock → lock → done
+        else:
+            self.phase = "fall"                     # fall → lock → done
         self.lock_ticks = int(lock_ticks)
         self.lock_t = 0
         self.watchdog = 0
         self.watchdog_max = int(watchdog_max)
         self.use_setpos = False     # ClipCursor 失败降级标志
+        self.replace_cursor = bool(replace_cursor)
         self.active = True
         _ACTIVE.append(self)
-        if not self.mock:
+        if not self.mock and self.replace_cursor:
             _set_busy_cursor()
 
     def hold_at(self, dev_x, dev_y):
@@ -109,7 +127,6 @@ class CursorHijack:
         self.y = float(dev_y)
 
     def update(self) -> bool:
-        """推进一帧。返回是否仍活动。"""
         if not self.active:
             return False
         self.watchdog += 1
@@ -117,7 +134,16 @@ class CursorHijack:
             self.release()
             return False
 
-        if self.phase == "fall":
+        if self.phase == "knock":
+            self.vx *= K_KNOCK
+            self.vy = self.vy * K_KNOCK + K_KNOCK_GRAV
+            self.x += self.vx
+            self.y += self.vy
+            self.use_setpos = True                  # ClipCursor 看不出位移，主动推光标
+            if math.hypot(self.vx, self.vy) < K_KNOCK_LAND:
+                self.phase = "lock"
+                self.lock_t = 0
+        elif self.phase == "fall":
             self.vy += T_FALL_GRAV
             self.y += self.vy
             if self.y >= self.bottom:
@@ -158,7 +184,6 @@ class CursorHijack:
                 pass
 
     def release(self):
-        """释放 ClipCursor。幂等。"""
         if not self.active:
             return
         self.active = False
@@ -168,10 +193,8 @@ class CursorHijack:
                 _unclip()
             except Exception:
                 pass
-            try:
-                _restore_cursors()
-            except Exception:
-                pass
+            if self.replace_cursor:
+                restore_cursors()
         try:
             _ACTIVE.remove(self)
         except ValueError:
@@ -179,16 +202,15 @@ class CursorHijack:
 
 
 def abort_all():
-    """释放所有活动劫持。"""
     for h in list(_ACTIVE):
         h.release()
     if _IS_WIN:
         try:
-            _unclip()                              # 兜底
+            _unclip()
         except Exception:
             pass
         try:
-            _restore_cursors()                     # 兜底
+            _restore_cursors()
         except Exception:
             pass
 

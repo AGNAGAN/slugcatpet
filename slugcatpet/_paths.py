@@ -1,28 +1,28 @@
 """Resolve asset and writable data paths across dev and frozen (PyInstaller) contexts."""
 from __future__ import annotations
+import os
 import sys
 from pathlib import Path
 
 
 def base_dir() -> Path:
-    """Frozen unpacked root / dev repository root."""
     if getattr(sys, "frozen", False):
         return Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
     return Path(__file__).resolve().parent.parent
 
 
 def resource_dir() -> Path:
-    """Read-only resource root (assets, layouts)."""
     if getattr(sys, "frozen", False):
         return base_dir() / "slugcatpet" / "resources"
     return Path(__file__).resolve().parent / "resources"
 
 
 def user_dir() -> Path:
-    """User writable data directory (~/.slugcatpet); migrates legacy ~/.saintpet if present."""
-    d = Path.home() / ".slugcatpet"
+    """~/.slugcatpet，可用 SLUGCATPET_HOME 覆盖；旧版 ~/.saintpet 首次自动迁移。"""
+    env = os.environ.get("SLUGCATPET_HOME")
+    d = Path(env) if env else Path.home() / ".slugcatpet"
     old = Path.home() / ".saintpet"
-    if not d.exists() and old.is_dir():
+    if not env and not d.exists() and old.is_dir():
         try:
             old.rename(d)
         except Exception:
@@ -35,10 +35,21 @@ def user_dir() -> Path:
 
 
 def assets_dir() -> Path:
-    """用户导入的图集目录（~/.slugcatpet/assets）。"""
     return user_dir() / "assets"
 
 
+def music_asset_dirs() -> list[Path]:
+    return [assets_dir() / "music"]
+
+
 def bundled_assets_dir() -> Path:
-    """仓库内资产目录（开发降级用）。"""
     return resource_dir() / "assets"
+
+
+def user_music_dir() -> Path:
+    d = user_dir() / "music"
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+    return d

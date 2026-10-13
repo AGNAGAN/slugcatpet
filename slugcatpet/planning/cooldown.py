@@ -2,7 +2,7 @@
 from __future__ import annotations
 import time
 
-from ..behavior import tuning
+from .. import tuning
 
 TICK_HZ = 40.0
 

@@ -23,7 +23,6 @@ def dispatch(body, inp0) -> None:
         _belly_to_flip_or_rocket(body, c0, c1, rd, inp0)
         return
 
-    # DownOnFours + 下斜==朝向 → BellySlide
     if a == "DownOnFours" and c1.on_floor and inp0.downDiagonal == flip:
         body.animation = "BellySlide"
         body._ctrl_roll_direction = flip
@@ -31,11 +30,11 @@ def dispatch(body, inp0) -> None:
         body.standing = False
         return
 
-    body.animation = None                        # 清残留 animation
+    body.animation = None
 
     if body.standing:
         if 0 < body._ctrl_slide_counter < 10:
-            _flip_skid_jump(body, c0, c1)       # 急刹窗口内按跳 → Flip 翻跳
+            _flip_skid_jump(body, c0, c1)
         else:
             _standard_jump(body, c0, c1)
     else:
@@ -57,7 +56,6 @@ def _flip_skid_jump(body, c0, c1) -> None:
 
 
 def _roll_to_rocket(body, c0, c1, rd) -> None:
-    """Roll→RocketJump，弹出方向角/速随滚动计时插值。"""
     c1.vx = 0.0
     c1.vy = 0.0
     c1.x += 5.0 * rd
@@ -66,11 +64,11 @@ def _roll_to_rocket(body, c0, c1, rd) -> None:
     c0.y = c1.y - 5.0
     t = inv_lerp(0.0, 25.0, body._ctrl_roll_counter)
     ang = rd * lerp(60.0, 35.0, t)
-    speed = lerp(9.5, 13.1, t)                   # 肾上腺素系数=1
+    speed = lerp(9.5, 13.1, t)
     vx, vy = vmath.degvec(ang)                   # y↑ 向量，此时未翻
     vx *= speed
     vy *= speed
-    m = body.stats.roll_rocket_vx_mult           # 仅水平 ×，溪流 1.5
+    m = body.stats.roll_rocket_vx_mult
     c0.vx = vx * m
     c0.vy = -vy                                  # y 翻
     c1.vx = vx * m
@@ -83,23 +81,17 @@ def _belly_to_flip_or_rocket(body, c0, c1, rd, inp0) -> None:
     """BellySlide 跳出：whiplash||反向x → Flip 路径1（后空翻）；否则 RocketJump 路径2（滑铲火箭）。"""
     s = body.stats
     if body._ctrl_whiplash or inp0.x == -rd:
-        # Flip 路径1
         body.animation = "Flip"
         body.standing = True
-        back_steps = 3                            # 无砖格，取探测上限 3
-        c0.x += rd * (-(back_steps * 15.0 + 8.0))
-        c0.y -= 14.0
-        c1.x += rd * (-(back_steps * 15.0 + 2.0))
+        c0.y -= 14.0                              # 无砖格，不做原版的后退瞬移
         c0.vx = rd * (-s.backflip_vx)
         c0.vy = s.backflip_c0_vy
         c1.vx = rd * (-s.backflip_vx)
         c1.vy = s.backflip_c1_vy
-        body._ctrl_roll_direction = -rd          # 反号
-        body._ctrl_flip_from_slide = True
+        body._ctrl_roll_direction = -rd
         body._ctrl_whiplash = False
         body.jump_boost = 0.0
     else:
-        # RocketJump 路径2
         launch_vx = s.belly_rocket_vx
         launch_vy = s.belly_rocket_vy
         c1.x += 5.0 * rd
@@ -131,11 +123,11 @@ def _crouch_jump(body, c0, c1, inp0) -> None:
     dir_x = inp0.x
     if body._ctrl_super_launch >= 20:
         body._ctrl_super_launch = 0
-        pounce_speed = body.stats.pounce_super    # 溪流 12，余 9
-        dir_x = 1 if c0.x > c1.x else -1          # 朝向
-        body._ctrl_sim_hold = 6                   # 自动持跳
+        pounce_speed = body.stats.pounce_super
+        dir_x = 1 if c0.x > c1.x else -1
+        body._ctrl_sim_hold = 6
     c0.y -= 6.0
-    if c0.on_floor:                               # 头触地判定
+    if c0.on_floor:
         c0.vy -= 3.0
         if dir_x == 0:
             c0.vy -= 3.0

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import math
-import random
 
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import (QBrush, QColor, QLinearGradient, QPainter,
@@ -18,7 +17,6 @@ _OVER = QPainter.CompositionMode.CompositionMode_SourceOver
 
 
 def _clerp(a, b, t):
-    """RGB 三元组 lerp（t 钳 [0,1]）。"""
     t = 0.0 if t < 0.0 else (1.0 if t > 1.0 else t)
     return (int(a[0] + (b[0] - a[0]) * t),
             int(a[1] + (b[1] - a[1]) * t),
@@ -26,7 +24,6 @@ def _clerp(a, b, t):
 
 
 def _smoke_scale(life):
-    """烟尺寸曲线：先涨大后收缩。"""
     if life > 0.5:
         return lerp(0.5, 1.0, inv_lerp(1.0, 0.5, life))
     return math.sin(max(life, 0.0) * math.pi)
@@ -62,9 +59,9 @@ def draw_smoke(p, s):
     sc = _smoke_scale(life)
     if sc <= 0.0:
         return
-    u = 1.0 - life                       # 寿命进度 0→1
+    u = 1.0 - life
     base = min(1.0, math.pow(max(s.life, 0.0), 1.8))
-    comp = 0.036 + 0.064 * math.pow(life, 2.2)   # 透明度曲线
+    comp = 0.036 + 0.064 * math.pow(life, 2.2)
     c0, c1 = _smoke_colors(s, life)
     p.setCompositionMode(_OVER)
     p.setPen(Qt.PenStyle.NoPen)
@@ -77,7 +74,7 @@ def draw_smoke(p, s):
             aa = int(a * w)
             if aa <= 0:
                 continue
-            mid = 0.38 + 0.14 * (phase % 1.0)    # 逐 lobe 抖动，外缘碎化
+            mid = 0.38 + 0.14 * (phase % 1.0)
             g = QRadialGradient(QPointF(bx, by), br)
             g.setColorAt(0.0, QColor(*col, aa))
             g.setColorAt(mid, QColor(*col, int(aa * 0.6)))
@@ -93,7 +90,6 @@ def draw_light(p, l):
     if r <= 0.5:
         return
     c = QPointF(l.x, l.y)
-    # 暗盘压底衬亮
     a0 = int(255 * life * l.alpha * 0.5)
     if a0 > 0:
         p.setCompositionMode(_OVER)
@@ -104,13 +100,12 @@ def draw_light(p, l):
         g.setColorAt(1.0, QColor(0, 0, 0, 0))
         p.setBrush(QBrush(g))
         p.drawEllipse(c, r, r)
-    # 双层加色光晕，第二层随机偏白
     a1 = int(255 * math.pow(life, 0.5) * l.alpha)
     if a1 <= 0:
         return
     p.setCompositionMode(_PLUS)
     p.setPen(Qt.PenStyle.NoPen)
-    col2 = _clerp(l.color, (255, 255, 255), random.random() * math.pow(life, 0.5))
+    col2 = _clerp(l.color, (255, 255, 255), l.white * math.pow(life, 0.5))
     for col in (l.color, col2):
         g = QRadialGradient(c, r)
         g.setColorAt(0.0, QColor(*col, a1))
@@ -127,7 +122,6 @@ def draw_spikes(p, sp):
         if a <= 0:
             continue
         col = _clerp(sp.color, (255, 255, 255), white_t)
-        # 线性渐变近似顶点插值
         g = QLinearGradient(QPointF(*tip), QPointF((b1[0] + b2[0]) / 2, (b1[1] + b2[1]) / 2))
         g.setColorAt(0.0, QColor(*col, a))
         g.setColorAt(1.0, QColor(*col, 0))
@@ -144,7 +138,7 @@ def draw_spark(p, s):
         else:
             dx, dy = (tx - s.x) / d, (ty - s.y) / d
         tx, ty = s.x + dx * 9.0, s.y + dy * 9.0
-    t = inv_lerp(0.0, 0.1, s.life)       # 濒死拖尾收缩
+    t = inv_lerp(0.0, 0.1, s.life)
     tx, ty = lerp(s.x, tx, t), lerp(s.y, ty, t)
     ddx, ddy = s.x - tx, s.y - ty
     dd = math.hypot(ddx, ddy)
@@ -201,7 +195,6 @@ _DRAW = {ExplosionSmoke: draw_smoke, FlashingSmoke: draw_smoke,
 
 
 def _draw_sorted(p, fx):
-    """按 LAYER 升序绘制一段粒子列表。"""
     for q in sorted(fx, key=lambda q: q.LAYER):
         fn = _DRAW.get(type(q))
         if fn is not None:
@@ -209,10 +202,8 @@ def _draw_sorted(p, fx):
 
 
 def draw_fx_under(p, fx):
-    """猫身之下段：焦痕→烟。"""
     _draw_sorted(p, split_fx_layers(fx)[0])
 
 
 def draw_fx_over(p, fx):
-    """猫身之上段：尖刺→火花→光→冲击环。"""
     _draw_sorted(p, split_fx_layers(fx)[1])

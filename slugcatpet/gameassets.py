@@ -1,10 +1,10 @@
-"""从用户本机 Rain World 安装提取图集到 ~/.slugcatpet/assets。"""
+"""从用户本机 Rain World 安装提取图集和场景曲到 ~/.slugcatpet/assets。"""
 from __future__ import annotations
 import re
 import sys
 from pathlib import Path
 
-from ._paths import assets_dir, bundled_assets_dir
+from ._paths import assets_dir, bundled_assets_dir, music_asset_dirs, user_dir
 from .i18n import t
 
 # 图集名：base + MSC 各含贴图与 UI
@@ -23,13 +23,10 @@ def atlases_present(d: Path) -> bool:
                 "uiSprites", "uiSprites.png", "uispritesmsc", "uispritesmsc.png"))
 
 
-# 定位 Steam 安装
-
 def _drive_roots() -> list[Path]:
     if sys.platform == "win32":
         return [Path(f"{c}:\\") for c in "CDEFGHIJKLMNOP"
                 if Path(f"{c}:\\").exists()]
-    # mac / linux Steam 默认库
     home = Path.home()
     return [home / "Library/Application Support/Steam",
             home / ".steam/steam", home / ".local/share/Steam"]
@@ -56,7 +53,6 @@ def _steam_root() -> Path | None:
 
 
 def _steam_libraries() -> list[Path]:
-    """枚举所有 Steam 库根目录。"""
     roots: list[Path] = []
     sr = _steam_root()
     if sr:
@@ -82,8 +78,24 @@ def _steam_libraries() -> list[Path]:
     return libs
 
 
+INSTALL_FILE = "game_path.txt"     # 导入图集时记下游戏目录，手动选的也能再找到
+
+
+def _saved_install() -> Path | None:
+    for d in {assets_dir(), user_dir() / "assets"}:
+        try:
+            game = Path((d / INSTALL_FILE).read_text(encoding="utf-8").strip())
+        except (OSError, ValueError):
+            continue
+        if (game / _ATLAS_REL).exists():
+            return game
+    return None
+
+
 def detect_install() -> Path | None:
-    """返回 Rain World 游戏根目录，找不到返回 None。"""
+    saved = _saved_install()
+    if saved is not None:
+        return saved
     for lib in _steam_libraries():
         game = lib / "steamapps" / "common" / "Rain World"
         if (game / _ATLAS_REL).exists():
@@ -91,10 +103,7 @@ def detect_install() -> Path | None:
     return None
 
 
-# 提取
-
 def extract_atlases(install: Path, dest: Path | None = None) -> Path:
-    """从游戏 resources.assets 提取 4 个图集文件到 dest（默认 ~/.slugcatpet/assets）。"""
     install = Path(install)
     res = install / _ATLAS_REL
     if not res.exists():
@@ -134,11 +143,114 @@ def extract_atlases(install: Path, dest: Path | None = None) -> Path:
         raise SetupError(t("err_ui_fail"))
     if got.get("uispritesmsc") != {"png", "map"}:
         raise SetupError(t("err_uimsc_missing"))
+    try:
+        (dest / INSTALL_FILE).write_text(str(install.resolve()), encoding="utf-8")
+    except OSError:
+        pass
     return dest
 
 
+_STREAMING = Path("RainWorld_Data") / "StreamingAssets"
+_AUDIO_BUNDLES = ("music_songs",)
+_LOOSE_AUDIO = (("music/songs", ".mp3"),)
+
+
+def _bundle_clips(install: Path, names) -> dict[str, bytes]:
+    import UnityPy
+    from UnityPy.helpers.ResourceReader import get_resource_data
+    want, got = set(names), {}
+    for bundle in _AUDIO_BUNDLES:
+        path = install / _STREAMING / "AssetBundles" / bundle
+        if not path.is_file() or not want - got.keys():
+            continue
+        for obj in UnityPy.load(str(path)).objects:
+            if obj.type.name != "AudioClip":
+                continue
+            d = obj.read()
+            if d.m_Name in want:
+                r = d.m_Resource
+                got[d.m_Name] = bytes(get_resource_data(r.m_Source, d.assets_file, r.m_Offset, r.m_Size))
+    return got
+
+
+def read_bundle_clip(install: Path, name: str) -> bytes:
+    return _bundle_clips(Path(install), [name])[name]
+
+
+_MUSIC_MARK = ".format"          # 记录提取时的 ogg 格式版本，对不上就重新提取
+
+
+def _ogg_format() -> int:
+    from .audio.fsbogg import FORMAT
+    return FORMAT
+
+
+def _music_current(d: Path) -> bool:
+    try:
+        return (d / _MUSIC_MARK).read_text(encoding="ascii").strip() == str(_ogg_format())
+    except OSError:
+        return False
+
+
+def music_missing(names, dirs=None) -> list[str]:
+    dirs = [d for d in (music_asset_dirs() if dirs is None else dirs) if _music_current(d)]
+    return [n for n in names
+            if not any((d / (n + ext)).is_file() for d in dirs for ext in (".ogg", ".mp3"))]
+
+
+def prune_music(keep) -> None:
+    d = music_asset_dirs()[0]
+    try:
+        files = list(d.iterdir())
+    except OSError:
+        return
+    for f in files:
+        if f.suffix == ".part" or (f.suffix in (".ogg", ".mp3") and f.stem not in keep):
+            try:
+                f.unlink()
+            except OSError:
+                pass
+
+
+def extract_music(install: Path, names, dest: Path | None = None) -> list[str]:
+    """游戏里有完整散文件就直接复制，否则从资源包重新封装成 ogg；已有的跳过，单首失败不影响别的，返回这次写出的曲名。"""
+    from .audio.fsbogg import fsb_to_ogg
+    install = Path(install)
+    out = Path(dest) / "music" if dest is not None else music_asset_dirs()[0]
+    todo = music_missing(names, [out] if dest is not None else None)
+    if not todo:
+        return []
+    out.mkdir(parents=True, exist_ok=True)
+    blobs: dict[str, tuple[str, bytes]] = {}
+    for name in todo:
+        for sub, ext in _LOOSE_AUDIO:
+            f = install / _STREAMING / sub / (name + ext)
+            try:
+                if f.is_file() and f.stat().st_size > 0:
+                    blobs[name] = (ext, f.read_bytes())
+                    break
+            except OSError:
+                pass
+    rest = [n for n in todo if n not in blobs]
+    if rest:
+        try:
+            clips = _bundle_clips(install, rest)
+        except Exception:
+            clips = {}
+        for name, fsb in clips.items():
+            try:
+                blobs[name] = (".ogg", fsb_to_ogg(fsb))
+            except ValueError:
+                pass
+    for name, (ext, data) in blobs.items():
+        tmp = out / (name + ext + ".part")
+        tmp.write_bytes(data)
+        tmp.replace(out / (name + ext))
+    (out / _MUSIC_MARK).write_text(str(_ogg_format()), encoding="ascii")
+    return list(blobs)
+
+
 def ensure_atlases() -> Path:
-    """已导入则直接返回，否则自动定位安装并提取。"""
     for d in (assets_dir(), bundled_assets_dir()):
         if atlases_present(d):
             return d

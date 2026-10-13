@@ -28,13 +28,12 @@ class _Flake:
 
 
 class Snowfall:
-    """稀疏雪花池+边缘霜冻 vignette；纯视觉，无碰撞。"""
 
     def __init__(self, max_flakes, vignette_max, seed=0):
         self.max_flakes = int(max_flakes)
         self.vignette_max = int(vignette_max)
         self._rng = random.Random(0x5170 ^ (int(seed) * 2654435761 & 0xFFFFFFFF))
-        self._flakes = []          # 长度随强度伸缩
+        self._flakes = []
         self.intensity = 0.0
         self._vignette_pm = None   # 满强度预渲染缓存，尺寸变自动重建
         self._vignette_key = None
@@ -44,7 +43,6 @@ class Snowfall:
         return self.intensity > 0.001 or bool(self._flakes)
 
     def _new_flake(self, WL, HL, spread) -> _Flake:
-        """生成一片雪花；spread=True 时 y 散布全高。"""
         rng = self._rng
         f = _Flake()
         f.r = rng.uniform(FLAKE_R_MIN, FLAKE_R_MAX)
@@ -60,7 +58,6 @@ class Snowfall:
         return f
 
     def step(self, cycle_prog, WL, HL):
-        """推进雪花物理，按强度伸缩密度。"""
         self.intensity = snowfall_intensity(cycle_prog)
         norm = min(self.intensity / _INTENSITY_PEAK, 1.0)
         target = int(round(self.max_flakes * norm))
@@ -83,7 +80,6 @@ class Snowfall:
         self._flakes = kept
 
     def _vignette(self, WL, HL, scale):
-        """满强度 vignette 预渲染缓存；绘制时按 setOpacity 调强度。"""
         key = (int(round(WL * scale)), int(round(HL * scale)))
         if self._vignette_key != key:
             pm = QPixmap(key[0], key[1])
@@ -105,7 +101,6 @@ class Snowfall:
         return self._vignette_pm
 
     def draw(self, p, WL, HL, scale=1.0):
-        """绘制边缘霜冻 vignette + 雪花，最上层 overlay。"""
         if not self.active:
             return
         norm = min(self.intensity / _INTENSITY_PEAK, 1.0)

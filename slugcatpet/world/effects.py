@@ -18,17 +18,25 @@ class EffectsMixin:
         return ((self._area.x() + logical_x * self._scale) * dpr,
                 (self._area.y() + logical_y * self._scale) * dpr)
 
-    def start_cursor_hijack(self, logical_x, logical_y, lock_ticks=None):
+    def start_cursor_hijack(self, logical_x, logical_y, lock_ticks=None, knock_v=(0.0, 0.0)):
+        """劫持光标；设置里关了抢光标则返回 None。knock_v 为逻辑 px/tick 的弹开初速。"""
+        if not self.cfg_cursor_hijack:
+            return None
         from ..platform.cursorfx import CursorHijack
 
         dpr = self.devicePixelRatioF()
         dev_x, dev_y = self._cursor_to_device(logical_x, logical_y)
+        k = self._scale * dpr
         kw = {} if lock_ticks is None else {"lock_ticks": lock_ticks}
         self.cursor_hijack = CursorHijack(
             dev_x, dev_y, self._area.width() * dpr, self._area.height() * dpr,
-            self._area.x() * dpr, self._area.y() * dpr, **kw)
+            self._area.x() * dpr, self._area.y() * dpr,
+            replace_cursor=self.cfg_cursor_shape, knock_v=(knock_v[0] * k, knock_v[1] * k), **kw)
+        return self.cursor_hijack
 
     def start_cursor_hold(self, logical_x, logical_y, max_ticks):
+        if not self.cfg_cursor_hijack:
+            return None
         from ..platform.cursorfx import CursorHijack
 
         dpr = self.devicePixelRatioF()
@@ -36,7 +44,7 @@ class EffectsMixin:
         self.cursor_hijack = CursorHijack(
             dev_x, dev_y, self._area.width() * dpr, self._area.height() * dpr,
             self._area.x() * dpr, self._area.y() * dpr,
-            mode="hold", watchdog_max=max_ticks)
+            mode="hold", watchdog_max=max_ticks, replace_cursor=self.cfg_cursor_shape)
         return self.cursor_hijack
 
     def move_cursor_hold(self, logical_x, logical_y):
@@ -71,11 +79,9 @@ class EffectsMixin:
                 sw.append(w)
         self.shockwaves = sw
 
-        # fx: update() 返回 False 即剔除
         if self.fx:
             self.fx = [q for q in self.fx if q.update()]
 
-        # 无水面则清空
         if self.bubbles:
             surf = self.water_surface
             if surf is None:
@@ -88,7 +94,6 @@ class EffectsMixin:
             self.cursor_hijack = None
 
     def _draw_fx_under(self, p):
-        # 焦痕/烟层，画在猫身体之下
         if not self.fx:
             return
         from .explosionfx_draw import draw_fx_under
@@ -98,7 +103,6 @@ class EffectsMixin:
         p.restore()
 
     def _draw_fx(self, p):
-        # 各猫独占全屏特效（如业力眼）
         pet_fx = [fx for fx in (pet.behavior.exclusive_fx()
                                 for pet in self.pets if pet.behavior is not None)
                   if fx is not None]
@@ -118,7 +122,6 @@ class EffectsMixin:
             a = int(230 * (s[4] / s[5]))
             p.setBrush(QColor(255, 255, 240, a) if s[6] else QColor(*self.layout_data.tint, a))
             p.drawEllipse(QPointF(s[0], s[1]), 0.9, 0.9)
-        # 尖刺/火花/光/环层
         if self.fx:
             from .explosionfx_draw import draw_fx_over
             draw_fx_over(p, self.fx)

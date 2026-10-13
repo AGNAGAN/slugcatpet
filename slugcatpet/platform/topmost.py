@@ -20,7 +20,6 @@ if _IS_WIN:
 
     _user32 = ctypes.windll.user32
 
-    # WinEvent 回调签名（win32 参数名）
     WINEVENTPROC = ctypes.WINFUNCTYPE(
         None, wintypes.HANDLE, wintypes.DWORD, wintypes.HWND,
         wintypes.LONG, wintypes.LONG, wintypes.DWORD, wintypes.DWORD,
@@ -68,8 +67,6 @@ if _IS_WIN:
 
 
 class TopmostKeeper:
-    """维持一组窗置顶，仅在丢失样式时重申。"""
-
     def __init__(self, windows, is_suspended=None, *,
                  get_exstyle=None, set_topmost=None, install_hook=None, remove_hook=None):
         self._windows = list(windows)
@@ -89,7 +86,6 @@ class TopmostKeeper:
         self._hook = None
 
     def reassert(self):
-        """逐窗补置顶，暂停时跳过。"""
         if self._is_suspended():
             return
         for w in self._windows:
@@ -104,8 +100,22 @@ class TopmostKeeper:
             except Exception:
                 pass
 
+    def force_top(self):
+        """不管标志位，把所有可见窗重新提到置顶组最上面。"""
+        if self._is_suspended():
+            return
+        for w in reversed(self._windows):
+            try:
+                if not w.isVisible():
+                    continue
+                w.raise_()
+                hwnd = int(w.winId())
+                if hwnd:
+                    self._set_topmost(hwnd)
+            except Exception:
+                pass
+
     def start(self):
-        """装前台变更钩子；非 Win 靠外部轮询。"""
         if self._hook is not None or self._install_hook is None:
             return
         try:
