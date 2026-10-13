@@ -75,6 +75,9 @@ class Stunned(State):
         if fsm.body.stun <= 0:
             fsm.gfx.stunned = False
             fsm.body.set_posture(True)
+            if not fsm.stun_blame:
+                fsm.settle()
+                return
             if fsm.stun_takeover is not None and fsm.stun_takeover():
                 return
             fsm.anger = ANGER_TOTAL

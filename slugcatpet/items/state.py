@@ -8,5 +8,6 @@ class ItemState:
     HANGING = "hanging"
     CARRIED = "carried"
     MOUSE = "mouse"
+    STUCK = "stuck"  # 扎在墙里或身上
     EATEN = "eaten"
     GONE = "gone"

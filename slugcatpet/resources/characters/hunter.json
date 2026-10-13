@@ -21,7 +21,8 @@
     "pole_fac": 1.25,
     "weight_fac": 1.12,
     "max_food": 9,
-    "food_hibernate": 6
+    "food_hibernate": 6,
+    "throw_skill": 2
   },
   "personality": {
     "activity": 0.65,

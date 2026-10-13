@@ -102,8 +102,7 @@ class SlimeMoldKind(ItemKind):
 
     def drop(self, win, m):
         for pet in win.pets:
-            if m is pet.body.carried_fruit:
-                pet.body.release_fruit()
+            pet.body.release(m)
         m.state = ItemState.EATEN
 
     def on_grab(self, m):

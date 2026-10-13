@@ -4,6 +4,7 @@ from __future__ import annotations
 import math
 
 from ...core.units import clampf
+from ...abilities.tongue.aim import fire_at, tongue_of
 
 REACH_FRAC = 1.0
 FIRE_IDEAL = 30.0
@@ -20,7 +21,7 @@ class KillDodger:
         self.win = win
         self.body = win.body
         self.gfx = win.gfx
-        self.tongue = win.tongue
+        self.tongue = tongue_of(win)
         self.phase = "approach"
         self.timer = 0
         self.giveup = False
@@ -63,7 +64,7 @@ class KillDodger:
             if within:
                 if tg.is_idle():
                     tg.set_targets(ideal=FIRE_IDEAL, reel_rate=FIRE_REEL)
-                    self.win.fire_tongue_at(tx, ty)
+                    fire_at(self.win, tx, ty)
                     self.phase = "clicking"
                     self.timer = 0
                 return False

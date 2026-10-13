@@ -24,7 +24,7 @@ python run_slugcatpet.py
 ## 皮肤
 
 可以用 Dress My Slugcat 的皮肤。创意工坊里订阅的会自动出现，别人发给你的放进皮肤文件夹（设置 → 打开皮肤文件夹）就行。
-在设置里点猫旁边的「外观」，可以换皮肤、改颜色、开关配件（疤、鳃）。皮肤格式和画法见 [Dress My Slugcat](https://steamcommunity.com/sharedfiles/filedetails/?id=2948971756)。
+在设置里点猫旁边的「外观」，可以换皮肤、改颜色、开关配件（疤、鳃）。头、脸、身体、手臂、臀、腿、尾巴还能各用不同的皮肤，也能单独设颜色、调尾巴形状。皮肤格式和画法见 [Dress My Slugcat](https://steamcommunity.com/sharedfiles/filedetails/?id=2948971756)。
 
 ## 改代码
 
@@ -67,7 +67,7 @@ On first launch, pick your Rain World install folder. The images and a few game 
 ## Skins
 
 Dress My Slugcat skins work. Workshop subscriptions show up on their own; put skins you get elsewhere in the skins folder (Settings → Open skins folder).
-Click "Appearance" next to a cat in Settings to change its skin, colors and accessories (scar, gills). Skin format and drawing: [Dress My Slugcat](https://steamcommunity.com/sharedfiles/filedetails/?id=2948971756).
+Click "Appearance" next to a cat in Settings to change its skin, colors and accessories (scar, gills). Head, face, body, arms, hips, legs and tail can each use a different skin and color, and the tail shape is adjustable. Skin format and drawing: [Dress My Slugcat](https://steamcommunity.com/sharedfiles/filedetails/?id=2948971756).
 
 ## Changing the code
 

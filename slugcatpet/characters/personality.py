@@ -35,7 +35,7 @@ EFFECTS = (
     ("cold_gain_fac", "暴风雪里变冷的速度"),
     ("sociability", "发呆走位：靠近或远离其他猫"),
     ("swim_zeal", "漂游最大深度、潜泳冲刺距离"),
-    ("diet", "哪些可食物会去吃、肉的优先度"),
+    ("diet", "哪些可食物会去吃、肉的优先度、吃一样得多少饱食（肉食者 1/4 格）"),
 )
 
 
@@ -62,6 +62,11 @@ class Traits:
 
     def eats(self, item) -> bool:
         return not (is_meat(item) and self.diet in (DIET_VEGETARIAN, DIET_SPECIAL))
+
+    def nourishment(self, item) -> int:
+        """吃完 item 得几个 1/4 格：肉食者只得 food_points 个，其余 4 × food_points 个。"""
+        n = getattr(item, "food_points", 1)
+        return n if self.diet == DIET_CARNIVORE else 4 * n
 
     def food_time(self, item, t: float) -> float:
         return t * MEAT_PREF if is_meat(item) and self.diet == DIET_CARNIVORE else t

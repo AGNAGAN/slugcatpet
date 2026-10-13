@@ -6,6 +6,7 @@ from ... import tuning
 from ...core.units import clampf
 from ...planning.reach import Reach, Estimate, RUNNING, DONE, GIVEUP, reach_assist, walk_band
 from ...planning.jump_arc import get_drop_arc
+from .aim import tongue_of
 
 CEIL_RELEASE_Y = 50.0
 CEIL_MARGIN = 20.0
@@ -26,7 +27,7 @@ class CeilingDropReach(Reach):
 
     def _feasible(self, goal):
         pet = self.pet
-        if pet.tongue is None:
+        if tongue_of(pet) is None:
             return None
         gx, gy = goal.pos()
         if not (CEIL_MARGIN <= gx <= pet._WL - CEIL_MARGIN):
@@ -67,7 +68,7 @@ class CeilingDropController:
         pet = self.pet
         body = pet.body
         gx, gy = self.goal.pos()
-        if pet.tongue is None:
+        if tongue_of(pet) is None:
             return GIVEUP
         if self.phase == "approach":
             self._side = -1 if gx < pet._WL * 0.5 else 1

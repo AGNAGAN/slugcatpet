@@ -1,0 +1,42 @@
+{
+  "format": 1,
+  "key": "spearmaster",
+  "order": 7,
+  "notes": "信使：快而轻、爬杆快、投矛有力，两手都能拿矛；没有能吃东西的嘴，进食靠骨针（骨针生成与扎食还没做，暂时吃不到东西）。身体、臀部按原版收窄到 0.76，头 0.85、两肩间距 0.6，尾巴每段 8/6/4/2（尾根仍是 6），睡觉睁眼，eye_color 是白色混 30% 暗色。",
+  "body_color": "#4F2E69",
+  "eye_color": "#B9BBB7",
+  "layout": "spearmaster.json",
+  "atlases": ["base"],
+  "frames": {
+    "head": "base/HeadA",
+    "face": "base/FaceA",
+    "face_blink": "base/FaceB",
+    "legs_walk": "base/LegsA",
+    "legs_crawl": "base/LegsACrawling",
+    "legs_air": "base/LegsAAir0"
+  },
+  "tail_rad": [8, 6, 4, 2],
+  "abilities": {
+    "needle": {}
+  },
+  "behaviors": {},
+  "stats": {
+    "runspeed_fac": 1.2,
+    "pole_fac": 1.25,
+    "weight_fac": 0.85,
+    "max_food": 10,
+    "food_hibernate": 5,
+    "body_width": 0.76,
+    "hip_width": 0.76,
+    "head_width": 0.85,
+    "shoulder_width": 0.6,
+    "throw_skill": 2,
+    "dual_wield": true,
+    "sleep_eyes_open": true
+  },
+  "personality": {
+    "activity": 0.6,
+    "sociability": 0.35
+  },
+  "wip": true
+}

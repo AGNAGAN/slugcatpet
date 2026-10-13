@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .. import tuning
+from ..items.base import CLIMBABLE
 from .reach import Reach, Estimate, RUNNING, DONE, GIVEUP, reach_assist
 from .jump_arc import get_arc, get_drop_arc, get_pole_jump_arc, sweep_hit
 
@@ -10,8 +11,16 @@ POLE_TIP_C0_H = 17.0  # 杆顶/站立时 chunk0 距顶高
 LAUNCH_ARRIVE_EPS = 6.0
 
 
+def _climbables(pet):
+    items = getattr(pet, "items_affording", None)
+    return items(CLIMBABLE) if items is not None else getattr(pet, "poles", ())
+
+
 def _vpoles(pet):
-    return [p for p in getattr(pet, "poles", ()) if getattr(p, "kind", None) == "vertical"]
+    """底端着地的竖杆（含竖扎在地上的矛）。"""
+    return [
+        p for p in _climbables(pet) if getattr(p, "kind", None) == "vertical" and getattr(p, "grounded", True)
+    ]
 
 
 def _c0_range(pet, pole):
@@ -54,7 +63,7 @@ class _PoleClimb:
 
     def _step_to_height(self, release_hy, want_tip):
         pet = self.pet
-        if self.pole not in getattr(pet, "poles", ()):
+        if self.pole not in _climbables(pet):
             return "fail"
         self._ensure_climber()
         done = self.climber.update(want_dismount=False)

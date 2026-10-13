@@ -32,6 +32,11 @@ class ItemKind:
     fling_cap = 14.0
     splash_states = (ItemState.FREE,)
     dead_state = ItemState.EATEN
+    varies = False  # 每件物体提供的用法随状态变（见 affords_now）
+
+    def affords_now(self, obj, use) -> bool:
+        """varies 时：这件物体眼下提不提供 use。"""
+        return True
 
     def objects(self, win):
         v = getattr(win, self.store)
@@ -79,7 +84,12 @@ class ItemKind:
         p.drawEllipse(_pt(obj.x, obj.y), rad, rad)
 
     def grabbable(self, obj) -> bool:
-        return obj.state in self.grab_states
+        """能被光标拖：在 grab_states 里，或是猫手里拿着的可拿物（抢过来）。"""
+        return obj.state in self.grab_states or (obj.state == ItemState.CARRIED and CARRYABLE in self.affords)
+
+    def grab_dist(self, obj, cx, cy) -> float:
+        """光标到物体抓取点的距离，和 rad + grab_pad 比。"""
+        return math.hypot(cx - obj.x, cy - obj.y)
 
     def on_grab(self, obj):
         """开始拖：清掉挂载 / 叼持等。"""
@@ -111,6 +121,9 @@ class ItemKind:
 
     def draw(self, win, p):
         raise NotImplementedError
+
+    def draw_behind(self, win, p):
+        """画在猫身后的部分（如走路时远侧手里的武器）。"""
 
     def paint_icon(self, p, r, atlas):
         """侧边栏按钮图标，画在矩形 r 内。"""

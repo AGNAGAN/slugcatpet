@@ -59,7 +59,7 @@ def _mount(fsm, p):
             return
         done = fsm.climb.update()
         if fsm.climb.giveup:
-            fsm._break_tongue()
+            fsm.release_organs()
             fsm._transition("IdleStand")
         elif done:
             fsm._transition("CeilingHang")
@@ -70,17 +70,17 @@ def _mount(fsm, p):
     def st_ceilinghang(cursor, disturbed):
         done = fsm.climb.update() if fsm.climb else True
         if done or fsm.mood.should_quit("ceiling_play"):
-            fsm._break_tongue()
+            fsm.release_organs()
             fsm.climb = None
             fsm._transition("Airborne")
 
     def brk():
-        fsm._break_tongue()
+        fsm.release_organs()
         fsm.body.stop_walk()
         fsm.climb = None
 
     def kill_brk():
-        fsm._break_tongue()
+        fsm.release_organs()
         fsm.climb = None
 
     fsm.register_state(

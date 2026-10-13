@@ -15,6 +15,7 @@ from .rendering.atlas import AtlasSet
 from .rendering.display_list import FrameRecorder, replay
 from .rendering.layout import Layout
 from .rendering.pacer import FramePacer
+from .platform import vsync
 from .rendering.primitives import blit
 from .petunit import PetUnit
 from .brain.social import Social
@@ -162,6 +163,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self.follow_cursor = True
         self.cfg_cursor_hijack = bool(self._params.get("cursor_hijack", True))
         self.cfg_cursor_shape = bool(self._params.get("cursor_shape", True))
+        self.cfg_friendly_fire = bool(self._params.get("friendly_fire", False))
         self.cfg_fps = self._params.get("fps", "auto")  # "auto"=跟显示器刷新率
         self.cfg_power_save = bool(self._params.get("power_save", True))
         self.cfg_water_depth = clampf(
@@ -180,7 +182,8 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
 
         self._clock = QElapsedTimer()
         self._clock.start()
-        self._last_ms = self._clock.elapsed()
+        self._last_ns = self._clock.nsecsElapsed()
+        self._last_vsync = False  # 上一拍来自 vblank
         self._active_until = 0
         self._t = 0.0
         self._phys_acc = 0.0
@@ -188,11 +191,16 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self._hwnd = 0
         self._passthrough = None  # None 强制首次同步
 
+        self._mode = None  # "vsync" / "fast" / "slow"
+        self._vsync = None
+        self._screen = None
         self.anim = QTimer(self)
         self.anim.setTimerType(Qt.TimerType.PreciseTimer)
         self.anim.setInterval(self._iv_fast)
-        self.anim.timeout.connect(self._tick)
+        self.anim.timeout.connect(self._on_timer)
         self.anim.start()
+        QGuiApplication.instance().primaryScreenChanged.connect(self._watch_screen)
+        self._watch_screen()
 
     def _build_pets(self):
         saved = self._params.get("pets")
@@ -211,6 +219,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
                 "energy": state.get("energy", 1.0),
                 "temper": state.get("temper", 0.0),
                 "food": state.get("food", tuning.FOOD_INIT),
+                "food_q": state.get("food_q", 0),
                 "karma": state.get("karma", tuning.KARMA_INIT),
                 "cold": state.get("cold", 0.0),
             }
@@ -251,10 +260,6 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         return self.pets[0].tail if self.pets else None
 
     @property
-    def tongue(self):
-        return self.pets[0].tongue if self.pets else None
-
-    @property
     def behavior(self):
         return self.pets[0].behavior if self.pets else None
 
@@ -291,6 +296,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
     _PHYS_DT = 1.0 / 40.0
     _MAX_DT = 0.1  # 一帧最多补 4 个 tick，防时间螺旋
     _INT_SLOW = 66  # ms，省电时没动静的帧间隔
+    _INT_WATCHDOG = 250  # ms，vblank 停了（熄屏、驱动重置）时的兜底间隔
     _FPS_FALLBACK = 60.0
     _ACTIVE_HOLD_MS = 300  # 防快慢档来回切
     _MOTION_STILL = 1.2
@@ -307,14 +313,30 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
                 abs(b.chunk0.vx) + abs(b.chunk0.vy) + abs(b.chunk1.vx) + abs(b.chunk1.vy)
             ) > self._MOTION_STILL:
                 return True
+            # 啃食、换手等只动手的动作也要保持高帧率
+            if any(abs(h.vx) + abs(h.vy) > self._MOTION_STILL for h in pet.gfx.hands):
+                return True
         return any(abs(o.vx) + abs(o.vy) > self._MOTION_STILL for o in self._items())
 
-    def _tick(self):
+    def _on_timer(self):
+        if self._mode == "vsync":
+            if self._clock.nsecsElapsed() - self._last_ns < self._INT_WATCHDOG * 500_000:
+                return
+        self._tick()
+
+    def _on_vsync(self, vs_dt):
+        self._tick(vs_dt)
+
+    def _tick(self, vs_dt=None):
+        """推进一帧；vs_dt 是 vblank 节拍给的间隔，连续两拍都来自 vblank 时用它，否则用实测时长。"""
         if self._shutting_down:
             return
-        now = self._clock.elapsed()
-        dt = (now - self._last_ms) / 1000.0
-        self._last_ms = now
+        now_ns = self._clock.nsecsElapsed()
+        dt = (now_ns - self._last_ns) / 1e9
+        self._last_ns = now_ns
+        if vs_dt and self._last_vsync:
+            dt = vs_dt
+        self._last_vsync = vs_dt is not None
         if dt <= 0.0:
             return
         if not self.isVisible():
@@ -327,29 +349,74 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         dragging = self._drag is not None
         grabbing = any(pet.behavior is not None and pet.behavior.grab.active for pet in self.pets)
         active = self._fx_active or dragging or grabbing or self.isActiveWindow() or self._scene_moving()
+        now_ms = now_ns // 1_000_000
         if active:
-            self._active_until = now + self._ACTIVE_HOLD_MS
-        elif now < self._active_until:
+            self._active_until = now_ms + self._ACTIVE_HOLD_MS
+        elif now_ms < self._active_until:
             active = True
-        want_iv = self._iv_fast if active else self._iv_slow
-        if self.anim.interval() != want_iv:
-            # Precise 保平滑，Coarse 省功耗
-            self.anim.stop()
-            self.anim.setTimerType(Qt.TimerType.PreciseTimer if active else Qt.TimerType.CoarseTimer)
-            self.anim.setInterval(want_iv)
-            self.anim.start()
+        self._set_mode(active or not self.cfg_power_save)
         if region is None:
             self.update()
         else:
             self.update(region)
 
+    def _set_mode(self, fast):
+        """快档优先跟 vblank，不可用时用精确定时器；慢档用粗定时器。"""
+        if fast and self._ensure_vsync():
+            mode = "vsync"
+        else:
+            mode = "fast" if fast else "slow"
+        if mode == self._mode:
+            return
+        self._mode = mode
+        if mode == "vsync":
+            self._vsync.resume()
+        elif self._vsync is not None:
+            self._vsync.pause()
+        iv, kind = {
+            "vsync": (self._INT_WATCHDOG, Qt.TimerType.CoarseTimer),
+            "fast": (self._iv_fast, Qt.TimerType.PreciseTimer),  # Precise 保平滑
+            "slow": (self._iv_slow, Qt.TimerType.CoarseTimer),  # Coarse 省功耗
+        }[mode]
+        self.anim.stop()
+        self.anim.setTimerType(kind)
+        self.anim.setInterval(iv)
+        self.anim.start()
+
+    def _ensure_vsync(self):
+        if self._vsync is None:
+            if not self._vsync_wanted():
+                return False
+            self._vsync = vsync.VsyncDriver(self, self._screen_name(), self.display_hz())
+            self._vsync.set_divider(self._divider)
+            self._vsync.tick.connect(self._on_vsync)
+            self._vsync.failed.connect(self._on_vsync_failed)
+        return self._vsync.ok
+
+    def _vsync_wanted(self):
+        if not vsync.supported() or os.environ.get("SLUGCATPET_VSYNC", "1") == "0":
+            return False
+        return QGuiApplication.platformName() == "windows"
+
+    def _on_vsync_failed(self):
+        if self._mode == "vsync":
+            self._mode = None
+            self._set_mode(True)
+
+    @staticmethod
+    def _screen_name():
+        scr = QGuiApplication.primaryScreen()
+        return scr.name() if scr is not None else ""
+
     def _pace(self, dt, t0):
         """自动帧率下把快档帧的实测数据喂给 pacer，换档时重算间隔。"""
         busy = (self._clock.nsecsElapsed() - t0 + self._paint_ns) / 1e9
         self._paint_ns = 0
-        if self.cfg_fps != "auto" or dt > self._MAX_DT or self.anim.interval() != self._iv_fast:
+        if self.cfg_fps != "auto" or dt > self._MAX_DT or self._mode not in ("vsync", "fast"):
             return
-        if self._pacer.frame(dt, busy, self._iv_fast / 1000.0):
+        if self._pacer.frame(
+            dt, busy, self._divider / self._pacer.hz if self._mode == "vsync" else self._iv_fast / 1000.0
+        ):
             self._calc_intervals()
             sp = getattr(self, "_settings_panel", None)
             if sp is not None and hasattr(sp, "refresh_fps"):
@@ -390,17 +457,23 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
 
     def freeze_tick(self):
         self.anim.stop()
+        if self._vsync is not None:
+            self._vsync.pause()
+        self._mode = None
 
     def resume_tick(self):
         if self._shutting_down:
             return
-        self._last_ms = self._clock.elapsed()
-        self.anim.start()
+        self._last_ns = self._clock.nsecsElapsed()
+        self._last_vsync = False
+        self._set_mode(True)
 
     def shutdown(self):
         """退出前停帧并丢弃排队重绘，免得句柄销毁后还刷新。"""
         self._shutting_down = True
         self.anim.stop()
+        if self._vsync is not None:
+            self._vsync.stop()
         QCoreApplication.removePostedEvents(self, QEvent.Type.Paint)
         self.setUpdatesEnabled(False)
         self.hide()
@@ -416,12 +489,12 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         return self._pacer.rate
 
     def _calc_intervals(self):
-        """活跃 / 发呆两档帧间隔（ms）"""
+        """活跃 / 发呆两档帧间隔（ms）与 vblank 分频；固定帧率取最接近的整数分频。"""
+        hz = self.display_hz()
+        if hz != self._pacer.hz:
+            self._pacer.reset(hz)
         rate = self.cfg_fps
         if rate == "auto":
-            hz = self.display_hz()
-            if hz != self._pacer.hz:
-                self._pacer.reset(hz)
             rate = self._pacer.rate
         try:
             rate = float(rate)
@@ -429,13 +502,34 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             rate = 0.0
         if rate <= 1.0:
             rate = self._FPS_FALLBACK
+        self._divider = max(1, round(hz / rate))
         self._iv_fast = max(1, round(1000.0 / min(rate, 1000.0)))
         self._iv_slow = max(self._INT_SLOW, self._iv_fast) if self.cfg_power_save else self._iv_fast
+        vs = getattr(self, "_vsync", None)
+        if vs is not None:
+            vs.set_divider(self._divider)
+            vs.retarget(self._screen_name(), hz)
 
     def _restart_timer(self):
         self._calc_intervals()
-        if self.anim.isActive():
-            self.anim.setInterval(self._iv_fast)
+        if self._mode is not None:
+            fast = self._mode != "slow"
+            self._mode = None
+            self._set_mode(fast)
+
+    def _watch_screen(self, *_):
+        """主屏或其刷新率变了就重算帧间隔、换 vblank 来源。"""
+        scr = QGuiApplication.primaryScreen()
+        if scr is not self._screen:
+            if self._screen is not None:
+                try:
+                    self._screen.refreshRateChanged.disconnect(self._watch_screen)
+                except (RuntimeError, TypeError):
+                    pass
+            self._screen = scr
+            if scr is not None:
+                scr.refreshRateChanged.connect(self._watch_screen)
+        self._restart_timer()
 
     def set_water_depth(self, depth):
         """涨水高度（0~1）"""
@@ -457,6 +551,9 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self.cfg_cursor_hijack = self._params["cursor_hijack"] = bool(on)
         if not on:
             self.stop_cursor_hijack()
+
+    def set_friendly_fire(self, on):
+        self.cfg_friendly_fire = self._params["friendly_fire"] = bool(on)
 
     def set_cursor_shape(self, on):
         self.cfg_cursor_shape = self._params["cursor_shape"] = bool(on)
@@ -817,7 +914,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
     def _take_off_stage(self, pet):
         if getattr(pet, "controlled", False):
             self.stop_control()
-        self._drop_carried(pet)
+        pet.body.drop_carried()
         pet.dismiss_kill_dialog()
         if pet.behavior is not None:
             try:
@@ -865,16 +962,6 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
     def rename_pet(self, pet, name):
         pet.name = (name or "").strip()
         self._after_pets_changed()
-
-    def _drop_carried(self, pet):
-        b = pet.body
-        if b.carried_fruit is not None:
-            b.carried_fruit.stalk = None
-            b.carried_fruit.state = "free"
-            b.carried_fruit.held_by_hand = None
-            b.release_fruit()
-        if b.carried_stone is not None:
-            b.release_stone(to_free=True)
 
     def _after_pets_changed(self):
         hud = self._hud
@@ -994,7 +1081,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         p.restore()
 
     def _draw_scene(self, p):
-        # 图层序：物品 under（果柄）/ 烟 → 猫身 → 物品 mid（杆）/ 手 → 物品 front → 水 → 物品 top（灯）→ 特效 → 雪
+        # 图层序：物品 under（果柄）/ 烟 / 身后的手持物 → 猫身 → 物品 mid（杆）/ 手 → 物品 front → 水 → 物品 top（灯）→ 特效 → 雪
         p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
         p.scale(self._scale, self._scale)
         if self._shake[0] or self._shake[1]:
@@ -1002,6 +1089,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
 
         self._draw_items_under(p)
         self._draw_fx_under(p)
+        self._draw_items_behind(p)
 
         for pet in self.pets:
             fx = pet.behavior.exclusive_fx() if pet.behavior is not None else None
@@ -1083,6 +1171,9 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             return
         if e.button() == Qt.MouseButton.LeftButton:
             pos = self.to_logical(e.position().x(), e.position().y())
+            if self.held_item_at(pos):
+                self._begin_item_drag(pos)  # 手里的东西挨着猫身，先于抓猫
+                return
             grabbed = False
             for pet in self.pets:
                 if getattr(pet, "controlled", False):

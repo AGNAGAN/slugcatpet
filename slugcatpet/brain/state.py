@@ -5,7 +5,7 @@ from __future__ import annotations
 # 优先级：强制规则只能打断优先级比它低的状态，其余的等状态自己做完
 T_IDLE = 0  # 待机、空中、生完气闲逛
 T_ACTIVITY = 20  # 玩耍、让路：同级互不打断
-T_NEED = 30  # 取果
+T_NEED = 30  # 饿了去找吃的
 T_REST = 35  # 累了趴下、睡觉
 T_WARM = 40  # 取暖、起身
 T_BODY = 60  # 晕、游泳
@@ -18,7 +18,7 @@ ZEROG = "zerog"  # 无重力 → 漂浮待机
 SWIM = "swim"  # 入水 → 游泳
 COLD = "cold"  # 寒冷 → 找暖源
 EXHAUST = "exhaust"  # 体力告急 → 趴下
-FETCH = "fetch"  # 饿了 → 取果
+HUNGER = "hunger"  # 饿了 → 找吃的
 CROWD = "crowd"  # 被顶住 → 让路
 DRAG = "drag"  # 被光标抓住 → 被拖
 THREAT = "threat"  # 杀死弹窗 → 应对
@@ -31,7 +31,7 @@ RULE_TIER = {
     SWIM: T_BODY,
     COLD: T_WARM,
     EXHAUST: T_REST,
-    FETCH: T_NEED,
+    HUNGER: T_NEED,
     CROWD: T_ACTIVITY,
 }
 
@@ -48,9 +48,14 @@ class State:
     mood = None  # 对应的心情候选名（新鲜度结算）
     tier = T_IDLE  # 优先级
     energy = None  # 体力档位；None=不变
+    hands = "any"  # 需要的空手：any 拿着东西也行 / one 至少一只 / free 两只
 
     def __init__(self, fsm):
         self.fsm = fsm
+
+    def hands_needed(self):
+        """进入时需要的空手，见 hands。"""
+        return self.hands
 
     def enter(self):
         pass

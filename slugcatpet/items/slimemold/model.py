@@ -23,7 +23,7 @@ STUCK_GAP = 7.0
 STUCK_STIFFNESS = 0.2
 
 TENDRIL_MIN = 8
-TENDRIL_MAX = 14  # 参考区间 8..15 截断
+TENDRIL_MAX = 14
 TENDRIL_REST_MIN = 3.0
 TENDRIL_REST_MAX = 8.0
 TENDRIL_DAMP = 0.98
@@ -41,6 +41,8 @@ def _lerp_map(v, in_a, in_b, out_a, out_b):
 
 class SlimeMold:
     collision_layer = 1  # 与 Saint/果同层互推
+    edible = True
+    throwable = False
 
     __slots__ = (
         "x",

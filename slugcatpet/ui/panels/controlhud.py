@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QLayout
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QPoint, Qt, QTimer
 from PySide6.QtGui import QGuiApplication
 
 from ...i18n import t
@@ -10,6 +10,7 @@ from ...control.input import InputPackage
 from ...control.keymap import load_keymap, key_display_name
 from .catmenu import pet_label
 from ..theme import qss
+from ..widgets.screens import clamp_rect
 
 WATCH_MS = 200
 BOTTOM_MARGIN = 24
@@ -57,8 +58,14 @@ class ControlHud(QWidget):
         title.setObjectName("ctrlTitle")
         box.addWidget(title)
 
-        k = {a: key_display_name(a).upper() for a in ("left", "right", "up", "down", "jump")}
-        self._keys_text = t("ctrlhud_keys", move=k["up"] + k["left"] + k["down"] + k["right"], jump=k["jump"])
+        k = {a: key_display_name(a).upper() for a in ("left", "right", "up", "down", "jump", "grab", "throw")}
+        self._keys_text = t(
+            "ctrlhud_keys",
+            move=k["up"] + k["left"] + k["down"] + k["right"],
+            jump=k["jump"],
+            grab=k["grab"],
+            throw=k["throw"],
+        )
         self._keys = QLabel(self._keys_text)
         self._keys.setObjectName("ctrlKeys")
         box.addWidget(self._keys)
@@ -100,9 +107,14 @@ class ControlHud(QWidget):
             return
         self._paused = paused
         self._held.clear()
+        g = self.geometry()
+        cx, cy = g.x() + g.width() // 2, g.y() + g.height() // 2
         self._keys.setText(t("ctrlhud_paused") if paused else self._keys_text)
         self._keys.setStyleSheet(_PAUSED_QSS if paused else "")
         self.setWindowOpacity(0.7 if paused else 1.0)
+        self.layout().activate()  # 文字宽度变了，按原中心重新摆
+        w, h = self.width(), self.height()
+        self.move(clamp_rect(QPoint(cx - w // 2, cy - h // 2), w, h))
 
     # 焦点：show 即抢焦（需同步栈内）
     def showEvent(self, e):
@@ -141,11 +153,7 @@ class ControlHud(QWidget):
 
     def mouseMoveEvent(self, ev):
         if self._drag is not None and ev.buttons() & Qt.MouseButton.LeftButton:
-            screen = QGuiApplication.primaryScreen().availableGeometry()
-            p = ev.globalPosition().toPoint() - self._drag
-            x = max(screen.x(), min(screen.x() + screen.width() - self.width(), p.x()))
-            y = max(screen.y(), min(screen.y() + screen.height() - self.height(), p.y()))
-            self.move(x, y)
+            self.move(clamp_rect(ev.globalPosition().toPoint() - self._drag, self.width(), self.height()))
             ev.accept()
 
     def mouseReleaseEvent(self, ev):

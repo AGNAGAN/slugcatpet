@@ -1,0 +1,39 @@
+{
+  "format": 1,
+  "key": "gourmand",
+  "order": 6,
+  "notes": "重而能吃：滑铲翻滚强劲、跳多了会累倒喘气、从高处落下震动并砸晕别的猫；随和亲人。",
+  "body_color": "#F0C197",
+  "eye_color": "#161E10",
+  "layout": "gourmand.json",
+  "atlases": ["base"],
+  "frames": {
+    "head": "base/HeadA",
+    "face": "base/FaceA",
+    "face_blink": "base/FaceB",
+    "legs_walk": "base/LegsA",
+    "legs_crawl": "base/LegsACrawling",
+    "legs_air": "base/LegsAAir0"
+  },
+  "abilities": {"heavy": {}},
+  "behaviors": {},
+  "stats": {
+    "weight_fac": 1.35,
+    "pole_fac": 0.8,
+    "max_food": 11,
+    "food_hibernate": 7,
+    "jump_aerobic": 0.75,
+    "belly_slide_spd": 45.0,
+    "belly_slide_spd_tired": 14.0,
+    "fall_stun_speed": 40.0,
+    "fall_death_speed": 80.0,
+    "body_width": 1.4,
+    "hip_width": 1.6,
+    "throw_skill": 2
+  },
+  "personality": {
+    "activity": 0.4,
+    "stamina": 0.9,
+    "sociability": 0.75
+  }
+}

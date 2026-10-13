@@ -109,7 +109,8 @@ class PoleClimber:
         c0.x = (c0.x + tx) / 2.0
         c1.x = (c1.x * 7.0 + tx) / 8.0
         c0.vy *= 0.5
-        c0.vy += -1.0 * b.stats.pole_fac  # 爬升推进×种族因子，抗重力项不缩放
+        c0.vy += -1.0 * b.stats.pole_fac * b.slow_fac(0.2)  # 爬升推进×种族因子，抗重力项不缩放
+        b.aerobic_increase(0.1 / 20.0)
         c0.vy += -(1.0 + GRAV)
         c1.vy += 1.0 - GRAV
 

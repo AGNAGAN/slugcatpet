@@ -20,7 +20,8 @@
   "stats": {
     "weight_fac": 0.95,
     "food_hibernate": 3,
-    "lungs_fac": 1.2
+    "lungs_fac": 1.2,
+    "throw_skill": 0
   },
   "personality": {
     "activity": 0.4,

@@ -4,6 +4,7 @@ from __future__ import annotations
 import math
 
 from . import consts
+from .aim import tongue_of
 from .reach import FETCH_IDEAL, FETCH_REEL, mouth_pos
 
 
@@ -16,7 +17,7 @@ class TongueSnatch:
         self._timer = 0
 
     def update(self, goal):
-        tg = self.pet.tongue
+        tg = tongue_of(self.pet)
         if tg is None:
             return
         if self._active:
@@ -44,7 +45,7 @@ class TongueSnatch:
 
     def holding(self):
         """是否正持有补救舌头，需实查 owner 非仅看布尔。"""
-        tg = self.pet.tongue
+        tg = tongue_of(self.pet)
         return self._active and tg is not None and tg.owner is self
 
     def reset(self):
@@ -76,9 +77,11 @@ class TongueSnatch:
             tg.set_targets(ideal=FETCH_IDEAL, reel_rate=FETCH_REEL)
 
     def abort(self):
-        tg = self.pet.tongue
+        """取果收工或换目标：交还舌头并恢复默认参数。"""
+        tg = tongue_of(self.pet)
         if tg is not None and tg.owner is self:
             self._handback(tg)
+            tg.reset_config()
         else:
             self._clear()
 

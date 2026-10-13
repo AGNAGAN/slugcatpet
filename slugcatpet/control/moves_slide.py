@@ -47,7 +47,8 @@ def clear_flags(body) -> None:
 def movement_increments(body) -> None:
     if body._ctrl_roll_direction != 0:
         body._ctrl_roll_counter += 1
-        if body.bodyMode != "Default" or body._ctrl_roll_counter > 200:
+        endless = body.animation == "Roll" and _endless_roll(body)
+        if body.bodyMode != "Default" or (body._ctrl_roll_counter > 200 and not endless):
             body._ctrl_roll_counter = 0
             body._ctrl_roll_direction = 0
 
@@ -163,7 +164,9 @@ def _belly_slide(body, inp0, inp1) -> None:
         c1.vx -= 9.1 * rd
     else:
         c1.vy += 0.5
-    c0.vx += body.stats.belly_slide_spd * rd * _sin(rc / BELLY_PERIOD)
+    s = body.stats
+    spd = s.belly_slide_spd_tired if body.exhausted else s.belly_slide_spd
+    c0.vx += spd * rd * _sin(rc / BELLY_PERIOD)
     c0.vy += 2.3
     for c in (c0, c1):
         if c.cy == 0:
@@ -204,6 +207,7 @@ def _roll(body, inp0) -> None:
     c0.vy *= 0.9
     c1.vx *= 0.9
     c1.vy *= 0.9
+    body.aerobic_increase(0.01)
     torque_x = perp_x * 2.0 * rd
     torque_y = perp_y * 2.0 * rd
     c0.vx -= torque_x
@@ -211,6 +215,9 @@ def _roll(body, inp0) -> None:
     c1.vx += torque_x
     c1.vy += torque_y
     stuck = c0.cx == rd or c1.cx == rd
+    if body.walk_min is not None:  # 走位边界夹住也算顶住
+        edge = body.walk_max if rd > 0 else body.walk_min
+        stuck = stuck or (c0.x - edge) * rd >= 0.0
     if c0.on_floor or c1.on_floor:
         c0.vx += 1.1 * rd
         c1.vx += 1.1 * rd
@@ -220,14 +227,22 @@ def _roll(body, inp0) -> None:
     body._ctrl_stop_rolling = (body._ctrl_stop_rolling + 1) if stuck else 0
     rc = body._ctrl_roll_counter
     head_above = c0.y < c1.y
+    capped = not _endless_roll(body)
     if (
-        (((rc > 15 and inp0.y > -1 and inp0.downDiagonal == 0) or rc > 30 or inp0.x == -rd) and head_above)
-        or rc > 60
+        (
+            ((rc > 15 and inp0.y > -1 and inp0.downDiagonal == 0) or (rc > 30 and capped) or inp0.x == -rd)
+            and head_above
+        )
+        or (rc > 60 and capped)
         or body._ctrl_stop_rolling > 6
     ):
         body._ctrl_roll_direction = 0
         body.animation = None
         body.standing = inp0.y > -1
+
+
+def _endless_roll(body) -> bool:
+    return body.endless_roll and not body.exhausted
 
 
 def _rocket_jump(body) -> None:

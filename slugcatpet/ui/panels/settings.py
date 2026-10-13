@@ -414,6 +414,12 @@ class SettingsWindow(QWidget):
             w.cfg_cursor_shape,
             lambda on: (w.set_cursor_shape(on), self._write_state()),
         )
+        self._check(
+            v,
+            "settings_friendly_fire",
+            w.cfg_friendly_fire,
+            lambda on: (w.set_friendly_fire(on), self._write_state()),
+        )
 
     def _section_perf(self, v):
         v.addWidget(self._header(t("settings_perf_section")))

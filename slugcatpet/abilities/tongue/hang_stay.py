@@ -9,6 +9,7 @@ from ...core.chunkphys import DIST_STAND
 from ...core.units import clampf
 from ...planning.reach import Reach, Estimate, RUNNING, GIVEUP, HOLD, walk_band
 from .reach import mouth_pos, reset_tongue
+from .aim import fire_at, tongue_of
 
 WALL_ARRIVE = 12.0
 ATTACH_TIMEOUT = 120
@@ -105,7 +106,7 @@ class TongueHangStay(Reach):
         return None
 
     def can_stay(self, goal):
-        if self.pet.tongue is None:
+        if tongue_of(self.pet) is None:
             return None
         b = _best(self.pet, goal)
         return None if b is None else b[1]
@@ -127,7 +128,7 @@ class TongueHangController:
         self.timer = 0
 
     def update(self):
-        if self.pet.tongue is None:
+        if tongue_of(self.pet) is None:
             return GIVEUP
         ax, ay = _anchor_coord(self.pet, self.goal, self.kind)
         if self.phase == "approach":
@@ -180,7 +181,7 @@ class TongueHangController:
 
     def _attach(self, ax, ay):
         pet = self.pet
-        tg = pet.tongue
+        tg = tongue_of(pet)
         self.timer += 1
         if tg.attached:
             tg.set_targets(ideal=consts.PLAN_HANG_WALL_IDEAL, reel_rate=consts.PLAN_HANG_REEL_RATE)
@@ -194,7 +195,7 @@ class TongueHangController:
                     ideal=consts.PLAN_HANG_WALL_IDEAL,
                     reel_rate=consts.PLAN_HANG_REEL_RATE,
                 )
-                pet.fire_tongue_at(ax, ay)
+                fire_at(pet, ax, ay)
                 return RUNNING
             if pet.body.on_floor():
                 return self._retry()
@@ -205,7 +206,7 @@ class TongueHangController:
     def _settle(self):
         """吊顶悬停等摆荡平息（同时对准+静止）再松手：climber 的 done 只保证锚点对准，不保证猫已稳。"""
         pet = self.pet
-        tg = pet.tongue
+        tg = tongue_of(pet)
         body = pet.body
         self.timer += 1
         if not tg.attached:
@@ -223,7 +224,7 @@ class TongueHangController:
 
     def _drop(self):
         pet = self.pet
-        tg = pet.tongue
+        tg = tongue_of(pet)
         body = pet.body
         self.timer += 1
         gx, gy = self.goal.pos()
@@ -242,7 +243,7 @@ class TongueHangController:
                     ideal=consts.PLAN_HANG_BULB_IDEAL,
                     reel_rate=consts.PLAN_HANG_REEL_RATE,
                 )
-                pet.fire_tongue_at(gx, gy)  # 定点钉，不走双体弹簧（会反拽锚点）
+                fire_at(pet, gx, gy)  # 定点钉，不走双体弹簧（会反拽锚点）
                 return RUNNING
             if body.on_floor():
                 return self._retry()
@@ -252,7 +253,7 @@ class TongueHangController:
 
     def _hold(self):
         pet = self.pet
-        tg = pet.tongue
+        tg = tongue_of(pet)
         if not tg.attached or pet.body.on_floor():
             reset_tongue(pet)
             return self._retry()

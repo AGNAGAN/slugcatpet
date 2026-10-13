@@ -42,6 +42,8 @@ class BatFly:
     """单 chunk 小飞虫：游走扑翅+力竭挂+手动塞食；接口对齐 Fruit。"""
 
     collision_layer = 0  # 层0 不参与 collide_objects
+    edible = True
+    throwable = False
 
     __slots__ = (
         "x",

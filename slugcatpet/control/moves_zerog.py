@@ -8,7 +8,7 @@ import math
 def ctrl_zerog_update(body) -> None:
     inp = body._ctrl_input
     inp0, inp1 = inp[0], inp[1]
-    # 跳跃预输入缓冲同主干；蹬墙窗口用 body.canJump（勿混 _ctrl_can_jump）
+    # 跳跃预输入缓冲；蹬墙窗口用 body.canJump
     if body._ctrl_want_jump > 0:
         body._ctrl_want_jump -= 1
     elif inp0.jmp and not inp1.jmp:

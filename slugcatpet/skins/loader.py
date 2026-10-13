@@ -42,7 +42,7 @@ class SkinPack:
 
 
 def parse_color(v) -> tuple[int, int, int] | None:
-    """#RGB / #RRGGBB / #RRGGBBAA（同 Unity TryParseHtmlString 的十六进制形式）。"""
+    """#RGB / #RRGGBB / #RRGGBBAA。"""
     if not isinstance(v, str):
         return None
     s = v.strip().lstrip("#")
@@ -94,7 +94,7 @@ def load_pack(d: Path, source: str) -> SkinPack:
     n_frames = 0
     for png in pngs:
         txt = png.with_suffix(".txt")
-        if not txt.is_file():  # 没配 txt 的图不是图集，和 DMS 一样跳过
+        if not txt.is_file():  # 没配 txt 的图不是图集，跳过
             continue
         try:
             atlas = Atlas("", d, image_path=png, data_path=txt)
@@ -175,7 +175,7 @@ def _resolve_groups(pack: SkinPack) -> None:
                 pack.extent = max(pack.extent, ext_lr)
 
 
-# DMS 尾巴设置的取值范围（游戏内滑块）；超出则视为无效，同游戏一样不改形状
+# 尾巴设置的取值范围；超出则视为无效，不改形状
 _TAIL_RANGE = {
     "length": (2.0, 15.0),
     "wideness": (0.1, 10.0),

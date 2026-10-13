@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ..._paths import resource_dir
 from .palette import (
     ACCENT,
     ACCENT_BTN,
@@ -11,6 +12,7 @@ from .palette import (
     BG_CARD,
     BG_PANEL,
     BG_TOAST,
+    BG_TOOLTIP,
     BG_WINDOW,
     BORDER,
     BTN_BG,
@@ -53,6 +55,11 @@ SLIDER = (
     "QSlider::handle:horizontal{width:12px;height:12px;margin:-4px 0;border-radius:6px;"
     f"background:{ACCENT};}}"
 )
+# 悬停提示样式，拼在各顶层样式后
+TOOLTIP = (
+    f"QToolTip{{color:{TEXT};background:{BG_TOOLTIP};border:1px solid {BORDER};"
+    "border-radius:4px;padding:4px 6px;font-size:12px;}"
+)
 DIM_TEXT = f"color:{TEXT_DIM};"
 ERROR_TEXT = f"color:{ERROR};"
 PAUSED_TEXT = f"color:{WARN};font-weight:bold;"
@@ -66,7 +73,7 @@ _BTN_GHOST = (
     f"#btnGhost:hover{{background:{HOVER_TINT};}}"
 )
 
-# 下拉框字号用 pt（9pt = 12px）：px 字号在 Windows 上首次弹出列表时会触发 QFont 警告
+# 下拉框字号（用 pt）
 _COMBO_FONT = "QComboBox{font-size:9pt;}"
 
 MENU = (
@@ -77,6 +84,11 @@ MENU = (
     f"QMenu::item:disabled{{color:{TEXT_MENU_DISABLED};}}"
     f"QMenu::separator{{height:1px;background:{DIVIDER};margin:4px 6px;}}"
 )
+
+
+def icon_url(name: str) -> str:
+    """resources/icons 下图标的路径，供 QSS 的 url() 用。"""
+    return (resource_dir() / "icons" / name).as_posix()
 
 
 def settings_window(check_icon_url: str) -> str:
@@ -110,6 +122,11 @@ def settings_window(check_icon_url: str) -> str:
         f"QRadioButton::indicator:hover{{border-color:{RADIO_BORDER_HOVER};}}"
         f"QRadioButton::indicator:checked{{border:2px solid {ACCENT};background:{ACCENT};"
         f"image:url({check_icon_url});}}"
+        "QSpinBox{padding-right:16px;}"
+        "QSpinBox::up-button,QSpinBox::down-button{width:14px;border:none;background:transparent;}"
+        f"QSpinBox::up-button:hover,QSpinBox::down-button:hover{{background:{HOVER_TINT};}}"
+        f"QSpinBox::up-arrow{{image:url({icon_url('arrow_up.svg')});width:8px;height:5px;}}"
+        f"QSpinBox::down-arrow{{image:url({icon_url('arrow_down.svg')});width:8px;height:5px;}}" + TOOLTIP
     )
 
 
@@ -128,6 +145,7 @@ CARD = (
     "QRadioButton::indicator{width:13px;height:13px;border-radius:7px;"
     f"border:1px solid {BORDER};background:{TRACK_BG};}}"
     f"QRadioButton::indicator:checked{{background:{ACCENT_BTN_HOVER};border-color:{ACCENT_BTN_HOVER};}}"
+    + TOOLTIP
 )
 
 FORM = (
@@ -155,6 +173,34 @@ LOOK_DIALOG = (
     + "QCheckBox::indicator{width:13px;height:13px;border-radius:3px;"
     + f"border:1px solid {BORDER};background:{INPUT_BG};}}"
     + f"QCheckBox::indicator:checked{{background:{ACCENT_BTN_HOVER};border-color:{ACCENT_BTN_HOVER};}}"
+    + f"#partsToggle{{background:transparent;color:{TEXT_DIM};border:none;padding:0;font-size:12px;}}"
+    + "#partsBox{background:transparent;}"
+    + f"#partsToggle:hover{{color:{TEXT};}}"
+    + f"#partPack{{background:{INPUT_BG};color:{TEXT};border:1px solid {BORDER};border-radius:5px;"
+    "padding:2px 6px;font-size:12px;text-align:left;}"
+    + f"#partPack:hover{{background:{HOVER_TINT};}}"
+    + "#partSwatch{background:transparent;border:none;padding:0;}"
+    + "#partsScroll,#partsScroll > QWidget,#partsScroll > QWidget > QWidget{background:transparent;}"
+    + SCROLLBAR
+    + f"#partMini{{background:transparent;color:{TEXT_DIM};border:none;padding:0 2px;font-size:14px;}}"
+    + f"#partMini:hover{{color:{ACCENT};}}"
+)
+
+LOOK_POP = (
+    TOOLTIP
+    + f"#lookPop{{background:{BG_CARD};border:1px solid {BORDER};border-radius:8px;}}"
+    + f"#lookHead{{color:{TEXT_SOFT};font-size:12px;font-weight:600;background:transparent;}}"
+    + f"#cardText{{color:{TEXT_DIM};font-size:11px;background:transparent;}}"
+    + "#lookPopScroll,#lookPopScroll > QWidget > QWidget{background:transparent;}"
+    + f"#packTile{{background:transparent;color:{TEXT};border:1px solid transparent;border-radius:6px;"
+    "font-size:11px;padding:2px;}"
+    + f"#packTile:hover{{background:{HOVER_TINT};}}"
+    + f"#packTile:checked{{border-color:{ACCENT};}}"
+    + "QSlider{background:transparent;}"
+    + f"QSlider::groove:horizontal{{height:6px;background:{TRACK_BG};border-radius:3px;}}"
+    + f"QSlider::sub-page:horizontal{{background:{ACCENT_BTN};border-radius:3px;}}"
+    + "QSlider::handle:horizontal{width:12px;height:12px;margin:-4px 0;border-radius:6px;"
+    + f"background:{ACCENT};}}"
 )
 
 SCENE_MUSIC = (
@@ -220,7 +266,8 @@ SETUP_CARD = (
 )
 
 TABBAR_PANEL = (
-    f"QWidget{{background:{BG_PANEL};border-radius:8px;}}"
+    f"#tabPanel{{background:{BG_PANEL};border-radius:8px;"
+    "border-top-left-radius:0;border-bottom-left-radius:0;}"
     f"QPushButton{{color:{TEXT};background:{BTN_BG};border:1px solid {BORDER};"
     "border-radius:5px;font-size:12px;}"
     f"QPushButton:enabled:hover{{background:{BTN_HOVER};}}"

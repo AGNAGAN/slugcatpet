@@ -11,15 +11,13 @@ from ...brain.state import State, IDLE
 from ...brain.fsm import _lerpmap
 from ...brain.skills import motor
 from ...brain.skills.motor import WALL_MARGIN
-from ...items.base import CLIMBABLE, EDIBLE
+from ...items.base import CLIMBABLE
 
 # 零重力漂浮 idle
 ZEROG_ARRIVE_R = 30.0
 ZEROG_KICK_FAR = 60.0
 ZEROG_TWITCH_PROB = 0.02
 ZEROG_CURSOR_FRAC = 0.6
-ZEROG_LICK_PROB = 0.012
-ZEROG_CHASE_LICK_PROB = 0.03
 # 抓杆：赖杆来回滑一会再松
 ZEROG_GRAB_ALIGN = 12.0
 ZEROG_POLE_COOLDOWN = 40
@@ -148,77 +146,22 @@ class IdleStand(State):
         ctx = MoodContext(fsm.body.energy, fsm.body.temper, cold=fsm.body.cold, submerged=fsm.body.swimming)
         return fsm.mood.select(ctx)
 
-    def _nearest_zerog_edible(self):
-        """全房间最近可食物；飞行中蝙蝠与食性禁忌排除，无则 None。"""
-        fsm = self.fsm
-        b = fsm.body
-        best, bd = None, None
-        for f in fsm.items(EDIBLE):
-            if f.state not in ("free", "hanging"):
-                continue
-            if not getattr(f, "fetch_ready", True):
-                continue
-            if not fsm.traits.eats(f):
-                continue
-            d = math.hypot(f.x - b.chunk0.x, f.y - b.chunk0.y)
-            if bd is None or d < bd:
-                bd, best = d, f
-        return best
-
     def _roll_idle_hold(self):
         fsm = self.fsm
         base = fsm.rng.uniform(tuning.IDLE_HOLD_MIN, tuning.IDLE_HOLD_MAX)
         mult = _lerpmap(fsm.body.energy, 0.0, 1.0, tuning.IDLE_HOLD_TIRED_MULT, 1.0)
         return int(base * mult)
 
-    def _zerog_chase(self, b, e):
-        fsm = self.fsm
-        b.zerog_pole = None
-        fsm.gfx.look_at = (e.x, e.y)
-        dx, dy = e.x - b.chunk0.x, e.y - b.chunk0.y
-        dist = math.hypot(dx, dy)
-        if dist < tuning.SWIM_FETCH_REACH:
-            if getattr(e, "stuck_pos", None) is not None:
-                e.stuck_pos = None  # 抓取瞬间剥离黏菌
-            b.grab_fruit(e, "r" if e.x >= b.chunk0.x else "l")
-            motor.chew_reset(fsm)
-            return
-        ux, uy = dx / dist, dy / dist
-        b.zerog_swim(ux, uy, b.canJump > 0)
-        if b.canJump > 0 and dist > ZEROG_KICK_FAR:
-            b.request_zerog_kick(ux, uy)
-        if (
-            fsm.win.tongue is not None
-            and fsm.win.tongue.is_idle()
-            and dist > ZEROG_KICK_FAR
-            and fsm.rng.random() < ZEROG_CHASE_LICK_PROB
-        ):
-            fsm.win.fire_tongue(e.x, e.y)
-
-    def _zerog_eat(self, b):
-        fsm = self.fsm
-        b.zerog_pole = None
-        f = b.carried_fruit
-        if f.state != "carried":
-            b.release_fruit()
-            return
-        motor.carry_chew(fsm, b)
-
     def _zerog_idle(self, cursor):
         fsm = self.fsm
         b = fsm.body
         b.stop_walk()
-        if b.carried_fruit is not None:
-            self._zerog_eat(b)
+        if fsm.run_tasks("zerog"):
+            b.zerog_pole = None
             return
         fsm.gfx.look_at = fsm._ambient_look(cursor)
         if self._zerog_pole_cd > 0:
             self._zerog_pole_cd -= 1
-        if b.food < b.food_max and not fsm.ask("fetch_cooling"):
-            e = self._nearest_zerog_edible()
-            if e is not None:
-                self._zerog_chase(b, e)
-                return
 
         if fsm._zerog_entered:
             fsm._zerog_entered = False
@@ -250,8 +193,7 @@ class IdleStand(State):
                 ang = fsm.rng.uniform(0.0, math.tau)
                 b.zerog_swim(math.cos(ang), math.sin(ang), b.canJump > 0)
 
-        if fsm.win.tongue is not None and fsm.win.tongue.is_idle() and fsm.rng.random() < ZEROG_LICK_PROB:
-            fsm.win.fire_tongue(tx, ty)
+        fsm.run_tasks("zerog_aim", tx, ty)
 
     def _zerog_nearest_pole(self, x, y):
         """chunk0 点-段距离 < GRAB_DIST 的最近杆；无则 None。"""

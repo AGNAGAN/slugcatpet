@@ -27,7 +27,7 @@ def resolve_assets_dir() -> Path:
 
 
 _TRAILING_COMMA = re.compile(r",\s*([}\]])")
-# 换行分隔的成员之间漏了逗号（游戏里 DMS 的 MiniJSON 能容忍）
+# 换行分隔的成员之间漏了逗号
 _MISSING_COMMA = re.compile(r'(["}\]\d]|true|false|null)(\s*\n\s*)(")')
 
 

@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+from ..abilities import body_tags
 from ..abilities.base import resolve_params
-from .anger import Anger
+from .anger import Anger, ArmStoneBehavior
 from .ascend import Ascend
-from .base import Behavior, mood_candidate, mood_params, needed_abilities
+from .base import Behavior, mood_candidate, mood_params, needed_tags
+from .catch_breath import CatchBreathBehavior
 from .cursor_lick import CursorLick
 from .dodge_kill import DodgeKill
-from .fetch import Fetch
+from .fetch import Fetch, ForageBehavior
 from .idle import Idle
 from .makeway import MakeWayBehavior
 from .poles import Poles
@@ -21,6 +23,7 @@ from .seek_hpole import SeekHPoleBehavior
 from .swim import Swim
 from .wall_climb import WallClimb
 from .warmth import Warmth
+from .zerog_lick import ZeroGLick
 
 # 顺序即挂载顺序（影响心情抽签、规则与砸晕收尾的先后）；新模块加在末尾
 BUILTIN = (
@@ -41,12 +44,17 @@ BUILTIN = (
     RivSnatch,
     PyroRomp,
     PyroMaul,
+    ForageBehavior,
+    ArmStoneBehavior,
+    CatchBreathBehavior,
+    ZeroGLick,
 )
 
 REGISTRY: dict[str, type[Behavior]] = {cls.key: cls for cls in BUILTIN}
 
 
 def validate(behaviors: dict, abilities: dict, where: str) -> None:
+    tags = body_tags(abilities)
     for key, over in behaviors.items():
         cls = REGISTRY.get(key)
         if cls is None:
@@ -55,19 +63,20 @@ def validate(behaviors: dict, abilities: dict, where: str) -> None:
             if cls.essential:
                 raise ValueError(f"{where}: 行为 {key!r} 不能关闭")
             continue
-        missing = [r for r in needed_abilities(cls) if r not in abilities]
+        missing = [r for r in needed_tags(cls) if r not in tags]
         if missing:
-            raise ValueError(f"{where}: 行为 {key!r} 需要能力 {', '.join(missing)}")
+            raise ValueError(f"{where}: 行为 {key!r} 需要 {', '.join(missing)}")
         resolve_params(cls.params, over if isinstance(over, dict) else None, f"{where} 行为 {key}")
 
 
 def enabled(cat) -> list[type[Behavior]]:
     over = cat.behaviors
+    tags = body_tags(cat.abilities)
     return [
         cls
         for cls in BUILTIN
         if (cls.essential or over.get(cls.key, True) is not False)
-        and all(r in cat.abilities for r in needed_abilities(cls))
+        and all(r in tags for r in needed_tags(cls))
     ]
 
 

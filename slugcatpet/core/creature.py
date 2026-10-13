@@ -63,6 +63,27 @@ CARRY_OFF_X = 20.0
 CARRY_OFF_Y = 12.0
 EAT_BITES_MIN = 1
 
+HANDS = ("l", "r")  # 主手在前
+SWITCH_HANDS_RATE = 1.0 / 12.0
+
+
+def other_hand(side):
+    return "r" if side == "l" else "l"
+
+
+class Throw:
+    """一次投掷：谁扔的、方向（四向之一，y↓）、力度、瞄准方向（单位向量，可无）。"""
+
+    __slots__ = ("by", "dir_x", "dir_y", "force", "aim")
+
+    def __init__(self, by, dir_x, dir_y=0, force=1.0, aim=None):
+        self.by = by
+        self.dir_x = int(dir_x)
+        self.dir_y = int(dir_y)
+        self.force = float(force)
+        self.aim = aim
+
+
 WATER_FRICTION = 0.96
 
 
@@ -79,6 +100,7 @@ class SlugcatBody:
         food=None,
         karma=None,
         stats=DEFAULT_STATS,
+        food_q=0,
     ):
         self.stats = stats
         hx, hy = hip_xy
@@ -103,7 +125,6 @@ class SlugcatBody:
         self.feet_stuck = None  # 钉脚锚 (x,y) or None
         self.crawl_anchor = None
         self.crawl_pose = 0.0
-        self.prone_snap = 0  # >0 时趴姿快速贴合（让路趴下）
 
         self.crawl_sink = 0.0
         self.hip_sink = 0.0
@@ -140,6 +161,14 @@ class SlugcatBody:
         self.last_breath = 0.0
         self.sleeping = False  # 睡眠态：呼吸周期恒 80
 
+        # 气喘 aerobic ∈[0,1]：跳、爬、扔累积，随时间回落；驱动呼吸
+        self.aerobic = 0.0
+        self.exhausted = False  # 累倒：由能力按 aerobic 判定，核心只结算后果
+        self.slow_stun = 0  # 动作迟缓计数，>0 时跑、爬变慢
+        self.endless_roll = False  # 未累倒时翻滚不自然停（重压能力写入）
+        self.throw_hooks = []  # 扔出武器后调用 fn(body, obj, throw)，由能力登记
+        self.wounds = 0.0  # 累计伤，到 1 即死，复活清零
+
         # energy ∈[0,1]，1=满 0=耗尽
         self.energy = float(energy)
 
@@ -150,6 +179,7 @@ class SlugcatBody:
         self.food_max = stats.max_food
         self.food_hibernate = stats.food_hibernate
         self.food = int(tuning.FOOD_INIT if food is None else food)
+        self.food_q = int(food_q) % 4 if self.food < self.food_max else 0  # 攒着的 1/4 格
 
         # karma_max 随种族，老存档超值在此夹回
         self.karma_max = tuning.KARMA_MAX if stats.karma_cap is None else stats.karma_cap
@@ -220,13 +250,12 @@ class SlugcatBody:
         self._spin_hold = 0
         self._spin_done = False
         self.bubble_cb = None
-        self.carried_fruit = None
-        self.carry_hand = None
-        self.carried_stone = None
+        self.grasps = {"l": None, "r": None}  # 手持物：l 为主手
         self.stun = 0
         self.arm_aim = {"l": None, "r": None}
         self.arm_full_reach = 24.0
-        self.eat_raise = 0.0
+        self.eat_raise = {"l": 0.0, "r": 0.0}
+        self.switch_hands = 0.0  # 换手进度，0=未在换
 
     @property
     def total_mass(self):
@@ -264,8 +293,6 @@ class SlugcatBody:
 
     def set_posture(self, standing: bool):
         self.standing = bool(standing)
-        if standing:
-            self.prone_snap = 0
 
     def request_jump(self, kind="stand", hold_ticks=None):
         self._jump_pending = kind
@@ -287,6 +314,7 @@ class SlugcatBody:
         self.jump_boost = self.stats.jump_boost
         self.walk_target_x = None
         self.move_dir = int(move_dir)
+        self.aerobic_increase(self.stats.jump_aerobic)
 
     def pole_jump(self, direction, move_dir=None):
         c0, c1 = self.chunk0, self.chunk1
@@ -307,6 +335,7 @@ class SlugcatBody:
         c1.vy = s.pole_jump_feet_vy
         self.walk_target_x = None
         self.move_dir = int(d if move_dir is None else move_dir)
+        self.aerobic_increase(s.jump_aerobic)
 
     def backflip_launch(self, direction, boosted=False):
         c0, c1 = self.chunk0, self.chunk1
@@ -333,6 +362,7 @@ class SlugcatBody:
         self.walk_target_x = None
         self.move_dir = d
         self.facing = -d
+        self.aerobic_increase(s.jump_aerobic)
 
     def pyro_boost(self, ix, iy, overheat=False):
         c0, c1 = self.chunk0, self.chunk1
@@ -388,6 +418,7 @@ class SlugcatBody:
 
     def revive(self):
         self.dead = False
+        self.wounds = 0.0
         self.air_in_lungs = 1.0  # 复活重置憋气，防残留标志立即再死
         self.drown = 0.0
         self.lungs_exhausted = False
@@ -417,6 +448,8 @@ class SlugcatBody:
         if self.dead:
             self._step_dead()
             return
+        self._aerobic_update()
+        self._switch_update()
         self._update_submersion()
         self._lung_update()
         swimming = self._should_swim()
@@ -462,7 +495,6 @@ class SlugcatBody:
         self._gait_update()
         self._breath_update()
         self._apply_carry()
-        self._apply_carry_stone()
 
     def _step_hover(self):
         ws = self.water_surface
@@ -595,6 +627,8 @@ class SlugcatBody:
                 self.drown = 0.0
             self.submerged = False
             self.drown_burst = False
+            if self.lungs_exhausted and not (self.swimming and self.swim_mode == "surface"):
+                self.swim_cycle += 0.1  # 出水回气时喘粗气的节拍
         if self.air_in_lungs > 1.0:
             self.air_in_lungs = 1.0
 
@@ -665,7 +699,6 @@ class SlugcatBody:
         c1.clamp_inside(self.W, self._floor_h)
         self._breath_update()
         self._apply_carry()
-        self._apply_carry_stone()
 
     def _decide_swim_mode(self, ws):
         if self.no_dive or self.swim_resting:
@@ -855,7 +888,6 @@ class SlugcatBody:
         c1.clamp_inside(self.W, self.H)
         self._breath_update()
         self._apply_carry()
-        self._apply_carry_stone()
 
     def _zerog_pole_grab(self) -> bool:
         pole = self.zerog_pole
@@ -1026,12 +1058,13 @@ class SlugcatBody:
     def _impact(self, chunk, direction, speed, strength, ix, iy):
         if self.impact_cb is not None:
             self.impact_cb(chunk, direction, speed, strength, ix, iy)
-        if self.dead or self.stun > 0 or self.on_hurt is None or speed <= tuning.FALL_STUN_SPEED:
+        s = self.stats
+        if self.dead or self.stun > 0 or self.on_hurt is None or speed <= s.fall_stun_speed:
             return
-        if speed > tuning.FALL_DEATH_SPEED and direction[1] > 0 and self._held_chunk() is None:
+        if speed > s.fall_death_speed and direction[1] > 0 and self._held_chunk() is None:
             self.on_hurt("die", 0)
             return
-        t = inv_lerp(tuning.FALL_STUN_SPEED, tuning.FALL_DEATH_SPEED, speed) ** 2.5
+        t = inv_lerp(s.fall_stun_speed, s.fall_death_speed, speed) ** 2.5
         self.on_hurt("stun", int(lerp(tuning.FALL_STUN_MIN, tuning.FALL_STUN_MAX, t)))
 
     def _step_dead(self):
@@ -1117,8 +1150,9 @@ class SlugcatBody:
         else:
             self.bodyMode = "Crawl"
 
-        dyn0 = RUN_UPPER * self.stats.runspeed_fac  # 顶速×种族因子，不乘加速度
-        dyn1 = RUN_LOWER * self.stats.runspeed_fac
+        dyn0 = RUN_UPPER * self.stats.runspeed_fac * self.slow_fac(0.5)  # 顶速×种族因子，不乘加速度
+        dyn1 = RUN_LOWER * self.stats.runspeed_fac * self.slow_fac(0.5)
+        accel = H_ACCEL * self.slow_fac(0.4)
         if self.bodyMode == "Stand":
             c0.vy += STAND_HEAD
             c1.vy += STAND_FEET
@@ -1145,13 +1179,13 @@ class SlugcatBody:
             if c.pinned:
                 continue
             if move_x < 0:
-                step = H_ACCEL
+                step = accel
                 if c.vx - step < -dyn:
                     step = dyn + c.vx
                 if step > 0:
                     c.vx -= step
             elif move_x > 0:
-                step = H_ACCEL
+                step = accel
                 if c.vx + step > dyn:
                     step = dyn - c.vx
                 if step > 0:
@@ -1208,6 +1242,7 @@ class SlugcatBody:
         self.crawl_anchor = None
         self.crawl_pose = 0.0
         self._jump_hold_left = hold_ticks
+        self.aerobic_increase(self.stats.jump_aerobic)
         if kind == "wake":
             c0.y -= 6.0
             c0.vy += JUMP_STAND_FEET * 1.5
@@ -1241,9 +1276,6 @@ class SlugcatBody:
         ty = target_y
         if self.sleeping:
             k = tuning.SLEEP_ANCHOR_EASE
-        elif self.prone_snap > 0:
-            k = 0.35
-            self.prone_snap -= 1
         else:
             k = 0.045 + 0.035 * self.crawl_pose
         c0.x += (tx - c0.x) * k
@@ -1251,12 +1283,46 @@ class SlugcatBody:
         c0.vx *= 0.82
         c0.vy *= 0.82
 
+    def aerobic_increase(self, f):
+        self.aerobic = min(1.0, self.aerobic + f / 9.0)
+
+    def _moving_input(self):
+        """本 tick 有没有移动意图（决定气喘回落快慢）。"""
+        if self._ctrl_on and self._ctrl_input is not None:
+            i = self._ctrl_input[0]
+            return i.x != 0 or i.y != 0
+        return self.move_dir != 0 or self.is_moving() or self.swim_input_x != 0
+
+    def _aerobic_update(self):
+        if self.slow_stun > 0:
+            self.slow_stun -= 1
+        a = self.aerobic
+        if self.lungs_exhausted and not self.exhausted:
+            a = 1.0
+        else:
+            if not self.exhausted:
+                moving, still = 1100.0, 400.0
+            elif self.bodyMode == "Crawl":
+                moving, still = 400.0, 125.0
+            else:
+                moving, still = 800.0, 200.0
+            t = moving if self._moving_input() else still
+            a -= 1.0 / (t * (1.0 + 3.0 * inv_lerp(0.9, 1.0, a)))
+            a = max(1.0 - self.air_in_lungs, a, 0.0)
+        self.aerobic = a
+        if self.exhausted:
+            self.slow_stun = max(self.slow_stun, int(lerp(6.0, 0.0, inv_lerp(0.7, 0.4, a))))
+
+    def slow_fac(self, lo):
+        """迟缓时的速度倍率：slow_stun 0→10 映射到 1→lo。"""
+        return lerp(1.0, lo, self.slow_stun / 10.0)
+
     def _breath_update(self):
         self.last_breath = self.breath
         if self.sleeping:
             period = 80.0
         else:
-            period = 60.0 * (1.0 - 0.75 * ((1.0 - self.energy) ** 1.5))
+            period = lerp(60.0, 15.0, self.aerobic**1.5)
         self.breath += 1.0 / period
 
     def breath_phase(self, ts=1.0):
@@ -1276,7 +1342,23 @@ class SlugcatBody:
             self.temper = min(0.0, self.temper + tuning.TEMPER_DECAY)
 
     def food_eat(self, n):
+        """整格增减饱食；吃满时清掉攒着的 1/4。"""
         self.food = max(0, min(self.food_max, self.food + int(n)))
+        if self.food >= self.food_max:
+            self.food_q = 0
+
+    def feed(self, quarters):
+        """吃下 quarters 个 1/4 格：整格直接加，余下逐个攒，攒满 4 个进一格；好感、体力一起结算。"""
+        self.temper_shift(tuning.TEMPER_FEED)
+        whole, rest = divmod(int(quarters), 4)
+        self.food_eat(whole)
+        for _ in range(rest):
+            if self.food < self.food_max:
+                self.food_q += 1
+                if self.food_q >= 4:
+                    self.food_q -= 4
+                    self.food_eat(1)
+        self.energy_change(tuning.EN_EAT_RESTORE)
 
     def karma_gain(self):
         self.karma = min(self.karma_max, self.karma + 1)
@@ -1301,6 +1383,8 @@ class SlugcatBody:
             if not st["on"]:
                 if abs(foot[0] - should_x) > self.step_threshold and not other["on"]:
                     st["on"] = True
+                    if moving and self.bodyMode == "Stand" and self.aerobic < 0.7:
+                        self.aerobic_increase(0.05)
                     st["start"] = foot[0]
                     st["goal"] = should_x
                     st["lerp"] = 0.0
@@ -1330,135 +1414,204 @@ class SlugcatBody:
             self.walk_bob_y *= 0.85
 
     def _carry_pos(self, side):
+        """手持静止姿态点：上身侧下方，随脊柱转。"""
         c0 = self.chunk0
         sgn = -1.0 if side == "l" else 1.0
         ang = _ang_from_up(c0.x - self.chunk1.x, c0.y - self.chunk1.y)
-        s = 1.0 - self.eat_raise
-        ox, oy = _rot(sgn * CARRY_OFF_X * s, CARRY_OFF_Y * s, ang)
+        ox, oy = _rot(sgn * CARRY_OFF_X, CARRY_OFF_Y, ang)
         return c0.x + ox, c0.y + oy
 
-    def reach_for(self, fruit, side):
-        self.arm_aim[side] = (fruit.x, fruit.y)
-        self.arm_aim["l" if side == "r" else "r"] = None
+    def reach_for(self, obj, side):
+        """用空手伸向 obj；双手都满时用 side。"""
+        side = self.free_hand(side) or side
+        self.arm_aim[side] = (obj.x, obj.y)
+        self.arm_aim[other_hand(side)] = None
 
-    def grab_fruit(self, fruit, side):
-        self.carried_fruit = fruit
-        self.carry_hand = side
-        fruit.state = "carried"
-        fruit.held_by_hand = side
-        self.eat_raise = 0.0
-        if fruit.stalk is not None:
-            fruit.stalk.release_counter = 2
+    def held(self, side):
+        return self.grasps[side]
 
-    def release_fruit(self):
-        side = self.carry_hand
-        self.carried_fruit = None
-        self.carry_hand = None
-        self.eat_raise = 0.0
+    def hand_of(self, obj):
+        """obj 在哪只手里；不在手里返回 None。"""
+        if obj is None:
+            return None
+        for side in HANDS:
+            if self.grasps[side] is obj:
+                return side
+        return None
+
+    def free_hand(self, prefer=None):
+        """空手：优先 prefer，否则按主手顺序；双手满返回 None。"""
+        if prefer is not None and self.grasps[prefer] is None:
+            return prefer
+        for side in HANDS:
+            if self.grasps[side] is None:
+                return side
+        return None
+
+    def held_items(self):
+        return [o for o in (self.grasps["l"], self.grasps["r"]) if o is not None]
+
+    def can_hold(self, obj):
+        """再拿 obj 合不合规矩：大件同时只能拿一件，能双持的猫不限（不管有没有空手）。"""
+        if not getattr(obj, "bulky", False) or self.stats.dual_wield:
+            return True
+        return not any(getattr(o, "bulky", False) for o in self.held_items() if o is not obj)
+
+    def holding_any(self):
+        return self.grasps["l"] is not None or self.grasps["r"] is not None
+
+    def held_throwable(self):
+        """按主手顺序第一个可投掷的手持物。"""
+        for side in HANDS:
+            o = self.grasps[side]
+            if o is not None and getattr(o, "throwable", False):
+                return o
+        return None
+
+    def grab(self, obj, side):
+        self.grasps[side] = obj
+        obj.state = "carried"
+        obj.held_by_hand = side
+        self.eat_raise[side] = 0.0
+        self.arm_aim[side] = None
+        stalk = getattr(obj, "stalk", None)
+        if stalk is not None:
+            stalk.release_counter = 2
+
+    def release(self, obj, to_free=False):
+        """松开 obj；to_free 时把它放回自由态。"""
+        side = self.hand_of(obj)
+        if side is None:
+            return
+        self.grasps[side] = None
+        obj.held_by_hand = None
+        if to_free:
+            obj.state = "free"
+        self.eat_raise[side] = 0.0
+        self.arm_aim[side] = None
+
+    def set_eat_raise(self, obj, k):
+        """拿 obj 的手进入啃食姿态的程度，k∈[0,1]。"""
+        side = self.hand_of(obj)
         if side is not None:
-            self.arm_aim[side] = None
+            self.eat_raise[side] = k
 
-    def bite_carried(self):
-        f = self.carried_fruit
-        if f is None:
-            return False
-        f.bites -= 1
-        return f.bites < EAT_BITES_MIN
+    def can_switch_hands(self):
+        return self.switch_hands == 0.0 and self.holding_any()
 
-    def consume_carried(self):
-        """啃一口，吃完则结算并释放，返回是否吃完。"""
-        if self.carried_fruit is None:
+    def start_switch_hands(self):
+        """开始换手：两手收向中线，过半时交换手持物。"""
+        if self.can_switch_hands():
+            self.switch_hands = 0.01
+
+    def _switch_update(self):
+        p = self.switch_hands
+        if p <= 0.0:
+            return
+        q = p + SWITCH_HANDS_RATE
+        if p < 0.5 <= q:
+            g = self.grasps
+            g["l"], g["r"] = g["r"], g["l"]
+            e = self.eat_raise
+            e["l"], e["r"] = e["r"], e["l"]
+            for side in HANDS:
+                if g[side] is not None:
+                    g[side].held_by_hand = side
+        self.switch_hands = 0.0 if q >= 1.0 else q
+
+    def bite(self, obj):
+        obj.bites -= 1
+        return obj.bites < EAT_BITES_MIN
+
+    def consume(self, obj, quarters):
+        """啃一口，吃完则按 quarters 个 1/4 格结算并释放，返回是否吃完。"""
+        if self.hand_of(obj) is None:
             return False
-        if self.bite_carried():
-            f = self.carried_fruit
-            f.state = "eaten"
-            self.temper_shift(tuning.TEMPER_FEED)
-            self.food_eat(1)
-            self.energy_change(tuning.EN_EAT_RESTORE)
-            self.release_fruit()
+        if self.bite(obj):
+            obj.state = "eaten"
+            self.feed(quarters)
+            self.release(obj)
             return True
         return False
 
-    def _apply_carry(self):
-        f = self.carried_fruit
-        if f is None:
-            return
-        side = self.carry_hand
-        cx, cy = self._carry_pos(side)
-        f.last_x, f.last_y = f.x, f.y
-        f.x, f.y = cx, cy
-        f.set_rotation_to_grabber(self.chunk0.x, self.chunk0.y)
-        self.arm_aim[side] = (cx, cy)
-        self.arm_aim["l" if side == "r" else "r"] = None
-        if f.stalk is not None:
-            if f.stalk.step(f):
-                f.stalk = None
-
-    @property
-    def carried(self):
-        return self.carried_fruit if self.carried_fruit is not None else self.carried_stone
-
     def drop_carried(self):
-        f = self.carried_fruit
-        if f is not None:
-            f.stalk = None
-            f.state = "free"
-            f.held_by_hand = None
-            self.release_fruit()
-        if self.carried_stone is not None:
-            self.release_stone(to_free=True)
+        for obj in self.held_items():
+            if getattr(obj, "stalk", None) is not None:
+                obj.stalk = None
+            self.release(obj, to_free=True)
 
-    def grab_stone(self, stone, side):
-        self.carried_stone = stone
-        self.carry_hand = side
-        stone.state = "carried"
-        self.eat_raise = 0.0
+    def throw_origin(self, dir_x, dir_y=0):
+        """出手点：上身朝投掷方向偏出，与哪只手拿着无关。"""
+        c0 = self.chunk0
+        return c0.x + float(dir_x) * 10.0, c0.y + float(dir_y) * 10.0 - 4.0
 
-    def release_stone(self, to_free=False):
-        side = self.carry_hand
-        s = self.carried_stone
-        self.carried_stone = None
-        self.carry_hand = None
-        self.eat_raise = 0.0
-        if s is not None and to_free:
-            s.state = "free"
-        if side is not None:
-            self.arm_aim[side] = None
-
-    def throw_stone(self, dir_x, base_speed, up=3.0, recoil=1.0, vy=None):
-        """抛出手中石头，返回石头或 None；vy 给定时覆盖竖直初速。"""
-        s = self.carried_stone
-        if s is None:
+    def throw(self, obj, dir_x, base_speed, up=3.0, recoil=1.0, vy=None, dir_y=0, aim=None):
+        """抛出手中 obj，返回 obj 或 None；dir_y≠0 时竖直扔（y↓），vy 给定时覆盖竖直初速，aim 交给物体按自己的规则出手。"""
+        if self.hand_of(obj) is None:
             return None
         c0, c1 = self.chunk0, self.chunk1
-        side = self.carry_hand
-        sx, sy = self._carry_pos(side)
-        s.last_x, s.last_y = s.x, s.y
-        s.last_rotation = s.rotation_deg
-        s.x = sx + float(dir_x) * 10.0
-        s.y = sy - 4.0
-        s.vx = c0.vx * 0.2 + float(dir_x) * base_speed
-        s.vy = c0.vy * 0.5 - up if vy is None else float(vy)
-        s.spin = float(dir_x) * 8.0
-        s.fling = False
-        s.thrown_by_cat = True
-        s.state = "free"
-        self.release_stone(to_free=False)
+        obj.last_x, obj.last_y = obj.x, obj.y
+        force = 0.5 if self.exhausted else 1.0
+        base_speed *= force
+        if dir_y:
+            dir_x = 0
+        obj.set_rotation_to_grabber(c0.x, c0.y)
+        obj.x, obj.y = self.throw_origin(dir_x, dir_y)
+        if dir_y:
+            obj.vx = c0.vx * 0.5
+            obj.vy = float(dir_y) * base_speed
+        else:
+            obj.vx = c0.vx * 0.2 + float(dir_x) * base_speed
+            obj.vy = c0.vy * 0.5 - up if vy is None else float(vy)
+        throw = Throw(self, dir_x, dir_y, force, aim)
+        obj.on_thrown(throw)
+        obj.state = "free"
+        self.release(obj)
+        self.aerobic_increase(0.75)
         c0.vx += float(dir_x) * 8.0 * recoil
         c1.vx -= float(dir_x) * 4.0 * recoil
-        return s
+        for fn in self.throw_hooks:
+            fn(self, obj, throw)
+        return obj
 
-    def _apply_carry_stone(self):
-        s = self.carried_stone
-        if s is None:
-            return
-        side = self.carry_hand
-        cx, cy = self._carry_pos(side)
-        s.last_x, s.last_y = s.x, s.y
-        s.last_rotation = s.rotation_deg
-        s.x, s.y = cx, cy
-        self.arm_aim[side] = (cx, cy)
-        self.arm_aim["l" if side == "r" else "r"] = None
+    def throw_direction(self, input_x=0):
+        """出手方向：身体竖着时看输入或朝向，趴着时看头朝哪边。"""
+        c0, c1 = self.chunk0, self.chunk1
+        if self.bodyMode == "Default" or abs(c0.x - c1.x) < 15.0:
+            return input_x if input_x else self.facing
+        return 1 if c0.x >= c1.x else -1
+
+    def toss(self, obj, dir_x, ang_deg, power):
+        """抛开手中非武器物：从身体外侧按角度出手，ang_deg 自竖直向上量起。"""
+        if self.hand_of(obj) is None:
+            return None
+        c0, c1 = self.chunk0, self.chunk1
+        obj.last_x, obj.last_y = obj.x, obj.y
+        if dir_x < 0:
+            obj.x = min(obj.x, min(c0.x, c1.x) - 8.0)
+        elif dir_x > 0:
+            obj.x = max(obj.x, max(c0.x, c1.x) + 8.0)
+        obj.y = c0.y
+        mass = getattr(obj, "mass", 0.1)
+        k = clampf((mass - 0.2) / 0.3, 0.0, 1.0)
+        speed = clampf(power / (mass * 0.8 + 0.08), 4.0, 14.0)
+        a = math.radians(ang_deg * dir_x)
+        mix = 0.6 + (0.3 - 0.6) * k
+        obj.vx = c0.vx * mix + math.sin(a) * speed
+        obj.vy = c0.vy * mix - math.cos(a) * speed
+        if getattr(obj, "stalk", None) is not None:
+            obj.stalk = None
+        obj.state = "free"
+        self.release(obj)
+        self.aerobic_increase(0.75)
+        return obj
+
+    def _apply_carry(self):
+        """手持物的位置由图形层贴到手上，这里只推进果柄。"""
+        for obj in self.held_items():
+            stalk = getattr(obj, "stalk", None)
+            if stalk is not None and stalk.step(obj):
+                obj.stalk = None
 
 
 def _dot_norm(vx, vy, ux, uy):

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .grasp import GraspControl
 from .input import InputBuffer
 
 # 退出控制复位表（字段 → 默认值）；进/退共用，测试遍历断言
@@ -70,6 +71,7 @@ def enter_control(pet, provider) -> None:
     body._ctrl_input = InputBuffer()  # 新建历史环，防跨会话陈旧边沿
     body._input_provider = provider
     _mount_species_ctrl(pet, body)
+    pet.grasp_ctrl = GraspControl(pet)
     pet.controlled = True
 
 
@@ -89,6 +91,7 @@ def exit_control(pet) -> None:
         body.animation = None
     body.stop_walk()
     body.jump_boost = 0.0
+    pet.grasp_ctrl = None  # 手里的东西交给 AI 的手部管家
     beh = pet.behavior
     if beh is not None:
         if body.dead:

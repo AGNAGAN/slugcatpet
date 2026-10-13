@@ -4,6 +4,7 @@ from __future__ import annotations
 import math
 
 from ... import tuning
+from ...abilities.tongue.aim import fire_at, tongue_of
 
 BAND_LO = tuning.CURSOR_DWELL_BAND_LO
 BAND_HI = tuning.CURSOR_DWELL_BAND_HI
@@ -23,7 +24,7 @@ class CursorLicker:
     def __init__(self, win, rng):
         self.win = win
         self.body = win.body
-        self.tongue = win.tongue
+        self.tongue = tongue_of(win)
         self.rng = rng
         self.phase = "walk_under"
         self.timer = 0
@@ -75,7 +76,7 @@ class CursorLicker:
             dist = math.hypot(cursor[0] - mox, cursor[1] - moy)
             if dist <= tg.total * REACH_K:
                 tg.set_targets(ideal=LICK_IDEAL, reel_rate=LICK_REEL)
-                self.win.fire_tongue_at(cursor[0], cursor[1])
+                fire_at(self.win, cursor[0], cursor[1])
                 self._intent = "attach"
             else:
                 self._fire_miss(mox, moy, cursor)

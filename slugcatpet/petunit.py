@@ -4,6 +4,7 @@ from __future__ import annotations
 import math
 import random
 
+from .abilities import MOUTH, body_tags
 from .abilities import instantiate as build_abilities
 from .appearance import Look
 from . import tuning
@@ -44,6 +45,7 @@ class PetUnit:
         self.cat = get_cat_def(variant)
         self.traits = Traits(self.cat.personality)
         self.abilities = build_abilities(self.cat)  # key → Ability
+        self.tags = body_tags(self.cat.abilities)
         self.organs = {}  # 能力建的器官（key → 器官对象）
         self.look = look or Look()
         self.name = name  # 用户起的名字，空=用猫种名
@@ -55,6 +57,7 @@ class PetUnit:
         self._kill_cancel_by_self = False
         self._kill_dismiss_silent = False  # 静默消解，跳过扣好感
         self.controlled = False
+        self.grasp_ctrl = None  # 操控态的手部输入，进入操控时新建
         self.behavior = None
         self._build(init_state, spawn_x)
         self._attach_behavior()
@@ -77,6 +80,7 @@ class PetUnit:
             energy=init_state.get("energy", 1.0),
             temper=init_state.get("temper", 0.0),
             food=init_state.get("food"),
+            food_q=init_state.get("food_q", 0),
             karma=init_state.get("karma"),
             stats=self.cat.stats,
         )
@@ -98,7 +102,7 @@ class PetUnit:
             self.body.step()
             self.gfx.update()
         ax, ay = self.gfx.tail_root_world()
-        self.tail = Tail(ax, ay, self._tail_rads())
+        self.tail = Tail(ax, ay, self.gfx._tail_rad)
         self.tail.floor_y = floor_y
         self._prev_root = (ax, ay)
         self.gfx.tail_segs = self.tail.segs
@@ -128,32 +132,37 @@ class PetUnit:
                 layers[slot].append(fn)
 
     def _on_hurt(self, kind, ticks):
-        """撞击伤害交给行为层；舌头挂着时不算。"""
-        tg = self.tongue
-        if self.behavior is None or (tg is not None and tg.attached):
+        """撞击伤害交给行为层；吊挂着时不算。"""
+        if self.behavior is None or self.body.suspended:
             return
         if kind == "die":
             self.behavior.kill()
         else:
             self.behavior.apply_stun(ticks)
 
-    @property
-    def tongue(self):
-        return self.organs.get("tongue")
+    def release_organs(self):
+        """状态被打断、晕、死时：各能力收回器官，解除吊挂。"""
+        for ab in self.abilities.values():
+            ab.release(self)
+        self.body.suspended = False
 
-    @property
-    def skin_id(self) -> str | None:
-        return self.look.skin
+    def skill(self, name):
+        """能力提供的技能槽实现（按挂载顺序取第一个），没有则 None。"""
+        for ab in self.abilities.values():
+            cls = ab.skills.get(name)
+            if cls is not None:
+                return cls(self)
+        return None
+
+    def can_eat(self, obj) -> bool:
+        """这只猫能用嘴吃 obj：有嘴、obj 能吃、食性允许。"""
+        return MOUTH in self.tags and getattr(obj, "edible", False) and self.traits.eats(obj)
 
     def _make_atlas(self):
         """皮肤 → 原版。"""
         from . import skins
 
-        return skins.resolver_for(self.window.atlas, self.skin_id, self.cat.key)
-
-    def set_skin(self, skin_id: str | None):
-        self.look.skin = skin_id or None
-        self.refresh_skin()
+        return skins.resolver_for(self.window.atlas, self.look, self.cat.key)
 
     def set_look(self, look: Look):
         self.look = look
@@ -169,19 +178,14 @@ class PetUnit:
     def refresh_skin(self):
         self.atlas = self._make_atlas()
         self.gfx.apply_skin(self.atlas)
-        if len(self.gfx._tail_rad) != len(self.tail.segs):
+        if tuple(self.gfx._tail_rad) != tuple(s.rad for s in self.tail.segs):
             old = self.tail
-            self.tail = Tail(old.segs[0].x, old.segs[0].y, self._tail_rads())
+            self.tail = Tail(old.segs[0].x, old.segs[0].y, self.gfx._tail_rad)
             self.tail.adopt(old)
             self.gfx.tail_segs = self.tail.segs
         w = self.window
         w._shown = None
         w.update()
-
-    def _tail_rads(self):
-        """皮肤改了尾巴段数时，物理段也按 DMS 半径建；4 段沿用游戏默认。"""
-        rads = self.gfx._tail_rad
-        return rads if len(rads) != 4 else None
 
     def _attach_behavior(self):
         try:
@@ -199,10 +203,17 @@ class PetUnit:
 
             exit_control(self)
         self.dismiss_kill_dialog()
+        self.body.drop_carried()
         w = self.window
         if preserve:
             b = self.body
-            init_state = {"energy": b.energy, "temper": b.temper, "food": b.food, "karma": b.karma}
+            init_state = {
+                "energy": b.energy,
+                "temper": b.temper,
+                "food": b.food,
+                "food_q": b.food_q,
+                "karma": b.karma,
+            }
         else:
             init_state = {"energy": 1.0, "temper": 0.0, "food": tuning.FOOD_INIT, "karma": tuning.KARMA_INIT}
         self._build(init_state)
@@ -271,6 +282,8 @@ class PetUnit:
         self._feed_swim_neighbors()
 
         b.step()
+        if self.controlled and self.grasp_ctrl is not None:
+            self.grasp_ctrl.update()
         self._cold_update(cycle_prog)
         g.update()
         for ab in self.abilities.values():
@@ -411,18 +424,3 @@ class PetUnit:
         if len(segs) > 1:
             segs[1].vx += px * ZEROG_TAIL_AMP1 * s
             segs[1].vy += py * ZEROG_TAIL_AMP1 * s
-
-    def fire_tongue(self, tx, ty):
-        ab = self.abilities.get("tongue")
-        if ab is not None:
-            ab.fire(self, tx, ty)
-
-    def fire_tongue_at(self, px, py) -> bool:
-        """直接朝世界点钉舌，返回是否射出。"""
-        ab = self.abilities.get("tongue")
-        return ab is not None and ab.fire_at(self, px, py)
-
-    def fire_tongue_at_obj(self, fruit) -> bool:
-        """射舌粘住果子，返回是否射出。"""
-        ab = self.abilities.get("tongue")
-        return ab is not None and ab.fire_at(self, fruit.x, fruit.y, obj=fruit)

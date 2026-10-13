@@ -12,7 +12,7 @@ from PySide6.QtGui import QColor, QFont, QImage, QPainter
 
 from . import groups as G
 
-# 输出文件 → 部件组（TAILSPECKLES/PIXEL 桌宠不画，不导出）
+# 输出文件 → 部件组（PIXEL 桌宠不画，不导出）
 FILES = {
     "head": ("HEAD",),
     "face": ("FACE",),
@@ -21,7 +21,7 @@ FILES = {
     "arm": ("ARMS",),
     "legs": ("LEGS",),
     "tail": ("TAIL",),
-    "extras": ("FACESCAR", "GILLS", "ASCENSION"),
+    "extras": ("FACESCAR", "GILLS", "TAILSPECKLES", "ASCENSION"),
 }
 TAIL_SIZE = (150, 75)
 ROW_MAX_W = 1024

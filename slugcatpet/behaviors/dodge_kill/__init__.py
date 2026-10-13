@@ -58,7 +58,7 @@ def _mount(fsm, p):
 
     def brk():
         release()
-        fsm._break_tongue()
+        fsm.release_organs()
         fsm.body.stop_walk()
         fsm.gfx.hand_aim["l"] = None
         fsm.gfx.hand_aim["r"] = None

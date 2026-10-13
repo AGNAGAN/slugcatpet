@@ -25,6 +25,7 @@ _KEYS = {
     "layout",
     "atlases",
     "frames",
+    "tail_rad",
     "abilities",
     "behaviors",
     "stats",
@@ -32,7 +33,7 @@ _KEYS = {
     "wip",
 }
 _REQUIRED = ("key", "body_color", "eye_color", "layout", "atlases", "frames")
-# 语义帧名：必填 / 可选（含义见 ai-docs/CHARACTERS.md）
+# 语义帧名：必填 / 可选
 FRAMES_REQUIRED = ("head", "face", "face_blink", "legs_walk", "legs_crawl", "legs_air")
 FRAMES_OPTIONAL = ("face_open", "face_mirror")
 _HEX = re.compile(r"^#([0-9a-fA-F]{6})$")
@@ -94,6 +95,15 @@ def load_character(path: Path) -> tuple[int, CatDef]:
     lack = [n for n in FRAMES_REQUIRED if n not in frames]
     if bad or lack:
         raise ValueError(f"{where}: frames 未知 {bad} / 缺少 {lack}")
+    tail_rad = data.get("tail_rad", [])
+    if not isinstance(tail_rad, list) or not (
+        tail_rad == []
+        or (
+            2 <= len(tail_rad) <= 15
+            and all(isinstance(r, (int, float)) and not isinstance(r, bool) and r > 0 for r in tail_rad)
+        )
+    ):
+        raise ValueError(f"{where}: tail_rad 应为 2–15 个正数（尾巴每段半径），得到 {tail_rad!r}")
     abilities = data.get("abilities", {})
     behaviors = data.get("behaviors", {})
     if not isinstance(abilities, dict) or not all(isinstance(v, dict) for v in abilities.values()):
@@ -116,6 +126,7 @@ def load_character(path: Path) -> tuple[int, CatDef]:
         frames=frames,
         layout_file=data["layout"],
         atlas_keys=tuple(data["atlases"]),
+        tail_rad=tuple(float(r) for r in tail_rad),
         abilities=abilities,
         behaviors=behaviors,
         stats=_override(DEFAULT_STATS, data.get("stats", {}), f"{where} stats"),

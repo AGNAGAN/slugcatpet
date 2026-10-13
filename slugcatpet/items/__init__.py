@@ -8,10 +8,11 @@ from .fruit import KIND as FRUIT
 from .lamp import KIND as LAMP
 from .pole import HPOLE, VPOLE
 from .slimemold import KIND as SLIMEMOLD
+from .spear import KIND as SPEAR
 from .stone import KIND as STONE
 
 # 新物品加在末尾，原有场景的推进和绘制顺序就不变
-BUILTIN: tuple[ItemKind, ...] = (VPOLE, HPOLE, FRUIT, STONE, LAMP, SLIMEMOLD, BATFLY)
+BUILTIN: tuple[ItemKind, ...] = (VPOLE, HPOLE, FRUIT, STONE, LAMP, SLIMEMOLD, BATFLY, SPEAR)
 
 _BY_KEY = {k.key: k for k in BUILTIN}
 

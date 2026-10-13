@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 import math
-from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPainterPath, QPolygonF
+from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPainterPath, QPixmap, QPolygonF
 from PySide6.QtCore import QPointF, Qt
+
+from .display_list import FrameRecorder
 
 
 def _outline(points, halfwidths) -> QPainterPath:
@@ -53,6 +55,9 @@ def blit(painter, atlas, element, x, y, rotation, scale_x, scale_y, color, ax=0.
     pm = atlas.sprite(key, element, col)
     sw, sh = atlas.source_size(key, element)
     apx, apy = ax * sw, ay * sh
+    if isinstance(painter, FrameRecorder) and type(pm) is QPixmap:
+        painter.sprite(x, y, rotation, scale_x, scale_y, QPointF(-apx, -apy), pm)
+        return
     painter.save()
     painter.translate(x, y)
     if rotation:

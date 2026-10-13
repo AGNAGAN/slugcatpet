@@ -115,6 +115,9 @@ def ctrl_movement_update(body):
 
     if body._ctrl_roll_direction != 0:  # 滚/滑期跑速取默认上限
         dyn0 = dyn1 = ms.DEFAULT_DYN
+    dyn0 *= body.slow_fac(0.5)
+    dyn1 *= body.slow_fac(0.5)
+    accel = cr.H_ACCEL * body.slow_fac(0.4)
     ms.super_launch_charge(body, move_x, inp0, inp1)
 
     if body.walk_speed_target is not None:
@@ -125,13 +128,13 @@ def ctrl_movement_update(body):
         if c.pinned:
             continue
         if move_x < 0:
-            step = cr.H_ACCEL
+            step = accel
             if c.vx - step < -dyn:
                 step = dyn + c.vx
             if step > 0:
                 c.vx -= step
         elif move_x > 0:
-            step = cr.H_ACCEL
+            step = accel
             if c.vx + step > dyn:
                 step = dyn - c.vx
             if step > 0:

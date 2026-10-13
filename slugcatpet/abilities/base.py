@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+MOUTH = "mouth"  # 用嘴吃东西
+BODY_TAGS = frozenset((MOUTH,))  # 每只猫默认有的身体标签
+
 
 class Param:
     __slots__ = ("default", "lo", "hi", "doc")
@@ -44,6 +47,9 @@ class Ability:
     title = {"zh": "", "en": ""}
     doc = ""
     requires = ()
+    provides = ()  # 给身体加的标签
+    removes = ()  # 从身体去掉的标签，如 MOUTH
+    skills: dict = {}  # 技能槽名 → 类(pet)：替换共用动作里的某一步，见 PetUnit.skill
     params: dict = {}
 
     def __init__(self, p: SimpleNamespace):
@@ -71,9 +77,8 @@ class Ability:
     def reaches(self, pet):
         return ()
 
-    def fetch_assist(self, pet):
-        """取果时的空中补救器（update / abort / reset / holding），无则 None。"""
-        return None
+    def release(self, pet):
+        """状态被打断、晕、死时收回器官。"""
 
     def mount(self, fsm):
         """行为状态机建好后、行为模块挂载前调用：挂 ticker、致死钩子等。"""

@@ -6,7 +6,7 @@ import math
 from types import SimpleNamespace
 
 from ...brain import maneuver
-from ...brain.skills.motor import BITE_HEAD_NUDGE
+from ...rendering.graphics import BITE_HEAD_NUDGE
 from ...control.mouse import is_over
 from ...planning.jump_reach import SETTLE_MAX, SETTLE_VX
 from ...abilities.base import Param
@@ -28,8 +28,8 @@ LAUNCH_TIMEOUT = 80
 APPROACH_TIMEOUT = 200
 MAUL_TIMEOUT = 600
 CHEW_TICKS = 60  # ~1.5s
-BITE_PERIOD = 8  # 原版 maul：每 8 tick 一口
-JITTER_PERIOD = 3  # 原版 maul：每 3 tick 身体微抖
+BITE_PERIOD = 8  # 每 8 tick 一口
+JITTER_PERIOD = 3  # 每 3 tick 身体微抖
 JITTER_AMP = 1.2
 
 
@@ -105,8 +105,7 @@ def _mount(fsm, p):
             and not fsm._zerog()
             and not b.swimming
             and fsm.win.cursor_hijack is None
-            and b.carried_fruit is None
-            and b.carried_stone is None
+            and not b.holding_any()
             and b.temper <= temper_gate
             and maul.cooldown <= 0
         )

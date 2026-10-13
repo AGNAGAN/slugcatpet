@@ -15,6 +15,7 @@ class GillsAccessory(Accessory):
     title = {"zh": "鳃", "en": "Gills"}
     default_color = EFFECT
     default_on = ("rivulet",)
+    skin_group = "GILLS"
 
     def __init__(self, pet):
         super().__init__(pet)

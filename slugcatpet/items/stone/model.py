@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 import math
+import random
 from ...core.chunkphys import aabb_wall_collide, apply_water
 from ...core.units import lerp
 from ..state import ItemState
@@ -23,6 +24,8 @@ EXIT_FLING_SPEED = 8.0  # 脱离投掷阈，同砸晕阈
 
 class Stone:
     collision_layer = 2  # 与 Saint(层1) 不同层
+    edible = False
+    throwable = True
 
     __slots__ = (
         "x",
@@ -57,6 +60,8 @@ class Stone:
         "_impact_cb",
         "unfetchable",
         "fetch_fails",
+        "held_by_hand",
+        "behind",
     )
 
     def __init__(self, x: float, y: float, seed: int = 0):
@@ -90,6 +95,8 @@ class Stone:
         self._impact_cb = None  # 窗口抖动回调；None=不触发
         self.unfetchable = False
         self.fetch_fails = 0
+        self.held_by_hand = None
+        self.behind = False  # 拿在手里时画到猫身后
 
     @property
     def pos(self):
@@ -100,6 +107,41 @@ class Stone:
             self.state not in (ItemState.CARRIED, ItemState.MOUSE, ItemState.GONE) and not self.fling
         )
         return (self,)
+
+    def set_rotation_to_grabber(self, gx: float, gy: float) -> None:
+        self.last_rotation = self.rotation_deg
+
+    def set_held_direction(self, dx: float, dy: float) -> None:
+        """拿在手里时按方向转，取最近的等价角免得插值绕圈。"""
+        self.last_rotation = self.rotation_deg
+        a = math.degrees(math.atan2(dx, -dy))
+        self.rotation_deg += (a - self.rotation_deg + 180.0) % 360.0 - 180.0
+
+    def on_thrown(self, throw) -> None:
+        self.spin = throw.dir_x * 8.0
+        self.fling = False
+        self.thrown_by_cat = True
+
+    def in_flight(self) -> bool:
+        """被扔或甩出、还在飞：能被招架、能和别的飞行武器相撞。"""
+        return self.fling or self.thrown_by_cat
+
+    def parried(self, dx, dy) -> None:
+        """被招架弹开：失去投掷态，朝 (dx, dy) 飞出。"""
+        self.fling = False
+        self.thrown_by_cat = False
+        self.vx, self.vy = dx * 20.0, dy * 20.0
+        self.spin = lerp(-100.0, 100.0, random.random()) * lerp(0.05, 1.0, self.room_gravity)
+
+    def clash(self, mx, my, dx, dy, speed, rng) -> None:
+        """和另一件飞行武器迎面相撞：挪向交点，朝 (dx, dy) 以一半速度弹开。"""
+        self.x += (mx - self.x) * 0.5
+        self.y += (my - self.y) * 0.5
+        self.vx, self.vy = dx * speed * 0.5, dy * speed * 0.5
+        self.vibrate = 20
+        self.fling = False
+        self.thrown_by_cat = False
+        self.spin = rng.uniform(-40.0, 40.0) * lerp(0.05, 1.0, self.room_gravity)
 
     def at_rest_on_ground(self, HL: float) -> bool:
         return self.y + self.rad >= HL - 0.5 and abs(self.vx) < REST_VEL_EPS and abs(self.vy) < REST_VEL_EPS

@@ -37,11 +37,9 @@ class FruitKind(ItemKind):
 
     def drop(self, win, f):
         f.stalk = None
-        if f.state == ItemState.CARRIED:
-            f.held_by_hand = None
         for pet in win.pets:
-            if f is pet.body.carried_fruit:
-                pet.body.release_fruit()
+            pet.body.release(f)
+        f.held_by_hand = None
         f.state = ItemState.EATEN
 
     def on_grab(self, f):

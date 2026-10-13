@@ -94,7 +94,7 @@ def game_tail_vertices(root, nodes, root_rad, rads):
 
 
 def draw_game_tail(painter, verts, pm, band=None) -> None:
-    """按 DMS MapTailUV 贴图：u=顶点序号/顶点数，偶数顶点取图底、奇数取图顶。
+    """按顶点序贴图：u=顶点序号/顶点数，偶数顶点取图底、奇数取图顶。
     band 为 0..1 时只用高 1/3 的窗口（0=最下、1=最上），用于不对称尾巴。"""
     nv = len(verts)
     if pm is None or pm.isNull() or nv < 7 or nv % 4 != 3:

@@ -145,6 +145,25 @@ class FrameRecorder(QPainter):
         self._add(r, False)
         self.ops.append((_m, a))
 
+    def sprite(self, x, y, rot, sx, sy, pt, pm):
+        """blit 快路径：直接算出世界变换，录成一条操作，等价于 save/平移/旋转/缩放/drawPixmap/restore。"""
+        t = self.transform()
+        t.translate(x, y)
+        if rot:
+            t.rotate(rot)
+        t.scale(sx, sy)
+        dpr = pm.devicePixelRatio()
+        d = t.mapRect(QRectF(pt.x(), pt.y(), pm.width() / dpr, pm.height() / dpr))
+        self._b = d if self._b is None else self._b.united(d)
+        self.ops.append((_sprite, (t, pt, pm)))
+
+
+def _sprite(p, t, pt, pm):
+    p.save()
+    p.setWorldTransform(t)
+    p.drawPixmap(pt, pm)
+    p.restore()
+
 
 def _plain(name):
     m = getattr(QPainter, name)

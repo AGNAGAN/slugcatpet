@@ -17,6 +17,7 @@ class ScarAccessory(Accessory):
     default_color = (69, 40, 60)
     default_on = ("artificer",)
     color_group = "FACESCAR"
+    skin_group = "FACESCAR"
 
     def draw_layers(self, pet):
         return (("behind_face", lambda gfx, p, atlas, ts: self._draw(gfx, p, atlas)),)

@@ -5,9 +5,10 @@ from __future__ import annotations
 from .base import Accessory
 from .gills import GillsAccessory
 from .scar import ScarAccessory
+from .tail_specks import TailSpecklesAccessory
 
 # 顺序即挂载与绘制顺序
-BUILTIN = (GillsAccessory, ScarAccessory)
+BUILTIN = (GillsAccessory, ScarAccessory, TailSpecklesAccessory)
 
 REGISTRY: dict[str, type[Accessory]] = {cls.key: cls for cls in BUILTIN}
 

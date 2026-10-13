@@ -24,8 +24,9 @@ def draw_gills(gfx, g, p, atlas, ts, acc):
         hx_i += side * 2.0 * gfx.sleep_curl
         hy_i -= 1.0 * gfx.sleep_curl
     hox, hoy = getattr(gfx, "_breath_head_off", (0.0, 0.0))
-    fx = hx_i + gfx.face_offset[0] + hox
-    fy = hy_i + gfx.face_offset[1] + hoy
+    ox, oy = gfx.face_offset_at(ts)
+    fx = hx_i + ox + hox
+    fy = hy_i + oy + hoy
 
     gf = g.flat
     hip_d = math.hypot(d0x - d1x, d0y - d1y)

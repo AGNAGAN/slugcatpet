@@ -5,6 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from ...abilities.base import Param
+from ...abilities.tongue.aim import tongue_of
 from ... import tuning
 from ...brain.fsm import _lerpmap
 from ...brain.state import LIGHT, T_ACTIVITY
@@ -74,7 +75,7 @@ def _mount(fsm, p):
         elif status == "to_airborne":
             brk()
             fsm._transition("Airborne")
-        elif lick.licker.phase == "hang" and fsm.win.tongue.attached:
+        elif lick.licker.phase == "hang" and tongue_of(fsm.win).attached:
             pole = _horizontal_pole_near(fsm, cursor)
             if pole is not None:
                 lick.licker = None
@@ -84,7 +85,7 @@ def _mount(fsm, p):
                 fsm._transition("HPole")
 
     def brk():
-        fsm._break_tongue()
+        fsm.release_organs()
         fsm.body.stop_walk()
         lick.licker = None
         fsm._dwell = 0

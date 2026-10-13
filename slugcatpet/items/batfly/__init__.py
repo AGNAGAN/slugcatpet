@@ -7,7 +7,6 @@ import math
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPolygonF
 
-from ... import tuning
 from ...core.units import clampf, inv_lerp, lerp
 from ...rendering.graphics import _ang_from_up
 from ..base import CARRYABLE, EDIBLE, ItemKind
@@ -59,11 +58,9 @@ class BatFlyKind(ItemKind):
 
     def drop(self, win, b):
         b.stalk = None
-        if b.state == ItemState.CARRIED:
-            b.held_by_hand = None
         for pet in win.pets:
-            if b is pet.body.carried_fruit:
-                pet.body.release_fruit()
+            pet.body.release(b)
+        b.held_by_hand = None
         b.state = ItemState.EATEN
         getattr(win, "_batfly_shove_cd", {}).pop(id(b), None)
 
@@ -138,14 +135,12 @@ def _shove(win):
         if key in cd:
             continue
         for pet in win.pets:
-            if pet.behavior is None:
+            if pet.behavior is None or not pet.can_eat(b):
                 continue
             mx, my = pet.gfx.mouth_world()
             if math.hypot(b.x - mx, b.y - my) < SHOVE_REACH:
                 if b.bite():
-                    pet.body.food_eat(1)
-                    pet.body.temper_shift(tuning.TEMPER_FEED)
-                    pet.body.energy_change(tuning.EN_EAT_RESTORE)
+                    pet.body.feed(pet.traits.nourishment(b))
                 cd[key] = SHOVE_COOLDOWN
                 break
 

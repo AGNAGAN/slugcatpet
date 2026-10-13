@@ -5,12 +5,22 @@ from __future__ import annotations
 from .acrobat import AcrobatAbility
 from .aquatic import AquaticAbility
 from .ascension import AscensionAbility
-from .base import Ability, Param, resolve_params
+from .base import BODY_TAGS, MOUTH, Ability, Param, resolve_params
+from .heavy import HeavyAbility
+from .needle import NeedleAbility
 from .pyro import PyroAbility
 from .tongue import TongueAbility
 
 # 顺序即挂载顺序
-BUILTIN = (TongueAbility, AscensionAbility, PyroAbility, AcrobatAbility, AquaticAbility)
+BUILTIN = (
+    TongueAbility,
+    AscensionAbility,
+    PyroAbility,
+    AcrobatAbility,
+    AquaticAbility,
+    HeavyAbility,
+    NeedleAbility,
+)
 
 REGISTRY: dict[str, type[Ability]] = {cls.key: cls for cls in BUILTIN}
 
@@ -26,6 +36,17 @@ def validate(abilities: dict, where: str) -> None:
         resolve_params(cls.params, over, f"{where} 能力 {key}")
 
 
+def body_tags(abilities) -> frozenset[str]:
+    """身体标签：默认标签加上能力 key 和能力提供的，再去掉能力移除的。"""
+    classes = [REGISTRY[k] for k in abilities]
+    tags = set(BODY_TAGS) | set(abilities)
+    for cls in classes:
+        tags.update(cls.provides)
+    for cls in classes:
+        tags.difference_update(cls.removes)
+    return frozenset(tags)
+
+
 def instantiate(cat) -> dict[str, Ability]:
     """按注册顺序（非角色定义书写顺序）建能力实例。"""
     abilities = cat.abilities
@@ -37,4 +58,4 @@ def instantiate(cat) -> dict[str, Ability]:
     }
 
 
-__all__ = ["Ability", "Param", "REGISTRY", "instantiate", "validate", "resolve_params"]
+__all__ = ["MOUTH", "Ability", "Param", "REGISTRY", "body_tags", "instantiate", "validate", "resolve_params"]

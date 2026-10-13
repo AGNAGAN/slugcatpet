@@ -11,7 +11,7 @@ from .walk_reach import WalkReach
 
 
 class Planner:
-    """pet 为 PetUnit 鸭子类型：.body/.tongue/.cat 本猫；_WL/_HL/world_version/poles 世界。"""
+    """pet 为 PetUnit 鸭子类型：.body/.cat 本猫；_WL/_HL/world_version/poles 世界。"""
 
     def __init__(self, pet, clock=time.monotonic):
         self.pet = pet

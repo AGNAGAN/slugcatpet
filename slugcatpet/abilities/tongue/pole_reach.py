@@ -16,6 +16,7 @@ from ...planning.pole_reach import (
 )
 from ...planning.reach import Reach, Estimate, RUNNING, GIVEUP, reach_assist
 from .reach import FETCH_IDEAL, FETCH_REEL, APPROACH_TIMEOUT, reset_tongue
+from .aim import fire_at, tongue_of
 
 
 class PoleTongueReach(Reach):
@@ -23,7 +24,7 @@ class PoleTongueReach(Reach):
 
     def _plan(self, goal):
         pet = self.pet
-        tg = pet.tongue
+        tg = tongue_of(pet)
         if tg is None:
             return None
         gx, gy = goal.pos()
@@ -83,15 +84,15 @@ class PoleTongueController(_PoleClimb):
                 pet.body.release_to_air(move_dir=0)
                 self.phase = "fire"
             return RUNNING
-        tg = pet.tongue
+        tg = tongue_of(pet)
         if self.phase == "fire":
             if tg is None:
                 return GIVEUP
             if tg.is_idle():
                 if self.goal.obj is not None:
-                    pet.fire_tongue_at_obj(self.goal.obj)
+                    fire_at(pet, self.goal.obj.x, self.goal.obj.y, self.goal.obj)
                 else:
-                    pet.fire_tongue_at(gx, gy)
+                    fire_at(pet, gx, gy)
                 self.phase = "reel"
                 self.timer = 0
             return RUNNING

@@ -76,11 +76,13 @@ class ItemHost:
                 else:
                     plan.extend((m, False) for m in mates if use in m.affords)
             plan = by_use[use] = tuple(plan)
-        if len(plan) == 1 and plan[0][1] and not plan[0][0].single:
+        if len(plan) == 1 and plan[0][1] and not plan[0][0].single and not plan[0][0].varies:
             return getattr(self, plan[0][0].store)  # 单一存放：直接给原列表，不复制
         out = []
         for k, whole in plan:
-            if whole:
+            if k.varies:
+                out.extend(o for o in k.objects(self) if k.affords_now(o, use))
+            elif whole:
                 v = getattr(self, k.store)
                 if k.single:
                     if v is not None:
@@ -90,6 +92,11 @@ class ItemHost:
             else:
                 out.extend(k.objects(self))
         return out
+
+    def geometry_changed(self):
+        """物体自己改变了路径前提（如矛扎进墙成了杆、被拔出）。"""
+        self.geometry_version += 1
+        self.world_version += 1
 
     def has_items(self):
         return any(self._present(k) for k in _g().stores)
@@ -231,18 +238,31 @@ class ItemHost:
             for o in k.objects(self):
                 if not k.grabbable(o):
                     continue
-                d = math.hypot(cx - o.x, cy - o.y)
+                d = k.grab_dist(o, cx, cy)
                 if d <= o.rad + k.grab_pad and d < bestd:
                     best, bestd = o, d
             if best is not None:
                 return k, best
         return None
 
+    def held_item_at(self, pos) -> bool:
+        """pos 处有没有猫手里拿着、能抢过来的东西。"""
+        hit = self._grab_target(pos)
+        return hit is not None and hit[1].state == ItemState.CARRIED
+
     def _begin_item_drag(self, pos) -> bool:
         hit = self._grab_target(pos)
         if hit is None:
             return False
         k, o = hit
+        if o.state == ItemState.CARRIED:
+            for pet in self.pets:
+                if pet.body.hand_of(o) is None:
+                    continue
+                if pet.behavior is not None and not getattr(pet, "controlled", False):
+                    pet.behavior.hands.snatched(o)
+                else:
+                    pet.body.release(o)
         k.on_grab(o)
         o.state = ItemState.MOUSE
         o.vx = o.vy = 0.0
@@ -308,14 +328,22 @@ class ItemHost:
             k.on_zerog(self)
 
     def _draw_items_under(self, p):
-        for k in _g().stores:
-            if self._present(k):
-                k.draw_under(self, p)
+        self._draw_kinds(p, lambda k: k.draw_under(self, p))
+
+    def _draw_items_behind(self, p):
+        self._draw_kinds(p, lambda k: k.draw_behind(self, p))
 
     def _draw_items(self, p, layer):
+        self._draw_kinds(p, lambda k: k.draw(self, p) if k.layer == layer else None)
+
+    def _draw_kinds(self, p, fn):
+        """逐类绘制，只画到地面线为止：窗口下延盖住任务栏时，地面以下的部分不露出来。"""
+        p.save()
+        p.setClipRect(QRectF(-1e4, -1e4, 2e4, self._HL + 1e4), Qt.ClipOperation.IntersectClip)
         for k in _g().stores:
-            if k.layer == layer and self._present(k):
-                k.draw(self, p)
+            if self._present(k):
+                fn(k)
+        p.restore()
 
     def _draw_place_hint(self, p):
         self._draw_place_banner(p)

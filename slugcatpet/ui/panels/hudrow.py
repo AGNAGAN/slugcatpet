@@ -1,9 +1,12 @@
 """HUD 单猫行：体征 + 左键弹菜单/拖动移 HUD。"""
 
 from __future__ import annotations
+import math
+import time
+
 from PySide6.QtWidgets import QWidget, QLabel, QGridLayout, QFrame
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QGuiApplication, QPainter
+from PySide6.QtCore import QRectF, Qt
+from PySide6.QtGui import QColor, QPainter, QPainterPath
 
 from ... import tuning
 from ...i18n import t
@@ -15,6 +18,11 @@ KARMA_ICON = 22
 BAR_W, BAR_H = 88, 10
 PIP = 12
 _DRAG_THRESH = 3  # 小于此判定点击而非拖动
+QUARTER_FPS = 40.0  # 1/4 格呼吸与亮起按这个帧率换算
+QUARTER_PULSE = 20.0  # 呼吸正弦的帧数缩放
+QUARTER_ALPHA = (0.2, 0.5)  # 呼吸透明度范围
+QUARTER_LIT = 0.6  # 刚攒到一个 1/4 时亮到这么不透明
+QUARTER_LIT_DECAY = 0.95  # 亮起每帧衰减
 
 _BAR_BG = palette.BAR_BG
 _BAR_FG = palette.BAR_FG
@@ -49,19 +57,37 @@ class _Bar(QWidget):
 
 
 class _Pips(QWidget):
+    """饱食格：满的实心，下一格按攒着的 1/4 画扇形，呼吸闪烁。"""
+
     def __init__(self, total):
         super().__init__()
         self._total = int(total)
         self._filled = 0
+        self._quarters = 0
+        self._lit_at = None  # 最近一次多攒一个 1/4 的时刻
         gap = 4
         self.setFixedSize(self._total * PIP + (self._total - 1) * gap, PIP)
         self._gap = gap
 
-    def set_filled(self, n):
+    def set_filled(self, n, quarters=0):
         n = max(0, min(self._total, int(n)))
-        if n != self._filled:
-            self._filled = n
+        q = max(0, min(3, int(quarters))) if n < self._total else 0
+        if q > self._quarters:
+            self._lit_at = time.monotonic()
+        changed = (n, q) != (self._filled, self._quarters)
+        self._filled, self._quarters = n, q
+        if changed or q:
             self.update()
+
+    def _quarter_alpha(self):
+        now = time.monotonic()
+        s = 0.5 + 0.5 * math.sin(now * QUARTER_FPS / QUARTER_PULSE)
+        lo, hi = QUARTER_ALPHA
+        a = lo + (hi - lo) * s**0.4
+        if self._lit_at is not None:
+            lit = QUARTER_LIT_DECAY ** ((now - self._lit_at) * QUARTER_FPS)
+            a += (QUARTER_LIT - a) * lit * lit
+        return a
 
     def paintEvent(self, _ev):
         p = QPainter(self)
@@ -71,8 +97,23 @@ class _Pips(QWidget):
         for i in range(self._total):
             p.setBrush(_BAR_FG if i < self._filled else _BAR_BG)
             p.drawRoundedRect(x, 0, PIP, PIP, 3, 3)
+            if i == self._filled and self._quarters:
+                self._draw_quarters(p, x)
             x += PIP + self._gap
         p.end()
+
+    def _draw_quarters(self, p, x):
+        """从 12 点顺时针画 1/4、2/4、3/4 的扇形，裁在格子里。"""
+        clip = QPainterPath()
+        clip.addRoundedRect(QRectF(x, 0, PIP, PIP), 3, 3)
+        p.save()
+        p.setClipPath(clip)
+        c = QColor(_BAR_FG)
+        c.setAlphaF(self._quarter_alpha())
+        p.setBrush(c)
+        r = PIP * 0.75
+        p.drawPie(QRectF(x + PIP / 2 - r, PIP / 2 - r, 2 * r, 2 * r), 90 * 16, -self._quarters * 90 * 16)
+        p.restore()
 
 
 class PetRow(QFrame):
@@ -151,9 +192,12 @@ class PetRow(QFrame):
         return " · ".join(parts) + "\n" + t("hud_op_hint")
 
     def refresh(self) -> bool:
-        """刷新本行，返回寒冷 / 氧气条显隐是否变化。"""
+        """刷新本行，返回尺寸是否可能变了（名字、寒冷 / 氧气条显隐）。"""
         pets = list(getattr(self.pet.window, "pets", [self.pet]))
-        self.name.setText(pet_label(self.pet, pets))
+        label = pet_label(self.pet, pets)
+        renamed = label != self.name.text()
+        if renamed:
+            self.name.setText(label)
         body = self.pet.body
 
         k = int(body.karma)
@@ -167,7 +211,7 @@ class PetRow(QFrame):
         self.karma_val.setText(f"{k + 1}/{kmax + 1}")
 
         self.stam_bar.set_ratio(max(0.0, min(1.0, float(body.energy))))
-        self.food_pips.set_filled(max(0, min(body.food_max, int(body.food))))
+        self.food_pips.set_filled(body.food, body.food_q)
         self.temper_bar.set_ratio((max(-1.0, min(1.0, float(body.temper))) + 1.0) * 0.5)
 
         cold = float(getattr(body, "cold", 0.0))
@@ -188,7 +232,7 @@ class PetRow(QFrame):
             self.air_bar.setVisible(show_air)
         if show_air:
             self.air_bar.set_ratio(max(0.0, min(1.0, float(body.air_frac))))
-        return changed
+        return changed or renamed
 
     def _karma_sprite(self, frame):
         atlas = getattr(self.pet.window, "atlas", None)
@@ -223,13 +267,7 @@ class PetRow(QFrame):
         if not self._moved and delta.manhattanLength() <= _DRAG_THRESH:
             return
         self._moved = True
-        screen = QGuiApplication.primaryScreen().availableGeometry()
-        p = self._start_tl + delta
-        x = max(screen.x(), min(screen.x() + screen.width() - self.hud.width(), p.x()))
-        y = max(screen.y(), min(screen.y() + screen.height() - self.hud.height(), p.y()))
-        self.hud.move(x, y)
-        self.hud.params["hud_x"] = x
-        self.hud.params["hud_y"] = y
+        self.hud._move_to(self._start_tl + delta)
         ev.accept()
 
     def mouseReleaseEvent(self, ev):

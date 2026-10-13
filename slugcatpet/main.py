@@ -208,6 +208,7 @@ def main():
                 "energy": p.body.energy,
                 "temper": p.body.temper,
                 "food": p.body.food,
+                "food_q": p.body.food_q,
                 "karma": p.body.karma,
                 "cold": p.body.cold,
                 "dead": p.behavior is not None and p.behavior.is_truly_dead(),
@@ -239,7 +240,7 @@ def main():
     tray = QSystemTrayIcon(_tray_icon())
     menu = QMenu()
 
-    # 音乐：播放列表 = 音乐目录 + 导入的歌；游戏配乐是从游戏里提取到 assets/music 的
+    # 音乐：播放列表 = 音乐目录 + 导入的歌
     from .audio import MusicDirector, MusicPlayer
     from .audio.director import GAME_TRACKS
     from .ui.panels.musicpanel import MusicPanel

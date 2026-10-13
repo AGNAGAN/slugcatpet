@@ -54,7 +54,8 @@ def render() -> str:
         "```",
         "",
         "- `abilities`：这只猫有哪些能力（键）以及参数覆盖（值，`{}` = 全用默认）。",
-        "- `behaviors`：行为按能力自动挂载，这里只写例外：`false` 关掉，对象 = 覆盖参数。",
+        "- `behaviors`：行为按身体标签自动挂载，这里只写例外：`false` 关掉，对象 = 覆盖参数。",
+        "- 身体标签：默认的 `mouth`，加上各能力 key 和能力提供的标签，再去掉能力移除的标签。",
         "- 带心情候选的行为，权重还会乘以性格权重（好动度 × `toy_pref[心情名]`）。",
         "",
         "## 性格",
@@ -74,6 +75,10 @@ def render() -> str:
         meta = []
         if cls.requires:
             meta.append("依赖能力：" + "、".join(f"`{r}`" for r in cls.requires))
+        if cls.provides:
+            meta.append("提供标签：" + "、".join(f"`{r}`" for r in cls.provides))
+        if cls.removes:
+            meta.append("去掉标签：" + "、".join(f"`{r}`" for r in cls.removes))
         meta.append("内置角色：" + ("、".join(f"`{u}`" for u in users[cls.key]) or "无"))
         if dep:
             meta.append("随之挂载的行为：" + "、".join(f"`{d}`" for d in dep))
@@ -83,9 +88,9 @@ def render() -> str:
         out += [f"### {cls.title['zh']} `{cls.key}`", "", cls.doc, ""]
         from slugcatpet.items.base import USES
 
-        abil = [r for r in cls.requires if r not in USES]
+        tags = [r for r in cls.requires if r not in USES]
         uses = [r for r in cls.requires if r in USES]
-        meta = ["需要能力：" + ("、".join(f"`{r}`" for r in abil) or "无（所有猫）")]
+        meta = ["需要身体标签：" + ("、".join(f"`{r}`" for r in tags) or "无（所有猫）")]
         if uses:
             meta.append("用到的物品：" + "、".join(f"`{r}`" for r in uses))
         if cls.mood:
@@ -95,6 +100,7 @@ def render() -> str:
 
 
 def main(argv=None):
+    sys.stdout.reconfigure(encoding="utf-8")  # 输出被重定向时不随系统代码页
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--check", action="store_true")
     args = ap.parse_args(argv)

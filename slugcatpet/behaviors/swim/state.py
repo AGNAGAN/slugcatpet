@@ -6,9 +6,7 @@ import math
 
 from ... import tuning
 from ...brain.state import EN_REC_IDLE, T_BODY, VIGOROUS, State
-from ...brain.skills import motor
 from ...brain.skills.motor import WALL_MARGIN
-from ...items.base import EDIBLE
 
 
 class Swimming(State):
@@ -44,10 +42,6 @@ class Swimming(State):
         if not b.swimming:
             b.swim_target = None
             b.swim_resting = False
-            if b.carried_fruit is not None:
-                f = b.carried_fruit
-                b.release_fruit()
-                f.state = "free"
             fsm.settle()
             return
         fsm.gfx.look_at = fsm._ambient_look(cursor)
@@ -59,17 +53,8 @@ class Swimming(State):
         if b.swim_resting:
             b.swim_target = (b.chunk0.x, ws.level_at(b.chunk0.x) - tuning.SWIM_REST_ABOVE)
             return
-        if b.carried_fruit is not None:
-            self._swim_eat()
+        if fsm.run_tasks("swim"):
             return
-        if b.food < b.food_max and not fsm.ask("fetch_cooling"):
-            e = self._nearest_swim_edible()
-            if e is not None:
-                b.swim_target = (e.x, e.y)
-                if math.hypot(e.x - b.chunk0.x, e.y - b.chunk0.y) < tuning.SWIM_FETCH_REACH:
-                    b.grab_fruit(e, "r" if e.x >= b.chunk0.x else "l")
-                    motor.chew_reset(fsm)
-                return
         if self._swim_hold > 0:
             self._swim_hold -= 1
             b.swim_target = (b.chunk0.x, b.chunk0.y - 4.0)
@@ -100,20 +85,6 @@ class Swimming(State):
         elif b.energy < tuning.SWIM_REST_ENERGY_IN or b.air_frac < b.stats.drown_threshold:
             b.swim_resting = True
 
-    def _nearest_swim_edible(self):
-        fsm = self.fsm
-        b = fsm.body
-        best, bd = None, tuning.SWIM_FETCH_SEEK_R
-        for f in fsm.items(EDIBLE):
-            if f.state not in ("free", "hanging"):
-                continue
-            if not fsm.traits.eats(f):
-                continue
-            d = math.hypot(f.x - b.chunk0.x, f.y - b.chunk0.y)
-            if d < bd:
-                bd, best = d, f
-        return best
-
     def _pick_swim_target(self, cursor, ws):
         fsm = self.fsm
         if fsm.body.no_dive:
@@ -131,16 +102,6 @@ class Swimming(State):
         else:
             y = fsm.rng.uniform(WALL_MARGIN, fsm.HL - WALL_MARGIN)
         return (x, y)
-
-    def _swim_eat(self):
-        fsm = self.fsm
-        b = fsm.body
-        f = b.carried_fruit
-        if f.state not in ("carried",):
-            b.release_fruit()
-            return
-        b.swim_target = (b.chunk0.x, b.chunk0.y - 4.0)
-        motor.carry_chew(fsm, b)
 
     def _swim_reached(self, g):
         fsm = self.fsm

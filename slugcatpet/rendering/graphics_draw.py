@@ -5,11 +5,11 @@ from __future__ import annotations
 import math
 
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPolygonF
 
 from ..core.units import clampf
 from ..core.vecmath import _ang_from_up, _rot
-from ..core.gfxmath import _lerp, _catmull, SHOULDER_OFF_Y, ARM_DIV, ARM_MAX
+from ..core.gfxmath import _lerp, SHOULDER_OFF_Y, ARM_DIV, ARM_MAX
 from .primitives import blit
 from .tailtex import draw_game_tail, game_tail_vertices
 from ..skins.resolver import SKIN_KEY
@@ -17,10 +17,26 @@ from ..skins.resolver import SKIN_KEY
 TAIL_SUBDIV = 4  # 尾巴每段 Catmull-Rom 细分数
 
 
+def _catmull_weights(t):
+    """Catmull-Rom 在 t 处四个控制点的系数，末项附 t 供宽度插值。"""
+    t2 = t * t
+    t3 = t2 * t
+    return (
+        0.5 * (-t + 2.0 * t2 - t3),
+        0.5 * (2.0 - 5.0 * t2 + 3.0 * t3),
+        0.5 * (t + 4.0 * t2 - 3.0 * t3),
+        0.5 * (t3 - t2),
+        t,
+    )
+
+
+_TAIL_W = tuple(_catmull_weights(j / TAIL_SUBDIV) for j in range(1, TAIL_SUBDIV + 1))
+
+
 class GraphicsDrawMixin:
-    # 能力 / 配件可插入的绘制槽位：under_face=头臂之上；behind_face=紧贴脸下（face_pose 已定）；
-    # over_face=脸之上
-    LAYER_SLOTS = ("under_face", "behind_face", "over_face")
+    # 能力 / 配件可插入的绘制槽位：over_tail=尾巴、腿、臀之上，近侧臂之下；under_face=头臂之上；
+    # behind_face=紧贴脸下（face_pose 已定）；over_face=脸之上
+    LAYER_SLOTS = ("over_tail", "under_face", "behind_face", "over_face")
 
     def add_layer(self, slot, fn):
         self.layers[slot].append(fn)
@@ -32,16 +48,21 @@ class GraphicsDrawMixin:
             fn(self, p, atlas, ts)
 
     def draw_sprites(self, p, atlas, timeStacker=1.0):
+        """图层从后到前：远侧臂、身、尾、腿、臀、近侧臂、头、脸。"""
         ts = timeStacker
-        self._draw_body_hips(p, atlas, ts)
+        back = 1 if self.facing > 0 else 0
+        self._draw_arms(p, atlas, ts, (back,))
+        self._draw_body(p, atlas, ts)
         self._draw_tail(p, ts, atlas)
-        self._draw_head(p, atlas, ts)
         floor = getattr(self.body, "visual_floor_y", self.body.H)
         p.save()
         p.setClipRect(-1e4, -1e4, 2e4, floor + 1e4)
         self._draw_legs(p, atlas, ts)
         p.restore()
-        self._draw_arms(p, atlas, ts)
+        self._draw_hips(p, atlas)
+        self._run_layers("over_tail", p, atlas, ts)
+        self._draw_arms(p, atlas, ts, (1 - back,))
+        self._draw_head(p, atlas, ts)
         self._run_layers("under_face", p, atlas, ts)
         self._draw_face(p, atlas, ts)
         self._run_layers("over_face", p, atlas, ts)
@@ -67,7 +88,7 @@ class GraphicsDrawMixin:
 
     def _draw_tail(self, p, ts=1.0, atlas=None):
         segs = self.tail_segs
-        if segs is None:
+        if segs is None or self._tail_hidden:
             return
         d0x = _lerp(self._last_draw0[0], self.draw0[0], ts)
         d0y = _lerp(self._last_draw0[1], self.draw0[1], ts)
@@ -85,53 +106,42 @@ class GraphicsDrawMixin:
         if self._tail_tex and atlas is not None:
             self._draw_tail_skin(p, segs, root_x, root_y, ts, atlas)
             return
-        width_scale = 1.0
-
-        nodes = [(root_x, root_y)]
-        for seg in segs:
-            nodes.append((_lerp(seg.lx, seg.x, ts), _lerp(seg.ly, seg.y, ts)))
+        xs, ys = [root_x], [root_y]
+        for g in segs:
+            xs.append(g.lx + (g.x - g.lx) * ts)
+            ys.append(g.ly + (g.y - g.ly) * ts)
         n = len(segs)
-        widths = [self._tail_root * width_scale]
-        for i in range(n):
-            widths.append(self._tail_rad[i] * segs[i].stretched * width_scale)
-        widths[n] = 0.0
+        rad = self._tail_rad
+        ws = [self._tail_root] + [rad[i] * segs[i].stretched for i in range(n)]
+        ws[n] = 0.0
 
-        N = TAIL_SUBDIV
-        cx = [nodes[0][0]]
-        cy = [nodes[0][1]]
-        cw = [widths[0]]
+        cx, cy, cw = [root_x], [root_y], [ws[0]]
         for s in range(n):
-            p0 = nodes[max(0, s - 1)]
-            p1 = nodes[s]
-            p2 = nodes[s + 1]
-            p3 = nodes[min(n, s + 2)]
-            for j in range(1, N + 1):
-                t = j / N
-                cx.append(_catmull(p0[0], p1[0], p2[0], p3[0], t))
-                cy.append(_catmull(p0[1], p1[1], p2[1], p3[1], t))
-                cw.append(_lerp(widths[s], widths[s + 1], t))
+            a, d = max(0, s - 1), min(n, s + 2)
+            x0, x1, x2, x3 = xs[a], xs[s], xs[s + 1], xs[d]
+            y0, y1, y2, y3 = ys[a], ys[s], ys[s + 1], ys[d]
+            w0, dw = ws[s], ws[s + 1] - ws[s]
+            for b0, b1, b2, b3, t in _TAIL_W:
+                cx.append(b0 * x0 + b1 * x1 + b2 * x2 + b3 * x3)
+                cy.append(b0 * y0 + b1 * y1 + b2 * y2 + b3 * y3)
+                cw.append(w0 + dw * t)
         M = len(cx)
-        left, right = [], []
+        pts = [None] * (2 * M)  # 左边顺序 + 右边倒序
         for k in range(M):
-            kp = max(0, k - 1)
-            kn = min(M - 1, k + 1)
+            kp = k - 1 if k else 0
+            kn = k + 1 if k < M - 1 else k
             tx, ty = cx[kn] - cx[kp], cy[kn] - cy[kp]
             tl = math.hypot(tx, ty)
             if tl > 1e-6:
-                nx, ny = tx / tl, ty / tl
+                f = cw[k] / tl
+                ox, oy = -ty * f, tx * f
             else:
-                nx, ny = 0.0, 1.0
-            perpx, perpy = -ny, nx
-            w = cw[k]
-            left.append(QPointF(cx[k] - perpx * w, cy[k] - perpy * w))
-            right.append(QPointF(cx[k] + perpx * w, cy[k] + perpy * w))
+                ox, oy = -cw[k], 0.0
+            pts[k] = QPointF(cx[k] - ox, cy[k] - oy)
+            pts[2 * M - 1 - k] = QPointF(cx[k] + ox, cy[k] + oy)
 
         path = QPainterPath()
-        path.moveTo(left[0])
-        for q in left[1:]:
-            path.lineTo(q)
-        for q in reversed(right):
-            path.lineTo(q)
+        path.addPolygon(QPolygonF(pts))
         path.closeSubpath()
         path.setFillRule(Qt.FillRule.WindingFill)  # 防自交留洞
         col = QColor(*self._color("TAIL", self.BODY))
@@ -150,11 +160,11 @@ class GraphicsDrawMixin:
         pm = atlas.sprite(SKIN_KEY, "TailTexture", col)
         band = None
         if self._tail_asym:
-            # 三条横带的窗口随尾根相对臀部的左右位置滑动（同 DMS MapTailUV）
+            # 三条横带的窗口随尾根相对臀部的左右位置滑动
             band = clampf((segs[0].x - self.draw1[0] + 15.0) / 30.0, 0.0, 1.0)
         draw_game_tail(p, verts, pm, band)
 
-    def _draw_arms(self, p, atlas, ts=1.0):
+    def _draw_arms(self, p, atlas, ts=1.0, which=(0, 1)):
         d0x = _lerp(self._last_draw0[0], self.draw0[0], ts)
         d0y = _lerp(self._last_draw0[1], self.draw0[1], ts)
         d1x = _lerp(self._last_draw1[0], self.draw1[0], ts)
@@ -165,7 +175,7 @@ class GraphicsDrawMixin:
 
         anim = getattr(self.body, "animation", None)
 
-        for j in range(2):
+        for j in which:
             hand = self.hands[j]
             if hand.mode == "Retracted":
                 continue
@@ -177,7 +187,7 @@ class GraphicsDrawMixin:
                 continue
 
             sh_spread = 4.5 / (hand.retract_counter + 1.0)
-            sh_spread *= cos_axis
+            sh_spread *= cos_axis * self.body.stats.shoulder_width
 
             lx = (-1.0 + 2.0 * j) * sh_spread
             ly = SHOULDER_OFF_Y
@@ -246,7 +256,8 @@ class GraphicsDrawMixin:
                 ay=0.5,
             )
 
-    def _draw_body_hips(self, p, atlas, ts=1.0):
+    def _draw_body(self, p, atlas, ts=1.0):
+        """画身体，并算好呼吸偏移和臀的姿态（臀在腿之后由 _draw_hips 画）。"""
         d0x = _lerp(self._last_draw0[0], self.draw0[0], ts)
         d0y = _lerp(self._last_draw0[1], self.draw0[1], ts)
         d1x = _lerp(self._last_draw1[0], self.draw1[0], ts)
@@ -261,7 +272,7 @@ class GraphicsDrawMixin:
         d = math.hypot(ddx, ddy) or 1.0
         ux, uy = ddx / d, ddy / d
         upright = clampf((abs(uy) - 0.3) / 0.2, 0.0, 1.0)
-        fatigue = 1.0 - self.body.energy
+        fatigue = self.body.aerobic
         heave = clampf((fatigue - 0.5) / 0.5, 0.0, 1.0)
         swing = 2.0 * breath - 1.0
         chest_h = swing * heave * 0.5
@@ -274,7 +285,7 @@ class GraphicsDrawMixin:
         body_x = chest_x
         body_y = chest_y + 4.0 * sleep - breath_bob  # y↓ 睡眠下沉+起伏
         body_rot = body_axis
-        body_sx = 1.0 + _lerp(_lerp(-0.05, 0.05, breath) * upright, 0.15, sleep)
+        body_sx = self.body.stats.body_width + _lerp(_lerp(-0.05, 0.05, breath) * upright, 0.15, sleep)
         body_sy = 1.0  # 竖直呼吸走 body_y，不缩 Y
         side = self._motion_side(d0x, d0y, d1x, d1y)
         blit(
@@ -300,8 +311,12 @@ class GraphicsDrawMixin:
             hip_rot = _ang_from_up(t0x - chest_x, t0y - chest_y)
         else:
             hip_rot = body_axis
-        hip_sx = 1.0 + sleep * 0.2 + 0.05 * breath
+        hip_sx = self.body.stats.hip_width + sleep * 0.2 + 0.05 * breath
         hip_sy = 1.0 + sleep * 0.2
+        self._hip_pose = (side, hip_x, hip_y, hip_rot, hip_sx, hip_sy)
+
+    def _draw_hips(self, p, atlas):
+        side, hip_x, hip_y, hip_rot, hip_sx, hip_sy = self._hip_pose
         blit(
             p,
             atlas,
@@ -365,41 +380,22 @@ class GraphicsDrawMixin:
         blit(p, atlas, element, x, y, rotation, self._legs_scale_x, 1.0, color, ax=0.5, ay=0.75)
 
     def _draw_head(self, p, atlas, ts=1.0):
-        head = self.head
-        b = self.body
-
-        if b.animation == "Flip":  # 翻滚转得快，按插值后的头骨相对躯干中点画头
-            d0x = _lerp(self._last_draw0[0], self.draw0[0], ts)
-            d0y = _lerp(self._last_draw0[1], self.draw0[1], ts)
-            d1x = _lerp(self._last_draw1[0], self.draw1[0], ts)
-            d1y = _lerp(self._last_draw1[1], self.draw1[1], ts)
-            hx = _lerp(head.lx, head.x, ts)
-            hy = _lerp(head.ly, head.y, ts)
-            head_ang = _ang_from_up(hx - (d0x + d1x) * 0.5, hy - (d0y + d1y) * 0.5)
-        else:
-            head_ang = self.head_angle
-
-        frame_idx = self._head_frame_index()
+        hx_r, hy_r, head_ang = self.head_pose_at(ts)
+        frame_idx = self._head_frame_index(head_ang)
         frames = self._head_frames or [self.cat.frames["head"][1] + "0"]
         frame_idx = min(max(frame_idx, 0), len(frames) - 1)
         element = frames[frame_idx]
 
         scale_x = self.head_scale_x
 
-        hx_r = _lerp(head.lx, head.x, ts)
-        hy_r = _lerp(head.ly, head.y, ts)
-
         s_curl = self.sleep_curl
         if s_curl > 0.0:
             d0x = _lerp(self._last_draw0[0], self.draw0[0], ts)
             d1x = _lerp(self._last_draw1[0], self.draw1[0], ts)
             side = 1.0 if d0x >= d1x else -1.0
+            head_ang = _lerp(head_ang, 45.0 * side, s_curl)
             hx_r += side * 2.0 * s_curl
             hy_r -= 1.0 * s_curl
-
-        hox, hoy = getattr(self, "_breath_head_off", (0.0, 0.0))
-        hx_r += hox
-        hy_r += hoy
 
         blit(
             p,
@@ -408,7 +404,7 @@ class GraphicsDrawMixin:
             hx_r,
             hy_r,
             head_ang,
-            scale_x,
+            scale_x * self.body.stats.head_width,
             1.0,
             self._color("HEAD", self.BODY),
             ax=0.5,
@@ -418,19 +414,18 @@ class GraphicsDrawMixin:
     def _draw_face(self, p, atlas, ts=1.0):
         b = self.body
 
-        hx_i = _lerp(self.head.lx, self.head.x, ts)
-        hy_i = _lerp(self.head.ly, self.head.y, ts)
+        hx_i, hy_i, head_ang = self.head_pose_at(ts)
         if self.sleep_curl > 0.0:
             d0x = _lerp(self._last_draw0[0], self.draw0[0], ts)
             d1x = _lerp(self._last_draw1[0], self.draw1[0], ts)
             side = 1.0 if d0x >= d1x else -1.0
             hx_i += side * 2.0 * self.sleep_curl
             hy_i -= 1.0 * self.sleep_curl
-        hox, hoy = getattr(self, "_breath_head_off", (0.0, 0.0))
-        fx = hx_i + self.face_offset[0] + hox
-        fy = hy_i + self.face_offset[1] + hoy
+        ox, oy = self.face_offset_at(ts)
+        fx = hx_i + ox
+        fy = hy_i + oy
 
-        rot = self.face_angle
+        rot = head_ang * self.face_rot_k
         sx = self.face_scale_x
 
         face_color = self._asc_face_color or self._color("FACE", self.EYE)
@@ -445,7 +440,7 @@ class GraphicsDrawMixin:
         elif self.stunned:
             element = "FaceStunned"
         elif self.ascension is not None:
-            idx = int(clampf(self._face_angle_index(), 0, 8))
+            idx = int(clampf(self._face_angle_index(ts), 0, 8))
             element = face_a_frames[min(idx, n_max_a)]
         else:
             if self.blink > 0 or self.sleep_curl > 0.0:
@@ -462,7 +457,7 @@ class GraphicsDrawMixin:
             elif b.bodyMode == "Crawl" or (b.bodyMode == "Stand" and (b.is_moving() or b.move_dir != 0)):
                 idx = 4
             else:
-                idx = self._face_angle_index()
+                idx = self._face_angle_index(ts)
             idx = int(clampf(idx, 0, 8))
             element = frames[min(idx, n_max)]
 

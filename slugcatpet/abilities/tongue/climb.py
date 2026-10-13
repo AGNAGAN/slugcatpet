@@ -5,6 +5,7 @@ import math
 
 from ...core.units import clampf
 from . import consts
+from .aim import fire, tongue_of
 
 # 爬墙/吊顶常量（px/tick）
 CLIMB_SHOOT_V = 46.7
@@ -53,7 +54,7 @@ class TongueClimber:
     def __init__(self, win, side, target=None, stop_dist=None, rng=None):
         self.win = win
         self.body = win.body
-        self.tongue = win.tongue
+        self.tongue = tongue_of(win)
         self.side = 1 if side > 0 else -1  # 1=右墙 / -1=左墙
         self.target = target
         self.stop_dist = stop_dist
@@ -73,7 +74,7 @@ class TongueClimber:
         c0 = self.body.chunk0
         self.jitter = (self.jitter * 1103515245 + 12345) & 0x7FFF
         jy = ((self.jitter % 100) / 100.0 - 0.5) * 10.0
-        self.win.fire_tongue(self._wall_x(), c0.y - 105.0 + jy)
+        fire(self.win, self._wall_x(), c0.y - 105.0 + jy)
 
     def update(self):
         self.timer += 1
@@ -127,7 +128,7 @@ class TongueClimber:
             if tg.attached:
                 tg.retract()
             elif tg.is_idle():
-                self.win.fire_tongue(c0.x, c0.y - self.win._HL)
+                fire(self.win, c0.x, c0.y - self.win._HL)
                 self.phase = "ceil_wait"
                 self.timer = 0
             return False
@@ -160,7 +161,7 @@ class TongueClimber:
             elif tg.is_idle() and self.timer > 6:
                 if self.tv_hops >= TRAVERSE_MAX_HOPS:
                     return True
-                self.win.fire_tongue(self._traverse_target(), 0.0)
+                fire(self.win, self._traverse_target(), 0.0)
                 self.tv_hops += 1
                 self.phase = "tv_shoot"
                 self.timer = 0
@@ -176,7 +177,7 @@ class TongueClimber:
             elif tg.is_idle() and self.timer > 6:
                 if self.tv_hops >= TRAVERSE_MAX_HOPS:
                     return True
-                self.win.fire_tongue(self._traverse_target(), 0.0)
+                fire(self.win, self._traverse_target(), 0.0)
                 self.tv_hops += 1
                 self.timer = 0
             return False
@@ -214,7 +215,7 @@ class CeilingHanger:
     def __init__(self, win, side, rng, target_x=None):
         self.win = win
         self.body = win.body
-        self.tongue = win.tongue
+        self.tongue = tongue_of(win)
         self.side = 1 if side > 0 else -1
         self.target_x = target_x
         self.rng = rng
@@ -290,7 +291,7 @@ class CeilingHanger:
         if self._bm_phase == "drop":
             if self._bm_t > 8:
                 toward = self._roam_toward()
-                self.win.fire_tongue(c0.x + toward * 40.0, c0.y - self.win._HL)
+                fire(self.win, c0.x + toward * 40.0, c0.y - self.win._HL)
                 self._bm_phase = "reshoot"
                 self._bm_t = 0
                 self._bm_tries += 1
@@ -305,7 +306,7 @@ class CeilingHanger:
                     del self._bm_phase
                     return True
                 toward = self._roam_toward()
-                self.win.fire_tongue(c0.x + toward * 40.0, c0.y - self.win._HL)
+                fire(self.win, c0.x + toward * 40.0, c0.y - self.win._HL)
                 self._bm_t = 0
                 self._bm_tries += 1
         return False

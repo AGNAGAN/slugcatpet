@@ -16,6 +16,7 @@ class Pole:
     """单根杆子：端点+攀爬标记（ax/ay=锚边端，bx/by=光标端）。"""
 
     __slots__ = ("kind", "ax", "ay", "bx", "by", "state", "has_been_climbed", "_id")
+    grounded = True  # 竖杆底端着地
 
     def __init__(self, kind, ax, ay, bx, by, seed=0):
         self.kind = kind

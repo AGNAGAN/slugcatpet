@@ -60,7 +60,7 @@ class PoleClimb(State):
         best = None
         hx = fsm.body.chunk1.x
         for p in fsm.items(CLIMBABLE):
-            if p.kind != "vertical" or not pole_free(fsm, p):
+            if p.kind != "vertical" or not p.grounded or not pole_free(fsm, p):
                 continue
             if best is None or abs(p.x - hx) < abs(best.x - hx):
                 best = p

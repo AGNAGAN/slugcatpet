@@ -21,7 +21,9 @@ class Poles(Behavior):
         gate_e = fsm.traits.play_gate
 
         def vertical_pole():
-            return any(p.kind == "vertical" and pole_free(fsm, p) for p in fsm.items(CLIMBABLE))
+            return any(
+                p.kind == "vertical" and p.grounded and pole_free(fsm, p) for p in fsm.items(CLIMBABLE)
+            )
 
         fsm.mood.add(
             Candidate(

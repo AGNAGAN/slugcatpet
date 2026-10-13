@@ -5,6 +5,7 @@ import math
 
 from ... import tuning
 from . import consts
+from .aim import fire_at, tongue_of
 from ...core.units import clampf
 from ...planning.reach import Reach, Estimate, RUNNING, GIVEUP, reach_assist, walk_band
 
@@ -25,7 +26,7 @@ def mouth_pos(pet):
 
 def reset_tongue(pet, owner=None):
     """收舌 + 恢复默认参数 + 解除悬挂；舌头被他人持有时拒绝（不清舌、不解悬）。"""
-    tg = pet.tongue
+    tg = tongue_of(pet)
     if tg is not None:
         if tg.owned_by_other(owner):
             return
@@ -35,7 +36,7 @@ def reset_tongue(pet, owner=None):
 
 
 def tongue_fire_range(pet):
-    return pet.tongue.total * consts.PLAN_TONGUE_RANGE_FRAC
+    return tongue_of(pet).total * consts.PLAN_TONGUE_RANGE_FRAC
 
 
 class TongueReach(Reach):
@@ -78,7 +79,7 @@ class TongueApproachController:
     def update(self):
         pet = self.pet
         body = pet.body
-        tg = pet.tongue
+        tg = tongue_of(pet)
         self.timer += 1
         gx, gy = self.goal.pos()
         reach_assist(pet, self.goal, gx, gy)
@@ -104,9 +105,9 @@ class TongueApproachController:
             if body.on_floor() and gy < c0.y - tuning.GRAB_REACH:
                 body.request_jump("stand")
             if self.goal.obj is not None:
-                pet.fire_tongue_at_obj(self.goal.obj)
+                fire_at(pet, self.goal.obj.x, self.goal.obj.y, self.goal.obj)
             else:
-                pet.fire_tongue_at(gx, gy)
+                fire_at(pet, gx, gy)
             self._fired = True
             self.timer = 0
             return RUNNING

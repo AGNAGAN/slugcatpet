@@ -66,7 +66,7 @@ class SeekWarmth(State):
         if self._warm_exec is not None:
             self._warm_exec.cancel()
             self._warm_exec = None
-        fsm._break_tongue()
+        fsm.release_organs()
         fsm.body.stop_walk()
         fsm.climb = None
         fsm.gfx.hand_aim["l"] = None

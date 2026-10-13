@@ -49,7 +49,7 @@ class Behavior:
     key = ""  # 注册键，角色定义 behaviors 里用它
     title = {"zh": "", "en": ""}
     doc = ""
-    requires = ()  # 依赖的能力 key 或物品用法；能力不齐不挂载，用法只标明会用到哪类物品
+    requires = ()  # 依赖的身体标签（含能力 key）或物品用法；标签不齐不挂载，用法只标明会用到哪类物品
     essential = False  # 状态机离不开它，角色里不能关
     mood = None  # 心情候选名（性格按它调权重），无则 None
     params: dict = {}
@@ -61,5 +61,5 @@ class Behavior:
         raise NotImplementedError
 
 
-def needed_abilities(cls) -> list[str]:
+def needed_tags(cls) -> list[str]:
     return [r for r in cls.requires if r not in USES]

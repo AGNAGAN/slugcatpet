@@ -1,9 +1,10 @@
-"""内置行为状态：被砸后生气 / 扔石头。"""
+"""内置行为状态：被砸后生气 / 扔武器。"""
 
 from __future__ import annotations
 
 from ...brain.state import T_ACTIVITY, State, LIGHT, IDLE
 from ...brain.fsm import T_POSTTHROW_STAND
+from ...brain.hands import WEAPON
 from ...brain.skills import motor
 
 
@@ -52,13 +53,19 @@ class AngryStone(State):
     tier = T_ACTIVITY
     energy = LIGHT
 
+    def hands_needed(self):
+        return "any" if self.fsm.hands.held(WEAPON) is not None else "one"
+
     def enter(self):
         fsm = self.fsm
-        from .thrower import StoneThrower
+        from .thrower import WeaponThrower
 
         fsm.gfx.hand_aim["l"] = None
         fsm.gfx.hand_aim["r"] = None
-        self.thrower = StoneThrower(fsm.win, fsm.rng, fsm)
+        self.thrower = WeaponThrower(fsm.win, fsm.rng, fsm)
+        stone = fsm.hands.held(WEAPON)
+        if stone is not None:
+            self.thrower.start_with(stone)
 
     def tick(self, cursor, disturbed):
         fsm = self.fsm
@@ -85,12 +92,51 @@ class AngryStone(State):
         self._angrystone_release()
 
     def _angrystone_release(self):
-        fsm = self.fsm
-        if fsm.body.carried_stone is not None:
-            fsm.body.release_stone(to_free=True)
-        fsm.body.stop_walk()
+        _release_thrower(self.fsm, self.thrower)
         self.thrower = None
-        fsm.body.arm_aim["l"] = None
-        fsm.body.arm_aim["r"] = None
+
+
+class ArmStone(State):
+    """好感低时捡块石头揣着。"""
+
+    name = "ArmStone"
+    mood = "arm_stone"
+    thrower = None
+    tier = T_ACTIVITY
+    energy = LIGHT
+    hands = "one"
+
+    def enter(self):
+        fsm = self.fsm
+        from .thrower import WeaponThrower
+
         fsm.gfx.hand_aim["l"] = None
         fsm.gfx.hand_aim["r"] = None
+        self.thrower = WeaponThrower(fsm.win, fsm.rng, fsm, keep=True)
+
+    def tick(self, cursor, disturbed):
+        fsm = self.fsm
+        status = "idle" if self.thrower is None else self.thrower.update(True)
+        if status == "running":
+            return
+        _release_thrower(fsm, self.thrower)
+        self.thrower = None
+        fsm._transition("IdleStand")
+
+    def brk(self):
+        _release_thrower(self.fsm, self.thrower)
+        self.thrower = None
+
+    def kill_break(self):
+        self.brk()
+
+
+def _release_thrower(fsm, thrower):
+    """收尾：没扔出去的石头留在手里当武器。"""
+    if thrower is not None:
+        fsm.hands.adopt(thrower.target, WEAPON)
+    fsm.body.stop_walk()
+    fsm.body.arm_aim["l"] = None
+    fsm.body.arm_aim["r"] = None
+    fsm.gfx.hand_aim["l"] = None
+    fsm.gfx.hand_aim["r"] = None

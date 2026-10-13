@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QPoint
 from PySide6.QtGui import QGuiApplication
 from ..theme import qss
+from .screens import clamp_rect
 
 # 壳级 QSS：防父窗样式渗透
 _CARD_QSS = qss.CARD
@@ -81,10 +82,7 @@ class CardDialog(QDialog):
         self.move(self._clamped(QPoint(x, y)))
 
     def _clamped(self, pos: QPoint) -> QPoint:
-        scr = QGuiApplication.primaryScreen().availableGeometry()
-        x = max(scr.x(), min(pos.x(), scr.x() + scr.width() - self.width()))
-        y = max(scr.y(), min(pos.y(), scr.y() + scr.height() - self.height()))
-        return QPoint(x, y)
+        return clamp_rect(pos, self.width(), self.height())
 
     def mousePressEvent(self, ev):
         if ev.button() == Qt.MouseButton.LeftButton:

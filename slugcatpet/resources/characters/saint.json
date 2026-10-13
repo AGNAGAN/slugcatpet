@@ -21,7 +21,10 @@
     "ascension": {}
   },
   "behaviors": {},
-  "stats": {},
+  "stats": {
+    "throw_skill": 0,
+    "spear_toss": true
+  },
   "personality": {
     "activity": 0.4,
     "stamina": 0.8,

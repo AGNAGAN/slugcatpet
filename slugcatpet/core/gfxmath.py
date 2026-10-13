@@ -16,7 +16,7 @@ def _hsl2rgb(h, sl, lum):
     if v_max > 0.0:
         v_min = lum + lum - v_max
         chroma_ratio = (v_max - v_min) / v_max
-        h6 = h * 6.0
+        h6 = (h % 1.0) * 6.0  # 色相环首尾相接，h=1 与 h=0 同为红
         sector = int(h6)
         frac = h6 - sector
         delta = v_max * chroma_ratio * frac

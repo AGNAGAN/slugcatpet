@@ -51,9 +51,7 @@ KARMA_MAX = 9
 HIBERNATE_TICKS = 3600
 REVIVE_TICKS = 400
 
-# 撞击伤害：速度超过即晕，向下撞超过致死
-FALL_STUN_SPEED = 35.0
-FALL_DEATH_SPEED = 60.0
+# 撞击伤害：晕 / 死的速度阈值按种族见 SlugStats.fall_*_speed
 FALL_STUN_MIN = 40  # 晕 tick，按速度在两档之间插值
 FALL_STUN_MAX = 140
 DRAG_IMPACT_MAX_SCALE = 6.0  # 拖拽时补回被限速的部分，最多放大这么多
@@ -70,6 +68,18 @@ TEMPER_KILL_CANCEL_HUMAN = -0.10
 TEMPER_KILL_REVIVED = -0.50
 TEMPER_FEED = 0.20
 TEMPER_DECAY = 1.0 / 180000.0
+TEMPER_SNATCH = -0.06  # 手里东西被光标抢走
+SNATCH_ANGER_TEMPER = -0.35  # 被抢时好感低于此就生气
+
+# 手持
+HUNGER_URGENT_FRAC = 0.5  # 饱食低于上限的这一比例算真饿：拿到就吃
+SNACK_DELAY_MIN = 600  # 有点饿时拿着的东西过多久再吃（tick）
+SNACK_DELAY_MAX = 2400
+ARM_TEMPER = -0.25  # 好感低于此会捡块石头揣着
+ARM_TEMPER_HYST = 0.10  # 好感回升过 ARM_TEMPER + 此值才放下
+SPEAR_TEMPER = -0.55  # 好感低于此才拿矛当武器，且比石头优先；回升过此值 + ARM_TEMPER_HYST 放下
+SPEAR_PREF = 0.35  # 拿矛优先：挑武器时矛的距离乘此值
+DRAG_THROW_TEMPER = -0.25  # 被拎起时好感低于此可能把石头朝光标扔
 
 # 寒冷、暴风雪、暖灯供暖、转世
 COLD_BLIZZARD_DEFAULT_OFF = True
@@ -180,11 +190,9 @@ BUBBLE_INHERIT_VEL = 0.025
 BUBBLE_SPAWN_KICK = 0.5
 
 # idle 兜底层：东张西望
-LOOK_UPDATE_PROB = 0.025
-LOOK_NOTHING_PROB = 0.002
-LOOK_GLANCE_PROB = 0.002
-LOOK_GLANCE_INTEREST = 0.40
-LOOK_INTEREST_DECAY_TICKS = 24
+LOOK_UPDATE_PROB = 0.1
+LOOK_NOTHING_PROB = 0.0025
+LOOK_INTEREST_DECAY_UPDATES = 8  # 评估这么多次后开始看腻
 LOOK_MIN_INTEREST = 0.20
 LOOK_DIST_NEAR = 400.0
 LOOK_CURSOR_BASE = 1.00
@@ -274,8 +282,7 @@ MAKEWAY_CROWD_N = 2  # 身边挤了这么多只就只跳不趴
 MAKEWAY_CROWD_LIE_N = 4  # 场上超过这么多只时多半趴下让
 MAKEWAY_CROWD_HOP_PROB = 0.2
 MAKEWAY_EDGE_MARGIN = 48.0  # 贴屏幕边时只跳不趴
-MAKEWAY_LIE_MIN_TICKS = 20  # 趴下至少趴这么久
-MAKEWAY_LIE_SNAP_TICKS = 8
+MAKEWAY_LIE_MIN_TICKS = 36  # 趴下至少趴这么久（含约 17 tick 的趴下过程）
 
 # 顶人方兜底跳越
 BLOCKED_JUMP_TICKS = 100

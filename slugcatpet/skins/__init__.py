@@ -7,7 +7,11 @@ from pathlib import Path
 from ..i18n import t
 from . import sources
 from .loader import SkinPack, load_pack
-from .resolver import SkinAtlasSet
+from . import groups as G
+from .resolver import HIDDEN, SkinAtlasSet
+
+# Dress My Slugcat 自带的绘制底稿 id
+_DMS_TEMPLATES = frozenset({"dressmyslugcat.template", "dressmyslugcat.asymmetrytemplate"})
 
 _state = {
     "loaded": False,
@@ -85,7 +89,7 @@ def reload() -> None:
 
 def _is_dms_template(p: SkinPack) -> bool:
     """Dress My Slugcat 自带的绘制底稿，不当作可选皮肤。"""
-    return p.id.lower().startswith("dressmyslugcat.")
+    return p.id.lower() in _DMS_TEMPLATES
 
 
 def packs() -> list[SkinPack]:
@@ -130,9 +134,31 @@ def zip_errors() -> list:
     return list(_state["zip_errors"])
 
 
-def resolver_for(base_atlas, skin_id: str | None, species: str) -> SkinAtlasSet:
-    """该猫的查找链；skin_id 找不到则纯原版。"""
-    return SkinAtlasSet(base_atlas, get(skin_id), species)
+def resolver_for(base_atlas, look, species: str) -> SkinAtlasSet:
+    """该猫的查找链：每个部位按 look 取来源皮肤，找不到的按原皮；颜色和尾巴形状随部位来源。"""
+    from ..appearance import EMPTY
+
+    whole = get(look.skin)
+    colors = dict(whole.colors) if whole is not None else {}
+    tail = dict(whole.tail) if whole is not None else {}
+    sources = {}
+    for grp in G.GROUPS:
+        sid = look.source(grp)
+        if sid == EMPTY:
+            sources[grp] = HIDDEN
+            colors.pop(grp, None)
+            continue
+        pack = get(sid)
+        sources[grp] = pack
+        if grp in look.parts:
+            colors.pop(grp, None)
+            if pack is not None and grp in pack.colors:
+                colors[grp] = pack.colors[grp]
+            if grp == "TAIL":
+                tail = dict(pack.tail) if pack is not None else {}
+    if look.tail:
+        tail.update(look.tail)
+    return SkinAtlasSet(base_atlas, sources, species, colors, tail)
 
 
 def skins_dir() -> Path:

@@ -12,6 +12,7 @@ def dispatch(body, inp0) -> None:
         return
     body._ctrl_can_jump = 0
     body._ctrl_want_jump = 0
+    body.aerobic_increase(body.stats.jump_aerobic)
     c0, c1 = body.chunk0, body.chunk1
     a = body.animation
     rd = body._ctrl_roll_direction

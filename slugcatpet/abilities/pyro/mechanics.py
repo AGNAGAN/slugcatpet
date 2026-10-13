@@ -6,6 +6,7 @@ import math
 import random
 
 from ...core.units import inv_lerp, lerp
+from ...items.base import THROWABLE
 from ...world.explosionfx import (
     spawn_overheat_smoke,
     spawn_overheat_spark,
@@ -204,17 +205,12 @@ class PyroController:
         body._ctrl_pyro_cooldown = JUMP_COOLDOWN
         px, py = c0.x, c0.y
         spawn_parry_fx(self.pet, px, py)
-        for st in getattr(self.pet, "stones", ()):
-            if not getattr(st, "fling", False):
+        items = getattr(self.pet, "items_affording", None)
+        for w in items(THROWABLE) if items is not None else ():
+            if not w.in_flight() or math.hypot(w.x - px, w.y - py) >= PARRY_STONE_R:
                 continue
-            if math.hypot(st.x - px, st.y - py) >= PARRY_STONE_R:
-                continue
-            st.fling = False
-            st.thrown_by_cat = False
-            dx, dy = _dirvec(px, py, st.x, st.y)
-            st.vx, st.vy = dx * 20.0, dy * 20.0
-            st.spin = lerp(-100.0, 100.0, random.random()) * lerp(0.05, 1.0, getattr(st, "room_gravity", 1.0))
-        for other in self._other_cats():
+            w.parried(*_dirvec(px, py, w.x, w.y))
+        for other in self._other_cats() if getattr(self.pet, "cfg_friendly_fire", False) else ():
             oc = other.body.chunk0
             if math.hypot(oc.x - px, oc.y - py) >= PARRY_CAT_R:
                 continue

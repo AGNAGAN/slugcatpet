@@ -44,10 +44,7 @@ class StoneKind(ItemKind):
 
     def drop(self, win, s):
         for pet in win.pets:
-            if s is getattr(pet.body, "carried_stone", None):
-                rs = getattr(pet.body, "release_stone", None)
-                if rs is not None:
-                    rs()
+            pet.body.release(s)
         s.state = ItemState.GONE
 
     def on_grab(self, s):
@@ -66,8 +63,16 @@ class StoneKind(ItemKind):
         _hit_cursor(win)
 
     def draw(self, win, p):
+        self._draw(win, p, False)
+
+    def draw_behind(self, win, p):
+        self._draw(win, p, True)
+
+    def _draw(self, win, p, behind):
         ts = win._ts
         for s in win.stones:
+            if (s.behind and s.state == ItemState.CARRIED) != behind:
+                continue
             x = s.last_x + (s.x - s.last_x) * ts
             y = s.last_y + (s.y - s.last_y) * ts
             rot = s.last_rotation + (s.rotation_deg - s.last_rotation) * ts

@@ -36,6 +36,8 @@ def _perp(nx, ny):
 
 class Fruit:
     collision_layer = 1  # 与 Saint/黏菌同层互推
+    edible = True
+    throwable = False
 
     __slots__ = (
         "x",

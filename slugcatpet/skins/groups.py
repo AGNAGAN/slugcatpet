@@ -9,7 +9,7 @@ def _seq(prefix: str, n: int) -> list[str]:
     return [f"{prefix}{i}" for i in range(n)]
 
 
-# 部件组 → 必需帧；组内帧必须齐全该组才生效（同 DMS SpriteDefinitions）
+# 部件组 → 必需帧；组内帧必须齐全该组才生效
 GROUPS: dict[str, list[str]] = {
     "HEAD": _seq("HeadA", 18),
     "FACE": _seq("FaceA", 9) + _seq("FaceB", 9) + ["FaceDead", "FaceStunned"],
@@ -33,11 +33,11 @@ GROUPS: dict[str, list[str]] = {
 }
 
 # 桌宠不画的组：加载但标注"未使用"
-UNUSED_GROUPS = frozenset({"TAILSPECKLES", "PIXEL"})
+UNUSED_GROUPS = frozenset({"PIXEL"})
 
 FRAME_GROUP: dict[str, str] = {f: g for g, frames in GROUPS.items() for f in frames}
 
-# 物种专属帧 → 皮肤里的通用帧（同 DMS SlugcatSpecificReplacements）
+# 物种专属帧 → 皮肤里的通用帧
 SPECIES_ALIASES: dict[str, dict[str, str]] = {
     "saint": {"HeadB": "HeadA"},
     "artificer": {"FaceC": "FaceA", "FaceD": "FaceB"},
@@ -57,7 +57,7 @@ def generic_frame(frame: str, species: str | None) -> str:
     return frame
 
 
-# 归一化锚点（y↓），同原版 FSprite.anchor
+# 归一化锚点（y↓）
 _GROUP_ANCHOR = {"ARMS": (0.9, 0.5), "LEGS": (0.5, 0.75), "BODY": (0.5, 0.2105263), "GILLS": (0.5, 0.9)}
 _FRAME_ANCHOR = {"OnTopOfTerrainHand": (0.5, 0.5), "OnTopOfTerrainHand2": (0.5, 0.5)}
 
@@ -69,7 +69,7 @@ def frame_anchor(frame: str) -> tuple[float, float]:
     return _GROUP_ANCHOR.get(FRAME_GROUP.get(frame, ""), (0.5, 0.5))
 
 
-# 不对称前缀（DMS：LeftHeadA0 / RightHeadA0）
+# 不对称前缀（如 LeftHeadA0 / RightHeadA0）
 LEFT_PREFIX = "Left"
 RIGHT_PREFIX = "Right"
 

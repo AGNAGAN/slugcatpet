@@ -19,6 +19,7 @@ class MakeWay(State):
         self._face = 0  # 趴下时的朝向（顺对方前进方向）
         self._hop = False
         self._lie_min = 0
+        self._look = None  # 最近一次看向对方的点，对方短暂丢失时沿用
 
     def enter(self):
         fsm = self.fsm
@@ -32,7 +33,7 @@ class MakeWay(State):
         self._away = away
         self._face = 0
         self._lie_min = 0
-        b.prone_snap = 0
+        self._look = None
         if self._crowded() or self._near_edge():
             self._hop = True
         elif fsm.social.count() > tuning.MAKEWAY_CROWD_LIE_N:
@@ -51,10 +52,6 @@ class MakeWay(State):
             self._face = int(-away)
             self._lie_min = tuning.MAKEWAY_LIE_MIN_TICKS
             b.set_posture(False)
-            b.hip_sink = 1.0
-            b.crawl_pose = 1.0
-            b.prone_snap = tuning.MAKEWAY_LIE_SNAP_TICKS
-            b.crawl_anchor = b.chunk1.x
             if self._face:
                 b.facing = self._face
         cr.shoved = 0
@@ -65,7 +62,8 @@ class MakeWay(State):
         b = fsm.body
         ob = getattr(fsm.social.crowd(fsm.win).yield_to, "body", None)
         if ob is not None:
-            fsm.gfx.look_at = (ob.chunk0.x, ob.chunk0.y)
+            self._look = (ob.chunk0.x, ob.chunk0.y)
+        fsm.gfx.look_at = self._look
         if self._away:
             b.move_dir = 1 if self._away > 0 else -1
             tgt = self._away * b.stats.makeway_evade_vx
@@ -73,8 +71,6 @@ class MakeWay(State):
             b.chunk1.vx += (tgt - b.chunk1.vx) * 0.3
         if not self._hop:
             b.move_dir = 0
-            b.hip_sink = 1.0
-            b.crawl_pose = min(1.0, b.crawl_pose + 0.3)
             if self._face:
                 b.facing = self._face
         # 退出：让开了 / 超时 / 顶人者走了；趴下的至少趴稳再起

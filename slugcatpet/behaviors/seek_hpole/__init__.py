@@ -6,6 +6,7 @@ import math
 
 from ...abilities.base import Param
 from ...abilities.tongue.climb import TongueClimber
+from ...abilities.tongue.aim import fire_at, tongue_of
 from ...brain.desire import _lerp
 from ...brain.state import LIGHT, T_ACTIVITY, State
 from ...items.base import CLIMBABLE
@@ -43,7 +44,7 @@ class SeekHPole(State):
         fsm.climb = None
         self._hp_tries = 0
         self._hp_climbs = 0
-        p = self._pick_hpole() if fsm.win.tongue is not None else None
+        p = self._pick_hpole() if tongue_of(fsm.win) is not None else None
         self._hp = p
         if p is None:
             self._hp_phase = "done"
@@ -51,7 +52,7 @@ class SeekHPole(State):
         self._hp_lo = min(p.ax, p.bx)
         self._hp_hi = max(p.ax, p.bx)
         mox, moy = fsm.gfx.mouth_world()
-        reach = fsm.win.tongue.total * HPOLE_REACH_FRAC
+        reach = tongue_of(fsm.win).total * HPOLE_REACH_FRAC
         if p.ay >= moy - reach:
             self._hp_kind = "low"
             self._hp_ux = max(self._hp_lo + 8.0, min(self._hp_hi - 8.0, b.chunk1.x))
@@ -101,8 +102,8 @@ class SeekHPole(State):
 
         if ph == "climb":
             mox, moy = fsm.gfx.mouth_world()
-            if math.hypot(mox - p.ax, moy - p.ay) <= fsm.win.tongue.total * HPOLE_GRAB_REACH:
-                fsm._break_tongue()
+            if math.hypot(mox - p.ax, moy - p.ay) <= tongue_of(fsm.win).total * HPOLE_GRAB_REACH:
+                fsm.release_organs()
                 fsm.climb = None
                 self._hp_phase = "grab"
                 self._hp_tries = 0
@@ -114,7 +115,7 @@ class SeekHPole(State):
             if getattr(fsm.climb, "giveup", False):
                 self._hp_reclimb(b)
             elif done:
-                fsm._break_tongue()
+                fsm.release_organs()
                 fsm.climb = None
                 self._hp_phase = "grab"
                 self._hp_tries = 0
@@ -147,7 +148,7 @@ class SeekHPole(State):
     def _hp_reclimb(self, b):
         """高杆够不着→回墙脚重爬(限次)；低杆/超限→放弃回 idle。"""
         fsm = self.fsm
-        fsm._break_tongue()
+        fsm.release_organs()
         fsm.climb = None
         self._hp_tries = 0
         self._hp_climbs += 1
@@ -172,7 +173,7 @@ class SeekHPole(State):
 
     def _seekhpole_break(self):
         fsm = self.fsm
-        fsm._break_tongue()
+        fsm.release_organs()
         fsm.body.stop_walk()
         fsm.climb = None
         self._hp = None
@@ -182,7 +183,7 @@ class SeekHPole(State):
 
     def _try_grab_pole(self, p):
         fsm = self.fsm
-        tg = fsm.win.tongue
+        tg = tongue_of(fsm.win)
         lo, hi = self._hp_lo, self._hp_hi
         if tg.attached:
             ax, ay = tg.anchor if tg.anchor is not None else (None, None)
@@ -195,7 +196,7 @@ class SeekHPole(State):
             mox, moy = fsm.gfx.mouth_world()
             tx = max(lo + 6.0, min(hi - 6.0, mox))
             if math.hypot(mox - tx, moy - p.ay) <= tg.total * HPOLE_REACH_FRAC:
-                fsm.win.fire_tongue_at(tx, p.ay)
+                fire_at(fsm.win, tx, p.ay)
                 self._hp_tries += 1
                 return True
             return False

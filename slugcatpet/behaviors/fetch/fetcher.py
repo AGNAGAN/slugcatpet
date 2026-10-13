@@ -8,16 +8,7 @@ from ...planning import GIVEUP, PlanExecutor, obj_goal
 from ...characters.personality import NEUTRAL
 from ...core.vecmath import _dist
 from ...items.base import EDIBLE
-from ...brain.skills.motor import (
-    BITE_HEAD_NUDGE,
-    EAT_APPROACH,
-    EAT_CHOMP_POSE,
-    EAT_HOLD_POSE,
-    EAT_INTERVAL,
-    EAT_PEAK_PHASE,
-    EAT_STRIKE_POW,
-    eat_chomp_pulse,
-)
+from .chew import Chew
 
 CARRY_FALL_TIMEOUT = 200
 
@@ -91,30 +82,26 @@ class _NoAssist:
 
 
 def _fetch_assist(pet):
-    for ab in getattr(pet, "abilities", {}).values():
-        a = ab.fetch_assist(pet)
-        if a is not None:
-            return a
-    return _NoAssist()
+    return pet.skill("fetch_assist") or _NoAssist()
 
 
 class FruitFetcher:
-    def __init__(self, win, planner, traits=NEUTRAL):
+    """keep=True 时拿到落地就收工（留着待会儿吃），否则拿到就吃。"""
+
+    def __init__(self, win, planner, traits=NEUTRAL, keep=False, hands=None):
         self.win = win
         self.body = win.body
-        self.tongue = win.tongue
         self.planner = planner
         self.traits = traits
+        self.keep = keep
+        self.hands = hands
 
         self.target = None
         self.phase = "select"
-        self.eaten = 0
         self.giveup = False
         self.timer = 0
         self.grab_side = "r"
-        self.eat_counter = 0
-        self._eat_approaching = False
-        self._bit_this_cycle = False
+        self.chew = Chew()
         self._executor = None
         self._giveup_pending = False
         self._goal = None
@@ -133,22 +120,16 @@ class FruitFetcher:
         return d
 
     def _try_grab(self):
-        if self._grab_dist() < tuning.GRAB_REACH:
-            self._reset_tongue()
+        side = self.body.free_hand(self.grab_side)
+        if side is not None and self._grab_dist() < tuning.GRAB_REACH:
             if getattr(self.target, "stuck_pos", None) is not None:
                 self.target.stuck_pos = None  # 抓取瞬间剥离黏菌
-            self.body.grab_fruit(self.target, self.grab_side)
+            self.body.grab(self.target, side)
             self.social.release(self.win, "food")
             self.phase = "grabbed"
             self.timer = 0
             return True
         return False
-
-    def _reset_tongue(self):
-        if self.tongue is not None:
-            self.tongue.retract()
-            self.tongue.reset_config()
-        self.body.suspended = False
 
     def _pick_grab_side(self):
         return "r" if self.target.x >= self._chunk0().x else "l"
@@ -164,7 +145,19 @@ class FruitFetcher:
         self.social.release(self.win, "food")
 
     def _free(self):
-        return [f for f in self.win.items_affording(EDIBLE) if self.social.free_for(self.win, f)]
+        hands = self.hands
+        return [
+            f
+            for f in self.win.items_affording(EDIBLE)
+            if self.social.free_for(self.win, f) and (hands is None or not hands.forbidden(f))
+        ]
+
+    def start_with(self, f):
+        """手里已经有吃的：落地就开吃。"""
+        self.target = f
+        self.grab_side = self.body.hand_of(f)
+        self.phase = "carry_fall"
+        self.timer = 0
 
     def update(self) -> bool:
         self.timer += 1
@@ -213,15 +206,18 @@ class FruitFetcher:
             self.phase = "select"
         return False
 
+    def held_target(self):
+        """抓到手里的目标；不在手里返回 None。"""
+        return self.target if self.body.hand_of(self.target) is not None else None
+
     def _phase_grabbed(self):
-        self._reset_tongue()
-        self.body.suspended = False
+        """抓到后停一 tick 再叼着落地。"""
         self.phase = "carry_fall"
         self.timer = 0
         return False
 
     def _phase_carry_fall(self):
-        f = self.body.carried_fruit
+        f = self.held_target()
         if f is None:
             self.phase = "select"
             return False
@@ -229,56 +225,21 @@ class FruitFetcher:
         if self.timer > CARRY_FALL_TIMEOUT and f.stalk is not None:
             f.stalk = None
         if self.body.on_floor():
+            if self.keep:
+                return True
             self.phase = "eat"
             self.timer = 0
-            self.eat_counter = 0
-            self._eat_approaching = True
-            self._bit_this_cycle = False
+            self.chew.reset()
         return False
 
     def _phase_eat(self):
-        f = self.body.carried_fruit
+        f = self.held_target()
         if f is None:
             self.phase = "select"
             return False
-        self.win.gfx.look_at = (f.x, f.y)
-        self.eat_counter += 1
-
-        if self._eat_approaching:
-            k = min(1.0, self.eat_counter / EAT_APPROACH)
-            self.body.eat_raise = EAT_HOLD_POSE * (1.0 - (1.0 - k) ** EAT_STRIKE_POW)
-            if self.eat_counter >= EAT_APPROACH:
-                self._eat_approaching = False
-                self.eat_counter = 0
-                self._bit_this_cycle = False
-            return False
-
-        phase = min(1.0, self.eat_counter / EAT_INTERVAL)
-        self.body.eat_raise = EAT_HOLD_POSE + (EAT_CHOMP_POSE - EAT_HOLD_POSE) * eat_chomp_pulse(phase)
-        if self.eat_counter >= EAT_INTERVAL * EAT_PEAK_PHASE and not self._bit_this_cycle:
-            self._bit_this_cycle = True
-            self._bite_head_nudge(f)
-            if self.body.bite_carried():
-                f.state = "eaten"
-                self.eaten += 1
-                self.body.temper_shift(tuning.TEMPER_FEED)
-                self.body.food_eat(1)
-                self.body.energy_change(tuning.EN_EAT_RESTORE)
-                self.body.release_fruit()
-                if self.body.food >= self.body.food_max:
-                    return True
-                self.phase = "select"
-                self.timer = 0
-                return False
-        if self.eat_counter >= EAT_INTERVAL:
-            self.eat_counter = 0
-            self._bit_this_cycle = False
+        if self.chew.step(self.win, f):
+            if self.body.food >= self.body.food_max:
+                return True
+            self.phase = "select"
+            self.timer = 0
         return False
-
-    def _bite_head_nudge(self, f):
-        g = self.win.gfx
-        dx, dy = f.x - g.head.x, f.y - g.head.y
-        d = math.hypot(dx, dy)
-        if d > 1e-6:
-            g.head.vx += dx / d * BITE_HEAD_NUDGE
-            g.head.vy += dy / d * BITE_HEAD_NUDGE

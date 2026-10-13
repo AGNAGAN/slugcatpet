@@ -20,7 +20,8 @@ from ..widgets.tips import install as install_tip
 from ..theme import qss
 
 COLLAPSED_W, COLLAPSED_H = 24, 48
-EXPANDED_W = 120
+EXPANDED_W = 120  # 展开态面板宽（不含左侧箭头）
+ARROW_W = 16  # 展开态左侧收起箭头宽
 EXPANDED_H = 250  # 仅估值，实际走 _expanded_h()
 SLIDE_MS = 150
 
@@ -88,15 +89,36 @@ class TabBar(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
 
         screen = QGuiApplication.primaryScreen().availableGeometry()
-        self._screen = screen
-        self._edge_x = screen.x() + screen.width() - COLLAPSED_W
         self._y = self.params.get("tab_y", screen.y() + (screen.height() - EXPANDED_H) // 2)
+        self._read_screen()
 
         self._build()
         self._apply_collapsed()
 
+        app = QGuiApplication.instance()
+        app.primaryScreenChanged.connect(self._track_screen)
+        self._track_screen()
+
+    def _read_screen(self):
+        """取主屏可用区，收起态贴右边，纵向位置夹回屏内。"""
+        s = QGuiApplication.primaryScreen().availableGeometry()
+        self._screen = s
+        self._edge_x = s.x() + s.width() - COLLAPSED_W
+        self._y = max(s.y(), min(s.y() + s.height() - COLLAPSED_H, int(self._y)))
+
+    def _track_screen(self, *_):
+        QGuiApplication.primaryScreen().availableGeometryChanged.connect(self._on_screen_changed)
+        self._on_screen_changed()
+
+    def _on_screen_changed(self, *_):
+        """分辨率、任务栏或主屏变化后重新贴边。"""
+        self._read_screen()
+        self._apply_expanded() if self.expanded else self._apply_collapsed()
+
     def _build(self):
         self._panel = QWidget(self)
+        self._panel.setObjectName("tabPanel")
+        self._panel.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         lay = QVBoxLayout(self._panel)
         lay.setContentsMargins(6, 6, 6, 6)
         lay.setSpacing(4)
@@ -206,11 +228,13 @@ class TabBar(QWidget):
     def _apply_expanded(self):
         self.expanded = True
         h = self._expanded_h()
-        x = self._screen.x() + self._screen.width() - EXPANDED_W
-        self.setGeometry(x, self._y, EXPANDED_W, h)
-        self._panel.setGeometry(0, 0, EXPANDED_W, h)
+        s = self._screen
+        x = s.x() + s.width() - EXPANDED_W - ARROW_W
+        y = max(s.y(), min(s.y() + s.height() - h, self._y))  # 只夹展开态，不改记下的位置
+        self.setGeometry(x, y, EXPANDED_W + ARROW_W, h)
+        self._panel.setGeometry(ARROW_W, 0, EXPANDED_W, h)
         self._panel.show()
-        self._arrow.setGeometry(0, 0, 16, h)
+        self._arrow.setGeometry(0, 0, ARROW_W, h)
         self._arrow.setText("›")
         self._arrow.setGraphicsEffect(None)
         self._arrow.raise_()
@@ -266,9 +290,9 @@ class TabBar(QWidget):
     def _toast(self, msg):
         self._toast_lbl.setText(msg)
         self._toast_lbl.adjustSize()
-        right = EXPANDED_W if self.expanded else COLLAPSED_W
+        right = EXPANDED_W + ARROW_W if self.expanded else COLLAPSED_W
         gx = self._screen.x() + self._screen.width() - self._toast_lbl.width() - right - 8
-        gy = self._y + 10
+        gy = self.y() + 10
         self._toast_lbl.move(gx, gy)
         self._toast_lbl.show()
         self._toast_lbl.raise_()

@@ -9,6 +9,7 @@ class Accessory:
     default_color = (255, 255, 255)
     default_on = ()
     color_group = None
+    skin_group = None  # 皮肤里对应的部位组，外观面板里可单独换包
 
     def __init__(self, pet):
         self.pet = pet

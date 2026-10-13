@@ -16,6 +16,7 @@ class CatDef:
     frames: dict[str, tuple[str, str]]
     layout_file: str
     atlas_keys: tuple[str, ...]
+    tail_rad: tuple[float, ...] = ()  # 原皮尾巴每段半径，空=游戏默认
     abilities: dict = field(default_factory=dict)
     behaviors: dict = field(default_factory=dict)
     stats: SlugStats = DEFAULT_STATS

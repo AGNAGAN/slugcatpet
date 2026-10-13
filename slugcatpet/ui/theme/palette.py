@@ -32,6 +32,7 @@ BG_WINDOW = "rgba(30,34,40,245)"  # 设置窗 / 菜单
 BG_PANEL = "rgba(30,34,40,235)"  # HUD / 控制面板 / 标签栏
 BG_CARD = "rgba(28,32,38,238)"  # 卡片弹窗 / 首次导入
 BG_TOAST = "rgba(20,22,26,235)"
+BG_TOOLTIP = "#1c2026"  # 原生悬停提示（不透明，提示窗无半透明底）
 BTN_BG = "rgba(60,70,55,255)"
 BTN_HOVER = "rgba(80,100,70,255)"
 BTN_DISABLED = "rgba(45,48,52,255)"

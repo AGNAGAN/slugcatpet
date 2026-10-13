@@ -9,8 +9,8 @@ from .. import tuning
 from ..items.base import CLIMBABLE, EDIBLE, THROWABLE
 from ..planning import Planner
 from .desire import build_arbiter
+from .hands import HandKeeper
 from .objectlooker import ObjectLooker
-from .skills.motor import Chew
 from .state import DRAG, RULE_TIER, STUN, SWIM, T_IDLE, THREAT, ZEROG, FuncState, State
 from ..control.mouse import GrabController
 
@@ -39,6 +39,7 @@ class BehaviorFSM:
         self.HL = window._HL
         self.rng = random.Random(seed)
         self.grab = GrabController(self.body, self.gfx)
+        self.hands = HandKeeper(self)
         self.mood = build_arbiter(self.rng)
         self.looker = ObjectLooker(self.rng, self.traits.activity)
 
@@ -48,7 +49,6 @@ class BehaviorFSM:
         self.point_side = 0
         self._point_stopped = False
         self.cursor = None
-        self.chew = Chew()
         self._prev_zerog = False
         self._zerog_entered = False
         self._wake_then = None
@@ -91,6 +91,7 @@ class BehaviorFSM:
         self._mood_entries = {}  # 心情 → (状态名, 进入前回调)
         self._register_core_states()
         self._ext_tickers = []
+        self._tasks = {}  # 扩展点 → [fn]，见 add_task
         self._rules = []  # (优先级, 序号, fn)，见 register_rule
         self._rule_seq = ()
         self._stun_hooks = []
@@ -99,6 +100,7 @@ class BehaviorFSM:
         self._threat_responders = []
         self.drag_takeover = None  # fn(拎住帧数) → 是否接管（超度）
         self.stun_takeover = None  # fn() → 砸晕醒来是否接管（超度）
+        self.stun_blame = True  # 这次晕算不算人干的：扣好感、醒来生气、超度
         self.drown_burst_fx = None
         self.kill_cancel_temper = None  # 自己取消杀死弹窗时的好感变化（舌头躲杀挂）
         for ab in getattr(self.win, "abilities", {}).values():
@@ -179,6 +181,14 @@ class BehaviorFSM:
     def register_ticker(self, fn):
         self._ext_tickers.append(fn)
 
+    def add_task(self, point, fn):
+        """在基础状态的扩展点 point 挂子任务 fn(*参数) → 这一 tick 是否由它接管。"""
+        self._tasks.setdefault(point, []).append(fn)
+
+    def run_tasks(self, point, *args) -> bool:
+        """按挂载顺序跑 point 上的子任务，第一个接管的生效。"""
+        return any(fn(*args) for fn in self._tasks.get(point, ()))
+
     def add_threat_responder(self, fn):
         """杀死弹窗应对 fn() → 是否已应对；按挂载顺序询问，第一个应对的生效。"""
         self._threat_responders.append(fn)
@@ -201,12 +211,13 @@ class BehaviorFSM:
     def on_release(self):
         self.grab.end()
 
-    def apply_stun(self, ticks):
+    def apply_stun(self, ticks, blame=True):
+        """砸晕；blame=False 时不算到人头上（别的猫撞的）。"""
         if self.blocked(STUN):
             return False
         if self.grab.active:
             self.grab.force_release()
-        self._break_tongue()
+        self.release_organs()
         self.climb = None
         for fn in self._stun_hooks:
             fn()
@@ -217,11 +228,14 @@ class BehaviorFSM:
         self.body.set_posture(False)
         self.body.stun = max(self.body.stun, int(ticks))
         self.gfx.stunned = True
-        self.body.temper_shift(tuning.TEMPER_STUN)
+        self.stun_blame = blame or (self.state == "Stunned" and self.stun_blame)
+        if blame:
+            self.body.temper_shift(tuning.TEMPER_STUN)
         self._transition("Stunned")
         return True
 
-    def kill(self):
+    def kill(self, blame=True):
+        """死亡；blame=False 时不算到人头上（别的猫扎的）。"""
         if self.state == "Dead":
             return
         st = self._states.get(self.state)
@@ -231,7 +245,8 @@ class BehaviorFSM:
         self.body.food_eat(-tuning.FOOD_KILL_PENALTY)
         if self.body.karma > 0 or self.body.karma_bottomed():
             self.body.karma_drop()  # 业力锁底也照常空转复活
-            self.body.temper_shift(tuning.TEMPER_KILL_REVIVED)
+            if blame:
+                self.body.temper_shift(tuning.TEMPER_KILL_REVIVED)
             self.body.die()
             self.gfx.dead = True
             self._transition("Dead")
@@ -299,12 +314,8 @@ class BehaviorFSM:
         if st is not None:
             st.brk()
 
-    def _break_tongue(self):
-        tg = self.win.tongue
-        if tg is not None:
-            tg.retract()
-            tg.reset_config()
-        self.body.suspended = False
+    def release_organs(self):
+        self.win.release_organs()
 
     def update(self, cursor):
         self.cursor = cursor
@@ -316,10 +327,6 @@ class BehaviorFSM:
         z = self._zerog()
         if z and not self._prev_zerog:
             self._zerog_entered = True
-        elif self._prev_zerog and not z and self.state == "IdleStand" and self.body.carried_fruit is not None:
-            f = self.body.carried_fruit
-            self.body.release_fruit()
-            f.state = "free"
         self._prev_zerog = z
 
         if (
@@ -363,6 +370,7 @@ class BehaviorFSM:
         st = self._states.get(self.state)
         if st is not None:
             st.tick(cursor, disturbed)
+        self.hands.tick(cursor)
         self.body.energy_change(self._cur().energy_delta(self.traits.drain))
         if self._force_energy is not None:
             self.body.energy = self._force_energy
@@ -395,6 +403,7 @@ class BehaviorFSM:
     def _enter(self, st):
         state = self._states.get(st)
         if state is not None:
+            self.hands.on_enter(state)
             state.enter()
 
     def _active_mood(self):
@@ -431,7 +440,7 @@ class BehaviorFSM:
 
     def _ambient_look(self, cursor):
         head = (self.gfx.head.x, self.gfx.head.y)
-        return self.looker.update(head, self._look_candidates(cursor), self.WL, self.HL)
+        return self.looker.update(head, self._look_candidates(cursor))
 
     def _zerog(self) -> bool:
         return getattr(self.body, "zerog", False)

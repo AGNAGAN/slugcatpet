@@ -105,7 +105,8 @@ class EnvironmentWatcher(QObject):
         self._vis_snapshot: list[bool] | None = None
         self._area = None
         self._geo = None
-        self._connected_screen = None
+        self._primary_conn = None
+        self._screen_conn = None
         self._timer = QTimer(self)
         self._timer.setInterval(min(interval_ms, 2000))
         self._timer.timeout.connect(self._on_poll)
@@ -118,25 +119,17 @@ class EnvironmentWatcher(QObject):
         self._connect_screen(screen)
         app = QGuiApplication.instance()
         if app is not None:
-            try:
-                app.primaryScreenChanged.connect(self._on_primary_changed)
-            except Exception:
-                pass
+            self._primary_conn = app.primaryScreenChanged.connect(self._on_primary_changed)
         self._timer.start()
         self._topmost.start()
 
     def stop(self):
         self._timer.stop()
         self._topmost.stop()
-        app = QGuiApplication.instance()
-        try:
-            if app is not None:
-                app.primaryScreenChanged.disconnect(self._on_primary_changed)
-            if self._connected_screen is not None:
-                self._connected_screen.availableGeometryChanged.disconnect(self._on_screen_signal)
-        except (RuntimeError, TypeError):
-            pass
-        self._connected_screen = None
+        if self._primary_conn is not None:
+            QObject.disconnect(self._primary_conn)
+            self._primary_conn = None
+        self._connect_screen(None)
 
     def force_top(self):
         self._topmost.force_top()
@@ -268,17 +261,12 @@ class EnvironmentWatcher(QObject):
             pass
 
     def _connect_screen(self, screen):
-        if self._connected_screen is not None:
-            try:
-                self._connected_screen.availableGeometryChanged.disconnect(self._on_screen_signal)
-            except Exception:
-                pass
-        self._connected_screen = screen
+        """只盯一块屏的工作区变化；screen 为 None 时断开。"""
+        if self._screen_conn is not None:
+            QObject.disconnect(self._screen_conn)
+            self._screen_conn = None
         if screen is not None:
-            try:
-                screen.availableGeometryChanged.connect(self._on_screen_signal)
-            except Exception:
-                pass
+            self._screen_conn = screen.availableGeometryChanged.connect(self._on_screen_signal)
 
     def _on_screen_signal(self, *args):
         self._check_workspace()

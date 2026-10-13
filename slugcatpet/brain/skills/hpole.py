@@ -1,4 +1,4 @@
-"""横杆借力控制器：swing→reel→grip→pullup→stand 状态机；update() 返回 True=结束。"""
+"""横杆借力控制器：上杆（能力提供的 hpole_mount 或徒手抓）→grip→pullup→stand；update() 返回 True=结束。"""
 
 from __future__ import annotations
 
@@ -6,12 +6,10 @@ import math
 
 from ... import tuning
 
+RUNNING, GRIP, GIVEUP = "running", "grip", "giveup"  # hpole_mount.update(锚点) 的返回值
+
 CONN = 17.0
-SWAY_TICKS = 55
-GRIP_IDEAL = 9.0
 GRIP_DIST = 16.0
-REEL_RATE = 2.0
-REEL_TIMEOUT = 240
 HANG_TICKS = 28
 PULLUP_TICKS = 22
 STAND_HOVER = 5.0
@@ -29,10 +27,10 @@ class HPoleController:
         self.win = win
         self.body = win.body
         self.gfx = win.gfx
-        self.tongue = win.tongue
+        self.mount = win.skill("hpole_mount")
         self.pole = pole
         self.rng = rng
-        self.phase = "swing" if self.tongue is not None else "airgrab"
+        self.phase = "mount" if self.mount is not None else "airgrab"
         self.timer = 0
         self.giveup = False
         self._walk_dir = 1
@@ -43,9 +41,8 @@ class HPoleController:
         self._sway_c = 0.0
         self._wobble_target = 45.0
         lo, hi = self._extent()
-        if self.tongue is not None:
-            a = self.tongue.anchor
-            ax = a[0] if a is not None else (lo + hi) * 0.5
+        if self.mount is not None:
+            ax = self.mount.anchor_x((lo + hi) * 0.5)
         else:
             ax = self.body.chunk0.x
         self._anchor = (max(lo + 2.0, min(hi - 2.0, ax)), pole.ay)
@@ -76,27 +73,13 @@ class HPoleController:
             return True
         return False
 
-    def _phase_swing(self):
-        tg = self.tongue
-        if tg is None or not tg.attached:
+    def _phase_mount(self):
+        r = self.mount.update(self._anchor)
+        if r == GIVEUP:
             self.giveup = True
             return True
-        tg.anchor = self._anchor
-        if self.timer > SWAY_TICKS:
-            self.phase = "reel"
-            self.timer = 0
-        return False
-
-    def _phase_reel(self):
-        tg = self.tongue
-        if tg is None or not tg.attached:
-            self.giveup = True
-            return True
-        ax, ay = self._anchor
-        tg.anchor = self._anchor
-        tg.set_targets(ideal=GRIP_IDEAL, reel_rate=REEL_RATE)
-        if abs(self.body.chunk0.y - ay) <= GRIP_DIST or self.timer > REEL_TIMEOUT:
-            self._grip(ax, ay)
+        if r == GRIP:
+            self._grip(*self._anchor)
             self.phase = "hang"
             self.timer = 0
         return False
@@ -104,10 +87,7 @@ class HPoleController:
     def _grip(self, ax, ay):
         b = self.body
         c0, c1 = b.chunk0, b.chunk1
-        if self.tongue is not None:
-            self.tongue.retract()
-            self.tongue.reset_config()
-        b.suspended = False
+        self.win.release_organs()
         b.on_pole = True
         b.standing = True
         b.animation = "HangFromBeam"
@@ -266,9 +246,5 @@ class HPoleController:
         b.chunk1.pinned = False
         b.on_pole = False
         b.animation = None
-        if self.tongue is not None:
-            if self.tongue.attached:
-                self.tongue.retract()
-            self.tongue.reset_config()
-        b.suspended = False
+        self.win.release_organs()
         self._reset_pose()

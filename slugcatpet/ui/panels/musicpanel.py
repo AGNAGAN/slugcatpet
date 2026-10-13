@@ -25,7 +25,7 @@ from ..theme import qss
 from ..theme.palette import TEXT, TEXT_ON_ACCENT
 from ..widgets.tips import install as install_tip
 
-_QSS = qss.settings_window("") + qss.MUSIC_EXTRA
+_QSS = qss.settings_window(qss.icon_url("check.svg")) + qss.MUSIC_EXTRA
 
 _ROLE = Qt.ItemDataRole.UserRole  # 行数据：("user", 列表索引) 或 ("game", Track)
 
@@ -137,6 +137,7 @@ class MusicPanel(QWidget):
         self._build_progress(v)
 
         self._outer.addWidget(self._body)
+        self._body.show()  # 窗口可见时重建，需立即显示
         self._refresh_list()
         self._refresh_now()
         self._refresh_mode()
@@ -275,15 +276,15 @@ class MusicPanel(QWidget):
         else:
             tags = ""
             if self._player.muted:
-                tags += " 🔇"
+                tags += f"  · {t('music_tag_muted')}"
             if self._player.looping:
-                tags += " 🔁"
+                tags += f"  · {t('music_tag_looping')}"
             if self._game_row(cur) is not None:
-                self._now_lbl.setText(f"♪ {game_title(cur.path.stem)}  ({t('music_game_group')}){tags}")
+                self._now_lbl.setText(f"{game_title(cur.path.stem)}  ({t('music_game_group')}){tags}")
             else:
                 idx = self._player.index + 1
                 n = len(self._player.tracks)
-                self._now_lbl.setText(f"♪ {cur.name}  ({idx}/{n}){tags}")
+                self._now_lbl.setText(f"{cur.name}  ({idx}/{n}){tags}")
         self._refresh_play_button(self._player.is_playing())
         self._refresh_selection()
 
@@ -354,7 +355,7 @@ class MusicPanel(QWidget):
 
     def _on_failed(self, path):
         name = os.path.basename(path)
-        self._now_lbl.setText(f"⚠ {name}")
+        self._now_lbl.setText(t("music_failed", name=name))
 
     def _remove_selected(self):
         d = self._row_data(self._list.currentRow())

@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QFrame, QScrollArea
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QPoint, Qt, QTimer
 from PySide6.QtGui import QGuiApplication
 
 from .hudrow import PetRow
 from ..theme import qss
+from ..widgets.screens import available_at, clamp_rect
 
 REFRESH_MS = 200
 SCREEN_PAD = 24
@@ -63,10 +64,14 @@ class HudPanel(QWidget):
     def _build_rows(self):
         for i, pet_unit in enumerate(self._pets()):
             if i > 0:
-                self._vbox.addWidget(self._divider())
+                self._add(self._divider())
             row = PetRow(pet_unit, self)
-            self._vbox.addWidget(row)
+            self._add(row)
             self._rows.append(row)
+
+    def _add(self, w):
+        self._vbox.addWidget(w)
+        w.show()  # 面板可见时新加的控件需立即显示
 
     @staticmethod
     def _divider():
@@ -88,22 +93,28 @@ class HudPanel(QWidget):
         self._place()
 
     def _place(self):
+        for row in self._rows:
+            row.layout().activate()  # 行内刚改的字要先结算，面板才拿得到新尺寸
         self._panel.layout().activate()
         hint = self._panel.sizeHint()
-        screen = QGuiApplication.primaryScreen().availableGeometry()
-        self.resize(
-            hint.width() + SCROLLBAR_W, min(hint.height(), max(120, screen.height() - SCREEN_PAD * 2))
-        )
         x = self.params.get("hud_x")
         y = self.params.get("hud_y")
         if x is None or y is None:
-            x = screen.x() + SCREEN_PAD
-            y = screen.y() + SCREEN_PAD
-        x = max(screen.x(), min(screen.x() + screen.width() - self.width(), int(x)))
-        y = max(screen.y(), min(screen.y() + screen.height() - self.height(), int(y)))
-        self.move(x, y)
-        self.params["hud_x"] = x
-        self.params["hud_y"] = y
+            screen = QGuiApplication.primaryScreen().availableGeometry()
+            pos = QPoint(screen.x() + SCREEN_PAD, screen.y() + SCREEN_PAD)
+        else:
+            pos = QPoint(int(x), int(y))
+            screen = available_at(pos)
+        self.resize(
+            hint.width() + SCROLLBAR_W, min(hint.height(), max(120, screen.height() - SCREEN_PAD * 2))
+        )
+        self._move_to(pos)
+
+    def _move_to(self, pos):
+        p = clamp_rect(pos, self.width(), self.height())
+        self.move(p)
+        self.params["hud_x"] = p.x()
+        self.params["hud_y"] = p.y()
 
     def toggle_visible(self):
         # 实时记显隐（退出时查不到）
@@ -135,13 +146,7 @@ class HudPanel(QWidget):
 
     def mouseMoveEvent(self, ev):
         if self._drag is not None and ev.buttons() & Qt.MouseButton.LeftButton:
-            screen = QGuiApplication.primaryScreen().availableGeometry()
-            p = ev.globalPosition().toPoint() - self._drag
-            x = max(screen.x(), min(screen.x() + screen.width() - self.width(), p.x()))
-            y = max(screen.y(), min(screen.y() + screen.height() - self.height(), p.y()))
-            self.move(x, y)
-            self.params["hud_x"] = x
-            self.params["hud_y"] = y
+            self._move_to(ev.globalPosition().toPoint() - self._drag)
             ev.accept()
 
     def mouseReleaseEvent(self, ev):
