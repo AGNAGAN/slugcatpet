@@ -1,4 +1,4 @@
-"""slugcat 尾巴：N 段（默认 4）显式速度质点，绳套约束+扇出力，坐标系 y↓。"""
+"""尾巴：N 段（默认 4）质点，拴绳约束加扇出力，坐标系 y↓。"""
 
 from __future__ import annotations
 import math
@@ -38,7 +38,7 @@ class Tail:
             for i, r in enumerate(rads)
         ]
         self.floor_y = None
-        # 可调旋钮：存每 tick 原始量，施加时按需 ×K_IMP
+        # 存每 tick 的原始量，施加时按需乘 K_IMP
         self.fan = 28.0  # 扇出力，逐段 ÷2
         self.leash = 9.0  # 拴绳长度，不换算
         self.grav_taut, self.grav_loose = 0.1, 0.5
@@ -66,7 +66,7 @@ class Tail:
         rx, ry = head_x, head_y
         px, py = hip_x, hip_y
         F = self.fan * K_IMP
-        # 约束写 pos ×1，写 vel ×K_IMP
+        # 约束修正位置 ×1、速度 ×K_IMP
         KI = K_IMP
         for k, s in enumerate(segs):
             s.lx, s.ly = s.x, s.y
@@ -124,7 +124,7 @@ class Tail:
                 s.y = hip_y + dyh / dh * ld
             fdx, fdy = s.x - rx, s.y - ry
             fd = math.hypot(fdx, fdy)
-            if fd < 0.5:  # 防爆下限，勿改
+            if fd < 0.5:  # 下限，免得距离过近时力爆掉
                 fd = 0.5
             inv = F / (fd * fd)
             s.vx += fdx * inv

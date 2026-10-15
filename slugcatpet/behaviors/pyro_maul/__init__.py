@@ -21,15 +21,15 @@ NEAR_GIVEUP = BODY_LEN * 2.5
 NEAR_CATCH_R = 30.0
 POUNCE_MIN = BODY_LEN * 2.0
 POUNCE_MAX = 350.0
-POUNCE_MAX_RISE = 160.0  # 高于此够不到（vert/diag apex ~165）
+POUNCE_MAX_RISE = 160.0  # 光标比头高出这么多就够不到（竖跳、斜跳最高约 165）
 CATCH_R = 26.0
 HOLD_MAX = 400
 LAUNCH_TIMEOUT = 80
 APPROACH_TIMEOUT = 200
 MAUL_TIMEOUT = 600
-CHEW_TICKS = 60  # ~1.5s
-BITE_PERIOD = 8  # 每 8 tick 一口
-JITTER_PERIOD = 3  # 每 3 tick 身体微抖
+CHEW_TICKS = 60  # 约 1.5 秒
+BITE_PERIOD = 8  # 每隔这么多 tick 咬一口
+JITTER_PERIOD = 3  # 身体每隔这么多 tick 抖一下
 JITTER_AMP = 1.2
 
 
@@ -101,7 +101,7 @@ def _mount(fsm, p):
             fsm.state == "IdleStand"
             and b.on_floor()
             and not fsm.grab.active
-            and not fsm._exhausted
+            and not fsm.ask("exhausted")
             and not fsm._zerog()
             and not b.swimming
             and fsm.win.cursor_hijack is None
@@ -140,7 +140,7 @@ def _mount(fsm, p):
             if not maul.over:
                 maul.pass_ = True
                 maul.rolled = False
-            maul.near_t += 1  # 悬在身上也算 1 身位内
+            maul.near_t += 1  # 光标悬在身上也算贴身
             if maul.near_t >= p.near_ticks:
                 trigger("walkup")
         elif cursor is None:

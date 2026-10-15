@@ -1,4 +1,4 @@
-"""设置窗：两栏分组（猫、外观、交互、环境 | 性能、声音、系统），关窗即写盘。"""
+"""设置窗：左栏猫、外观、环境，右栏交互、性能、声音、系统；关窗即写盘。"""
 
 from __future__ import annotations
 from PySide6.QtWidgets import (
@@ -145,8 +145,8 @@ class SettingsWindow(QWidget):
         for v, build in (
             (left, self._section_cats),
             (left, lambda v: build_skin_section(self, v)),
-            (left, self._section_interact),
             (left, self._section_env),
+            (right, self._section_interact),
             (right, self._section_perf),
             (right, self._section_sound),
             (right, self._section_system),
@@ -332,6 +332,7 @@ class SettingsWindow(QWidget):
                 ("blizzard", "settings_snow"),
                 ("zerog", "settings_zerog"),
                 ("water", "settings_water"),
+                ("rain", "settings_rain"),
             )
         ):
             rb = QRadioButton(t(label_key))
@@ -355,6 +356,20 @@ class SettingsWindow(QWidget):
         depth.setSingleStep(5)
         depth.setPageStep(10)
         v.addLayout(row)
+        row = QHBoxLayout()
+        row.addWidget(QLabel(t("settings_rain_amount")))
+        row.addStretch(1)
+        amount = self._range(
+            row,
+            5,
+            100,
+            round(self._window.cfg_rain_amount * 100),
+            lambda n: f"{n}%",
+            lambda n: self._window.set_rain_amount(n / 100.0),
+        )
+        amount.setSingleStep(5)
+        amount.setPageStep(10)
+        v.addLayout(row)
         w = self._window
         fs = _Combo()
         fs.addItem(t("settings_fs_hide"), "hide")
@@ -373,10 +388,12 @@ class SettingsWindow(QWidget):
             return "zerog"
         if getattr(w, "water_on", False):
             return "water"
+        if getattr(w, "rain_on", False):
+            return "rain"
         return "none"
 
     def _on_env_selected(self, key):
-        """选中 key 对应环境，互斥关其余（none=全关）。"""
+        """切到 key 对应的环境并关掉其余，none 为全关。"""
         w = self._window
         if key != "blizzard" and getattr(w, "blizzard_on", False):
             w.set_blizzard(False)
@@ -384,12 +401,16 @@ class SettingsWindow(QWidget):
             w.set_zerog(False)
         if key != "water" and getattr(w, "water_on", False):
             w.set_water(False)
+        if key != "rain" and getattr(w, "rain_on", False):
+            w.set_rain(False)
         if key == "blizzard" and not w.blizzard_on:
             w.set_blizzard(True)
         elif key == "zerog" and not w.zerog_on:
             w.set_zerog(True)
         elif key == "water" and not w.water_on:
             w.set_water(True)
+        elif key == "rain" and not w.rain_on:
+            w.set_rain(True)
 
     def _check(self, v, key, on, slot):
         chk = QCheckBox(t(key))
@@ -420,6 +441,15 @@ class SettingsWindow(QWidget):
             w.cfg_friendly_fire,
             lambda on: (w.set_friendly_fire(on), self._write_state()),
         )
+        self._check(
+            v,
+            "settings_freeze_hide_ui",
+            w.cfg_freeze_hide_ui,
+            lambda on: (w.set_freeze_hide_ui(on), self._write_state()),
+        )
+        btn = QPushButton(t("settings_keybinds_btn"))
+        btn.clicked.connect(self._on_keybinds)
+        self._row(v, "settings_keybinds", btn)
 
     def _section_perf(self, v):
         v.addWidget(self._header(t("settings_perf_section")))
@@ -466,6 +496,17 @@ class SettingsWindow(QWidget):
             return
         v.addWidget(self._header(t("settings_sound_section")))
         self._check(v, "settings_mute_all", player.muted, player.set_mute)
+        amb = getattr(w, "_rain_ambience", None)
+        if amb is not None:
+            row = QHBoxLayout()
+            row.addWidget(QLabel(t("settings_rain_volume")))
+            row.addStretch(1)
+            vol = self._range(
+                row, 0, 100, round(amb.volume * 100), lambda n: f"{n}%", lambda n: amb.set_volume(n / 100.0)
+            )
+            vol.setSingleStep(5)
+            vol.setPageStep(10)
+            v.addLayout(row)
         director = getattr(w, "_music_director", None)
         if director is not None:
             btn = QPushButton(t("settings_scene_music_btn"))
@@ -483,7 +524,23 @@ class SettingsWindow(QWidget):
         dlg.place_center(self)
         dlg.open()
 
-    # 增删走卡片弹窗（open()=WindowModal，不 exec）
+    def _on_keybinds(self):
+        if self._dlg is not None:
+            return
+        from .keybinds import KeybindDialog
+
+        dlg = KeybindDialog(self._keybinds_saved, self._window._hotkey_filter, parent=self)
+        dlg.finished.connect(lambda _r: self._look_finished(dlg))
+        self._dlg = dlg
+        dlg.place_center(self)
+        dlg.open()
+
+    def _keybinds_saved(self):
+        hud = getattr(self._window, "_control_hud", None)
+        if hud is not None:
+            hud.reload_keys()
+
+    # 各弹窗都用卡片弹窗的 open()，不走 exec
     def _on_look(self, pet):
         if self._dlg is not None:
             return
@@ -527,7 +584,7 @@ class SettingsWindow(QWidget):
         self._dlg = None
         dlg.deleteLater()
         if result == QDialog.DialogCode.Accepted:
-            self._window.add_pet(self._pick_variants[dlg.selected_index()])  # 内部刷 HUD+写盘
+            self._window.add_pet(self._pick_variants[dlg.selected_index()])  # 里面会刷新 HUD 并写盘
             self._rebuild()
 
     def _on_remove(self, pet):
@@ -570,4 +627,4 @@ class SettingsWindow(QWidget):
             return
         rb = radios.get(self._current_env())
         if rb is not None and not rb.isChecked():
-            rb.setChecked(True)  # 互斥自动清其余，幂等
+            rb.setChecked(True)  # 单选组自动取消其余项

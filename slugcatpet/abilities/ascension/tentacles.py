@@ -1,4 +1,4 @@
-"""幽灵触手 GhostTentacle：飞升时的发光软触手；坐标 y↓。"""
+"""幽灵触手：超度时的发光软触手（y↓）。"""
 
 from __future__ import annotations
 import math
@@ -136,7 +136,7 @@ class GhostTentacle:
         return (int(r * 255), int(g * 255), int(b * 255))
 
     def build_centerline(self, ts):
-        """返回 (points, halfwidths, colors) 供 render.ribbon 带状填充。"""
+        """返回 (points, halfwidths, colors)，给 ribbon 画带状。"""
         n = self.n
 
         def lerp_pos(s):

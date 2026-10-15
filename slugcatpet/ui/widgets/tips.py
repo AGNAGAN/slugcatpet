@@ -1,4 +1,4 @@
-"""自绘 hover 提示（原生 QToolTip 在此类窗口不弹）。"""
+"""自绘悬停提示，原生 QToolTip 在这类窗口里不弹。"""
 
 from __future__ import annotations
 from typing import Callable

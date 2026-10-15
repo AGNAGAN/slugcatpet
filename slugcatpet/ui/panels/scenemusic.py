@@ -30,6 +30,7 @@ _SCENE_KEYS = {
     "blizzard": "settings_snow",
     "zerog": "settings_zerog",
     "water": "settings_water",
+    "rain": "settings_rain",
 }
 _TRACK_ROLE = Qt.ItemDataRole.UserRole
 _VOL_STEP = 5

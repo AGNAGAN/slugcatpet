@@ -6,6 +6,7 @@ import random as _random
 
 from ...core.chunkphys import aabb_wall_collide, apply_water
 from ...core.units import lerp, inv_lerp, clampf
+from ..base import HIT_SLAM, HIT_SPEAR, HIT_STONE
 from ..state import ItemState
 from .gfx import update_render
 from ...core.vecmath import _dist, _dirvec
@@ -26,6 +27,9 @@ FLAPSPEED_UP_A, FLAPSPEED_UP_B = 0.2, 0.8
 WALL_REFLECT_X = -6.0
 WATER_JUMP = 7.0  # y↓ 取负
 EATEN_COUNTDOWN = 3
+HELD_DIE_CHANCE = 1.0 / 160.0  # 活着被拿在手里时每 tick 死掉的概率
+STONE_KILL_CHANCE = 0.8  # 被石头砸中时砸死的概率，不然砸晕
+STONE_STUN_TICKS = 80
 
 WANDER_REPICK_TICKS, WANDER_REACH, WANDER_MARGIN = 180, 30.0, 24.0
 STUCK_DIST, STUCK_TICKS, STUCK_KICK = 40.0, 40, 2.0
@@ -39,11 +43,12 @@ def _deg_to_vec(deg):
 
 
 class BatFly:
-    """单 chunk 小飞虫：游走扑翅+力竭挂+手动塞食；接口对齐 Fruit。"""
+    """单节小飞虫：扑翅游荡，飞累落地即死，可手动喂给猫；接口同 Fruit。"""
 
-    collision_layer = 0  # 层0 不参与 collide_objects
+    collision_layer = 0  # 层 0：不参与物体间碰撞
     edible = True
     throwable = False
+    creature = True
 
     __slots__ = (
         "x",
@@ -71,6 +76,7 @@ class BatFly:
         "stalk",
         "bites",
         "dead",
+        "stun",
         "eaten",
         "is_meat",
         "_id",
@@ -111,13 +117,14 @@ class BatFly:
         self.rad, self.mass, self.gravity = RAD, MASS, GRAVITY
         self.air_friction, self.bounce = AIR_FRICTION, BOUNCE
         self.surface_friction, self.buoyancy, self.water_friction = SURFACE_FRICTION, BUOYANCY, WATER_FRICTION
-        self.water_y = None  # 外部每 tick 注入水面高；None=无水
+        self.water_y = None  # 水面高度，由外部每 tick 写入；None 为无水
         self.room_gravity, self.drown = 1.0, 0.0
         self._contact_floor, self._contact_x, self._impact_cb = False, 0, None
         self.state = ItemState.FREE
         self.held_by_hand = None
-        self.stalk = None  # 接口占位，fetcher/carry 读，恒 None
+        self.stalk = None  # 恒为 None，只为和果子接口一致
         self.bites, self.dead, self.eaten = BITES, False, 0
+        self.stun = 0  # 被砸晕的剩余帧：掉下来不扑翅
         self.is_meat = True
         self._id, self.collide_with_objects = int(seed), True
         rng = self._rng = _random.Random(seed)
@@ -141,11 +148,22 @@ class BatFly:
 
     @property
     def fetch_ready(self):
-        # 飞行中够不到，落地/力竭/死亡才可抓
+        # 飞着够不到，落地或死了才能抓
         return self.state == ItemState.FREE and self.held_by_hand is None and (self.dead or self._grounded)
 
+    @property
+    def huntable(self):
+        return not self._grounded
+
+    def struck(self, how, rng=None) -> None:
+        """被武器打中：矛和撞击必死，石头多半砸死、不然砸晕。"""
+        if how == HIT_STONE and rng.random() >= STONE_KILL_CHANCE:
+            self.stun = STONE_STUN_TICKS
+        elif how in (HIT_STONE, HIT_SPEAR, HIT_SLAM):
+            self.die()
+
     def collision_chunks(self):
-        # 层0 不自碰；被抓/拖/吃/消失本 tick 豁免
+        # 被拿着、拖着、吃掉或消失时不参与碰撞
         self.collide_with_objects = not (
             self.state in (ItemState.CARRIED, ItemState.MOUSE, ItemState.EATEN, ItemState.GONE)
             or self.held_by_hand is not None
@@ -165,8 +183,10 @@ class BatFly:
         self.last_flap_depth = self.flap_depth
         if st == ItemState.CARRIED:
             self.last_x, self.last_y = self.x, self.y
-            if not self.dead and (st == ItemState.CARRIED or self.bites < BITES):
+            if not self.dead and (self.bites < BITES or self._rng.random() < HELD_DIE_CHANCE):
                 self.die()
+            if not self.dead:
+                self._flap_wings()  # 活着被拿着时乱扑
             update_render(self, self._submersion())
             self._eaten_countdown()
             return
@@ -177,12 +197,14 @@ class BatFly:
             return
         self.last_x, self.last_y = self.x, self.y
         sub = self._submersion()
-        if not self.dead and sub == 0.0:
+        if self.stun > 0:
+            self.stun -= 1
+        if not self.dead and self.stun <= 0 and sub == 0.0:
             self._batflight()
         else:
             if not self.dead and sub > 0.0:
                 self._water_behavior(sub)
-            self.vy += self.gravity * self.room_gravity  # 水中/死体全重力，浮力另计
+            self.vy += self.gravity * self.room_gravity  # 水中或死了受全重力，浮力另算
         apply_water(
             self, self.water_y, self.buoyancy, self.water_friction, self.room_gravity, self.air_friction
         )
@@ -204,7 +226,7 @@ class BatFly:
         self._eaten_countdown()
 
     def _submersion(self) -> float:
-        """据 water_y/rad 算浸没度；无水恒 0，全浸 1。"""
+        """浸没度：无水为 0，全浸为 1。"""
         if self.water_y is None:
             return 0.0
         s = (self.y + self.rad - self.water_y) / (2.0 * self.rad)
@@ -225,12 +247,16 @@ class BatFly:
         self.vy *= VEL_DAMP
         self.vy += self.gravity * self.room_gravity * GRAV_FLY_FAC  # 下坠 +；零重力=0
         self.vx += dx * DIR_ACCEL_X
+        if self.flap_speed > 0.0 and not self._exhausted:
+            self.vy -= (1.0 + self.flap_speed) ** FLAP_THRUST_POW * lerp(
+                FLAP_THRUST_LO, FLAP_THRUST_HI, self.flap_depth
+            )
+        self._flap_wings()
+
+    def _flap_wings(self) -> None:
+        """翅膀一扇一收。"""
         self.flap += self.flap_speed
         if self.flap_speed > 0.0:
-            if not self._exhausted:
-                self.vy -= (1.0 + self.flap_speed) ** FLAP_THRUST_POW * lerp(
-                    FLAP_THRUST_LO, FLAP_THRUST_HI, self.flap_depth
-                )
             if self.flap > 1.0:
                 self.flap = 1.0
                 self.flap_speed = FLAPSPEED_DOWN_A - self.flap_depth * FLAPSPEED_DOWN_B
@@ -249,7 +275,7 @@ class BatFly:
             self.vy -= WATER_JUMP
 
     def _exhaust(self) -> None:
-        """力竭：累计扑翅致死，触墙回复。"""
+        """扑翅次数攒满就力竭，力竭后落地即死；碰墙或落地时恢复。"""
         if self._flaps_since_rest >= EXHAUST_FLAPS:
             self._exhausted = True
         if self._exhausted and self._contact_floor and self.room_gravity > 1e-6:
@@ -287,7 +313,7 @@ class BatFly:
                 self.state = ItemState.EATEN
 
     def bite(self) -> bool:
-        """手动塞结算，返回 True=可结算食物点。"""
+        """被咬一口；吃完时返回 True，可结算食物。"""
         self.bites -= 1
         if not self.dead:
             self.die()

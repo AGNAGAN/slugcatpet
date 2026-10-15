@@ -1,8 +1,10 @@
-"""多猫协调：互相感知、目标占用、让路裁决、杆顶挤人。行为只经这里了解别的猫。"""
+"""多猫协调：互相感知、目标占用、通行让路。行为只经这里了解别的猫。"""
 
 from __future__ import annotations
 
 import math
+
+from .traffic import Traffic
 
 STEAL_FRAC = 0.5  # 比占用者近到一半以内才抢目标
 
@@ -18,29 +20,17 @@ class Claim:
         self.since = since
 
 
-class Crowd:
-    __slots__ = ("shoved", "yield_to", "blocked", "yield_cd", "jump_cd")
-
-    def __init__(self):
-        self.shoved = 0
-        self.yield_to = None
-        self.blocked = 0
-        self.yield_cd = 0
-        self.jump_cd = 0
-
-
 class Social:
     def __init__(self, win):
         self.win = win
         self.now = 0
         self._claims = {}  # id(target) → Claim
         self._held = {}  # (owner, slot) → Claim
-        self._crowd = {}
-        self._tip = {}  # id(pole) → 站在杆顶的猫们
-        self._evicted = set()
+        self.traffic = Traffic(self)
 
     def tick(self):
         self.now += 1
+        self.traffic.update()
 
     def others(self, me):
         return [p for p in self.win.pets if p is not me and getattr(p, "body", None) is not None]
@@ -55,6 +45,10 @@ class Social:
 
     def count(self):
         return len(self.win.pets)
+
+    def order(self, me):
+        """这一 tick 给我的让路指令；没有 None。"""
+        return self.traffic.orders.get(me)
 
     def _valid(self, target):
         c = self._claims.get(id(target))
@@ -106,44 +100,6 @@ class Social:
         if steal is None:
             return False
         return _dist(me, target) < steal * _dist(c.owner, target)
-
-    def crowd(self, me) -> Crowd:
-        c = self._crowd.get(me)
-        if c is None:
-            c = self._crowd[me] = Crowd()
-        return c
-
-    def yielding_to(self, me):
-        if hasattr(me, "win"):  # 传入的是状态机
-            me = me.win
-        c = self._crowd.get(me)
-        return None if c is None else c.yield_to
-
-    def at_tip(self, me, pole, on):
-        s = self._tip.setdefault(id(pole), set())
-        if on:
-            s.add(me)
-        else:
-            s.discard(me)
-
-    def leave_tips(self, me):
-        for s in self._tip.values():
-            s.discard(me)
-
-    def tip_holders(self, pole, me):
-        s = self._tip.get(id(pole))
-        if not s:
-            return []
-        return [p for p in self.win.pets if p is not me and p in s and self.state_of(p) == "PoleClimb"]
-
-    def push_off(self, pet):
-        self._evicted.add(pet)
-
-    def take_push(self, me) -> bool:
-        if me in self._evicted:
-            self._evicted.discard(me)
-            return True
-        return False
 
 
 def _dist(pet, target):

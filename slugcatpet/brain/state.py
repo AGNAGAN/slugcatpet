@@ -1,14 +1,15 @@
-"""行为状态基类：FSM 只通过这组钩子与声明与状态交互。"""
+"""行为状态基类：状态机只经这些钩子和声明与状态打交道。"""
 
 from __future__ import annotations
 
 # 优先级：强制规则只能打断优先级比它低的状态，其余的等状态自己做完
-T_IDLE = 0  # 待机、空中、生完气闲逛
+T_IDLE = 0  # 待机、空中、生完气闲逛、爬架
 T_ACTIVITY = 20  # 玩耍、让路：同级互不打断
 T_NEED = 30  # 饿了去找吃的
 T_REST = 35  # 累了趴下、睡觉
 T_WARM = 40  # 取暖、起身
 T_BODY = 60  # 晕、游泳
+T_HOLD = 65  # 定身
 T_FORCED = 70  # 被拖
 T_REFLEX = 80  # 躲杀
 T_HIT = 90  # 被砸中
@@ -17,20 +18,26 @@ T_LOCKED = 100  # 死亡、超度
 ZEROG = "zerog"  # 无重力 → 漂浮待机
 SWIM = "swim"  # 入水 → 游泳
 COLD = "cold"  # 寒冷 → 找暖源
+RAIN = "rain"  # 大雨 → 躲到遮挡下
 EXHAUST = "exhaust"  # 体力告急 → 趴下
+SLEEPY = "sleepy"  # 困到撑不住就地睡
 HUNGER = "hunger"  # 饿了 → 找吃的
-CROWD = "crowd"  # 被顶住 → 让路
+CROWD = "crowd"  # 别的猫要过 → 让路
 DRAG = "drag"  # 被光标抓住 → 被拖
 THREAT = "threat"  # 杀死弹窗 → 应对
 STUN = "stun"  # 被砸中 → 晕
+HOLD = "hold"  # 用户让它定身 → 定身
 RULE_TIER = {
     STUN: T_HIT,
+    HOLD: T_HOLD,
     THREAT: T_REFLEX,
     DRAG: T_FORCED,
     ZEROG: T_BODY,
     SWIM: T_BODY,
     COLD: T_WARM,
+    RAIN: T_WARM,
     EXHAUST: T_REST,
+    SLEEPY: T_REST,
     HUNGER: T_NEED,
     CROWD: T_ACTIVITY,
 }
@@ -45,10 +52,11 @@ EN_REC_IDLE = 1.0 / 1600.0
 
 class State:
     name = ""
-    mood = None  # 对应的心情候选名（新鲜度结算）
+    mood = None  # 对应的心情候选名，用于新鲜度结算
     tier = T_IDLE  # 优先级
-    energy = None  # 体力档位；None=不变
+    energy = None  # 体力档位，None 为不变
     hands = "any"  # 需要的空手：any 拿着东西也行 / one 至少一只 / free 两只
+    needs = True  # False 时困意不涨
 
     def __init__(self, fsm):
         self.fsm = fsm

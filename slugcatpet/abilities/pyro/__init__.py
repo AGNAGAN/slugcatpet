@@ -19,13 +19,13 @@ class PyroAbility(Ability):
             mechanics.WARN_AT,
             0,
             mechanics.CAPACITY - 1,
-            "AI 自主爆跳的燃料上限（默认 = 过热警告线，AI 永不至眩晕 / 自爆）",
+            "AI 自主爆跳的燃料上限，默认为过热警告线，不会眩晕或自爆",
         ),
         "drown_burst_air": Param(0.65, 0.0, 0.95, "水下憋气剩余降到此值即溺爆（也是气量条的死亡下界）"),
     }
 
     def fuel_ok(self, body, cost=1):
-        """AI 发射门：当前燃料 + 本次成本 ≤ heat_cap。"""
+        """AI 能否爆跳：当前燃料加本次消耗不超过 heat_cap。"""
         mechanics.ensure(body)
         return body._ctrl_pyro_counter + cost <= self.p.heat_cap
 

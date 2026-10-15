@@ -1,4 +1,4 @@
-"""侧边 Tab：收起态可拖动箭头，展开态图标盘+动作列。"""
+"""侧边栏：收起时是可上下拖的箭头，展开后是物品图标和操作按钮。"""
 
 from __future__ import annotations
 import math
@@ -22,7 +22,7 @@ from ..theme import qss
 COLLAPSED_W, COLLAPSED_H = 24, 48
 EXPANDED_W = 120  # 展开态面板宽（不含左侧箭头）
 ARROW_W = 16  # 展开态左侧收起箭头宽
-EXPANDED_H = 250  # 仅估值，实际走 _expanded_h()
+EXPANDED_H = 250  # 估值，实际高度见 _expanded_h()
 SLIDE_MS = 150
 
 
@@ -60,7 +60,7 @@ def _paint_tool_icon(p, kind, r):
 
 
 def _make_icon(paint, size, dpr):
-    """渲染图标为 QPixmap（离屏，避免按钮重复开 painter）。"""
+    """把图标离屏画成 QPixmap。"""
     pm = QPixmap(int(size * dpr), int(size * dpr))
     pm.fill(Qt.GlobalColor.transparent)
     pm.setDevicePixelRatio(dpr)
@@ -138,6 +138,7 @@ class TabBar(QWidget):
                 lambda _=False, k=k: self._place(k),
             )
             for k in item_kinds()
+            if k.placeable
         ]
         place_items += [
             (lambda p, r: _paint_tool_icon(p, "remove", r), t("tip_remove"), self._remove_one),
@@ -174,7 +175,7 @@ class TabBar(QWidget):
         btn(t("btn_quit_app"), True, self._quit)
         self._panel.setStyleSheet(qss.TABBAR_PANEL)
 
-        # eventFilter 区分拖动/点击
+        # 箭头：eventFilter 区分拖动和点击
         self._arrow = QPushButton("‹", self)
         self._arrow.setCursor(Qt.CursorShape.PointingHandCursor)
         self._arrow.installEventFilter(self)
@@ -182,7 +183,7 @@ class TabBar(QWidget):
         self._arrow_moved = False
         self._arrow.setStyleSheet(qss.TABBAR_ARROW)
 
-        # toast 需顶层窗口，防裁切
+        # 提示用顶层窗口，免得被裁切
         self._toast_lbl = QLabel("", None)
         self._toast_lbl.setWindowFlags(
             Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.ToolTip

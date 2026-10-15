@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 import math
+import random
 import re
 
 from ..core.units import K_VEL, K_IMP, damp60, clampf, inv_lerp
@@ -263,6 +264,8 @@ class SlugcatGraphics(GraphicsDrawMixin):
         self.anim_frame = 0
         self.disbalance = 0.0
         self.balance_counter = 0.0
+        self._bal_rng = random.Random(0xBA1A)
+        self._beam_aim = [None, None]
         self.last_look_dir = (0.0, 0.0)
         self.head_frame_override = None
         self.face_rot_k = 0.0  # 脸的旋转 = 头角度 × 此系数（绘制时按插值后的头角度算）
@@ -342,11 +345,44 @@ class SlugcatGraphics(GraphicsDrawMixin):
     def body_axis(self):
         return _ang_from_up(self.draw0[0] - self.draw1[0], self.draw0[1] - self.draw1[1])
 
+    def _update_balance(self, b, c0):
+        """站杆上的平衡晃动和尾巴甩动。"""
+        anim = getattr(b, "animation", None)
+        if anim == "GetUpOnBeam":
+            self.disbalance = 70.0
+        elif anim == "GetUpToBeamTip":
+            self.disbalance = tuning.BAL_MAX
+        standing = b.bodyMode == "ClimbingOnBeam" and anim in ("BeamTip", "StandOnBeam")
+        if standing:
+            if abs(c0.vx) > 2.0:
+                self.disbalance += 17.0 if anim == "BeamTip" else 3.0
+            else:
+                self.disbalance -= 1.0
+        elif b.bodyMode == "ZeroG":
+            self.disbalance -= 1.0
+        else:
+            return
+        self.disbalance = max(0.0, min(tuning.BAL_MAX, self.disbalance))
+        self.balance_counter += 1.0 + self.disbalance / 40.0 * (1.0 + self._bal_rng.random())
+        if self.balance_counter > tuning.BAL_COUNTER_WRAP:
+            self.balance_counter -= tuning.BAL_COUNTER_WRAP
+        segs = self.tail_segs
+        if standing and segs:
+            sway = math.sin(self.balance_counter / 300.0 * 2.0 * math.pi) / (abs(b.chunk1.vx) + 1.0)
+            segs[0].vx += sway * (self.disbalance + 20.0) * 0.1
+            segs[1].vx += sway * (self.disbalance + 20.0) * 0.04
+            if anim == "StandOnBeam" and abs(c0.vx) > 2.0 and abs(b.chunk1.vx) > 2.0:
+                segs[0].vx -= c0.vx * 2.0
+                segs[0].vy -= 1.5
+                segs[1].vx -= c0.vx * 0.2
+                segs[1].vy -= 0.5
+
     def update(self):
         """每帧推进，在 body.step() 之后调用。"""
         b = self.body
         c0, c1 = b.chunk0, b.chunk1
         self._update_asc_color()
+        self._update_balance(b, c0)
 
         if b.cold > 0.0:
             base = self._body0
@@ -385,13 +421,7 @@ class SlugcatGraphics(GraphicsDrawMixin):
             else:
                 self.anim_frame = 0
         elif b.bodyMode == "ClimbingOnBeam":
-            anim = getattr(b, "animation", None)
-            if anim in ("ClimbOnBeam", "HangFromBeam", "GetUpOnBeam"):
-                self.anim_frame = (self.anim_frame + 1) % 20
-            elif anim == "StandOnBeam":
-                self.anim_frame = (self.anim_frame + 1) % 7 if abs(c1.vx) > 0.5 else 0
-            else:
-                self.anim_frame = 0
+            self.anim_frame = b.pole_frame
         elif b.bodyMode == "ZeroG":
             self.anim_frame = (self.anim_frame + 1) % 240
         else:
@@ -933,18 +963,29 @@ class SlugcatGraphics(GraphicsDrawMixin):
                 aim = getattr(b, "arm_aim", _NO_ARM_AIM).get(side)
             speed = HUNT_SPEED
             quickness = HAND_QUICKNESS
+            pinned_down = (
+                held is not None
+                and not b.standing
+                and b.bodyMode in ("Crawl", "Stand")
+                and self.sleep_curl <= 0.0
+                and getattr(held, "carcass", False)
+            )
+            if aim is None and pinned_down:
+                aim = (b.chunk0.x - 6.0 + 12.0 * idx + b.facing * 20.0, crawl_ground_y)
+                speed, quickness = CRAWL_HUNT_SPEED, CRAWL_QUICKNESS
             if aim is None and held is not None and b.eat_raise[side] > 0.0:
                 aim = self._hold_target(idx, side)
 
             if aim is None and not self.dead:
                 anim = getattr(b, "animation", None)
-                balanced = anim == "StandOnBeam" and self.disbalance <= 0.0
-                if (
-                    b.bodyMode == "ClimbingOnBeam"
-                    and anim in ("ClimbOnBeam", "BeamTip", "StandOnBeam", "HangFromBeam", "GetUpOnBeam")
-                    and not (balanced and held is not None)  # 站稳后手持的手不再平衡
-                ):
-                    aim, speed, quickness = self._beam_hand_target(idx, anim, spine_ang)
+                if b.bodyMode == "ClimbingOnBeam":
+                    if anim == "GetUpToBeamTip":
+                        aim = self._beam_aim[idx]  # 手停在最后抓的地方
+                    elif anim in ("StandOnBeam", "BeamTip") and self.disbalance <= 0.0:
+                        pass  # 站稳了，空手收回
+                    elif anim in ("ClimbOnBeam", "BeamTip", "StandOnBeam", "HangFromBeam", "GetUpOnBeam"):
+                        aim, speed, quickness = self._beam_hand_target(idx, anim, spine_ang)
+                        self._beam_aim[idx] = aim
                 elif b.bodyMode == "Crawl":
                     if self.sleep_curl > 0.0:
                         if held is not None:
@@ -962,17 +1003,7 @@ class SlugcatGraphics(GraphicsDrawMixin):
                         speed = CRAWL_HUNT_SPEED
                         quickness = CRAWL_QUICKNESS
                 elif b.bodyMode == "ZeroG" and getattr(b, "animation", None) == "ZeroGPoleGrab":
-                    px = getattr(b, "pole_x", b.chunk0.x)
-                    py = getattr(b, "pole_y", b.chunk0.y)
-                    pole = getattr(b, "zerog_pole", None)
-                    if pole is not None:
-                        plx, ply = pole.bx - pole.ax, pole.by - pole.ay
-                        pll = math.hypot(plx, ply) or 1.0
-                        axu, ayu = plx / pll, ply / pll
-                    else:
-                        axu, ayu = 0.0, 1.0
-                    off = 6.0 * (-1.0 if idx == 0 else 1.0)
-                    aim = (px + axu * off, py + ayu * off)
+                    aim = self._zerog_pole_hand(idx)
                 elif b.bodyMode == "ZeroG":
                     ph = self.anim_frame / 240.0 * 2.0 * math.pi + idx * math.pi
                     ox, oy = _rot(sh_local_sign * 6.0, 8.0 + 2.0 * math.sin(ph), spine_ang)
@@ -1008,6 +1039,8 @@ class SlugcatGraphics(GraphicsDrawMixin):
             if aim is None and held is not None:
                 aim = self._hold_target(idx, side)
             hand.update(sx, sy, aim, speed=speed, quickness=quickness)
+            if b.animation in ("ClimbOnBeam", "ZeroGPoleGrab"):
+                hand.retract_counter = 30  # 抓杆时手臂贴着身子中线
 
         if thr is not None:
             side, obj, n = thr
@@ -1031,6 +1064,19 @@ class SlugcatGraphics(GraphicsDrawMixin):
             self._throw = (side, obj, n - 1)
         self._pin_held()
 
+    def _zerog_pole_hand(self, j):
+        """失重抓杆时第 j 只手的位置。"""
+        b = self.body
+        c0, c1 = b.chunk0, b.chunk1
+        dx, dy = b.zerog_grab_dir
+        lead = (j == 1) == (dx == 1)
+        ph = b.pole_frame / 20.0 * 2.0 * math.pi
+        reach = (-3.0 if lead else 3.0) + 6.0 * (math.sin(ph) if lead else math.cos(ph))
+        side = -1.0 if lead else 1.0
+        if b.standing:
+            return b.pole_x + side * dx, c0.y + reach * math.copysign(1.0, c1.y - c0.y)
+        return c0.x + reach * math.copysign(1.0, c1.x - c0.x), b.pole_y - side * dy
+
     def _beam_hand_target(self, j, anim, axis):
         b = self.body
         c0, c1 = b.chunk0, b.chunk1
@@ -1048,13 +1094,17 @@ class SlugcatGraphics(GraphicsDrawMixin):
             return (hx, hy), HUNT_SPEED, HAND_QUICKNESS
         if anim in ("HangFromBeam", "GetUpOnBeam"):
             beam_y = getattr(b, "pole_y", c0.y)
+            side = -1.0 if j == 0 else 1.0
             sh = 10.0 + 3.0 * math.sin(2.0 * math.pi * self.anim_frame / 20.0)
-            hx = c0.x + (-1.0 if j == 0 else 1.0) * sh
-            return (hx, beam_y), HUNT_SPEED, HAND_QUICKNESS
+            hx = c0.x + side * sh
+            x0, x1 = b.beam_span
+            if not x0 <= hx <= x1:
+                hx = c0.x + side * 10.0  # 够到杆外就收在头两边
+            return (hx, beam_y + 1.0), HUNT_SPEED, HAND_QUICKNESS
         sway = math.sin(2.0 * math.pi * self.balance_counter / 300.0)
         relx = -20.0 + 40.0 * j
         rely_up = -4.0 - 6.0 * sway * (-1.0 if j == 0 else 1.0)
-        if anim == "StandOnBeam" and self.disbalance < 40.0:
+        if self.disbalance < 40.0:
             s = (40.0 - self.disbalance) / 40.0
             rely_up = rely_up * (1.0 - s) - s * 15.0
             relx = relx * (1.0 - s)
@@ -1094,7 +1144,7 @@ class SlugcatGraphics(GraphicsDrawMixin):
         return int(round(ang / 22.5))
 
     def _head_frame_index(self, head_ang):
-        """HeadB 帧号单一真值源：sleep > dead > Crawl > Stand&&moving > ZeroG > 角度基线。"""
+        """HeadB 帧号，按优先级：睡 > 死或晕 > Crawl > Stand 且在走 > ZeroG > 按头角度。"""
         b = self.body
         if self.sleep_curl > 0.0:
             return int(clampf(int(_lerp(7.0, 4.0, self.sleep_curl)), 0, 8))

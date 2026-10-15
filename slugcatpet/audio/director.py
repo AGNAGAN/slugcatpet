@@ -17,8 +17,8 @@ _TITLES = {
     "RW_92 - Reclaiming Entropy": "Reclaiming Entropy",
 }
 
-SCENES = ("intro", "settings", "none", "blizzard", "zerog", "water")
-ENV_SCENES = ("none", "blizzard", "zerog", "water")
+SCENES = ("intro", "settings", "none", "blizzard", "zerog", "water", "rain")
+ENV_SCENES = ("none", "blizzard", "zerog", "water", "rain")
 MODE_LOOP = "loop"
 MODE_ONCE = "once"
 _DEFAULTS = {
@@ -37,7 +37,7 @@ def track_title(track_id: str) -> str:
 
 
 def scene_music(params: dict) -> dict:
-    """读出 6 个场景的配置 {scene: {track, mode, gain}}，缺省项补默认。"""
+    """读出各场景的配置 {scene: {track, mode, gain}}，缺省项补默认。"""
     saved = params.get("scene_music")
     if not isinstance(saved, dict):
         saved = {}

@@ -1,4 +1,4 @@
-"""向量辅助（Roll/Flip 力矩用），y↑ 手性不做翻转；角度基准 0°=+Y 顺时针增。"""
+"""Roll、Flip 力矩用的向量函数，按 y↑ 计算不翻转；角度 0° 为 +Y，顺时针增大。"""
 
 from __future__ import annotations
 import math

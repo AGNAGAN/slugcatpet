@@ -1,4 +1,4 @@
-"""爆跳够取：普通起跳腾空后爆冲，命中远/高目标。"""
+"""爆跳够取：普通起跳后在空中爆冲，够远处或高处的目标。"""
 
 from __future__ import annotations
 import math
@@ -16,7 +16,7 @@ _VARIANTS = ("vert", "side+", "side-", "diag+", "diag-")
 
 
 def _fuel_ok(pet, body):
-    """AI 发射门：counter + 1 ≤ heat_cap（AI 永不自爆）。"""
+    """燃料加一不超过 heat_cap 才爆跳。"""
     return pet.abilities["pyro"].fuel_ok(body)
 
 
@@ -62,6 +62,10 @@ class PyroJumpReach(Reach):
 
 
 class PyroJumpReachController:
+    def on_geometry(self):
+        """只在地上走、跳，不受杆增删影响。"""
+        return True
+
     def __init__(self, pet, goal):
         self.pet = pet
         self.goal = goal
@@ -97,7 +101,7 @@ class PyroJumpReachController:
             if body.on_floor() and (still or self._settle > SETTLE_MAX):
                 v = self._pick_at_launch(gx, gy)
                 if v is None:
-                    return GIVEUP  # 尚未起跳无脏态，不白耗燃料照爆
+                    return GIVEUP  # 还没起跳，直接放弃，不白耗燃料
                 self._variant = v
                 body.request_jump("stand")
                 self.phase = "air"
@@ -128,7 +132,7 @@ class PyroJumpReachController:
         return None
 
     def _cleanup(self):
-        # 非手操路径无 ANIM_RESET 兜底，终止需手动清理
+        # 自动行为没有 ANIM_RESET 兜底，结束时手动清理
         body = self.pet.body
         body.animation = None
         body.jump_boost = 0.0

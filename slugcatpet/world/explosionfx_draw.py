@@ -35,7 +35,7 @@ def _smoke_scale(life):
 
 
 def _smoke_blobs(s, r, u, sign):
-    """主団+随机 lobe 列表：(x,y,半径,权重,相位)；sign 区分两层。"""
+    """主团加随机小团：[(x, y, 半径, 权重, 相位)]，sign 区分两层。"""
     blobs = [(s.x, s.y, r * (1.0 - 0.22 * u), 0.75, 0.0)]
     for ang0, orbit, radf, phase, freq, wrot, erode in s.draw_lobes:
         ang = math.radians(ang0 * sign + s.rotation * wrot + 28.0 * math.sin(phase + u * freq))

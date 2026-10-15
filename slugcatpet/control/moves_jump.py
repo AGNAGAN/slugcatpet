@@ -1,4 +1,4 @@
-"""跳跃转移链分派（控制路径专用，y↓）；degvec 返回 y↑ 向量，取 vy 时翻号。"""
+"""手动控制的跳跃：按当前动作选跳法（y↓）。degvec 返回 y↑ 向量，算 vy 时取反。"""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from . import vmath
 
 
 def dispatch(body, inp0) -> None:
-    """郊狼窗口与跳跃预输入均>0 时按优先级分派转移；否则无操作。"""
+    """离地宽限和跳跃预输入都没过期时，按优先级选一种跳法起跳。"""
     if not (body._ctrl_can_jump > 0 and body._ctrl_want_jump > 0):
         return
     body._ctrl_can_jump = 0
@@ -44,7 +44,7 @@ def dispatch(body, inp0) -> None:
 
 
 def _flip_skid_jump(body, c0, c1) -> None:
-    """站立急刹翻跳（y 翻），按种族取速度。"""
+    """站立急刹后的翻跳，速度按猫种取。"""
     s = body.stats
     sd = body._ctrl_slide_direction
     c0.vy = s.flip_head
@@ -67,12 +67,12 @@ def _roll_to_rocket(body, c0, c1, rd) -> None:
     t = inv_lerp(0.0, 25.0, body._ctrl_roll_counter)
     ang = rd * lerp(60.0, 35.0, t)
     speed = lerp(9.5, 13.1, t)
-    vx, vy = vmath.degvec(ang)  # y↑ 向量，此时未翻
+    vx, vy = vmath.degvec(ang)  # y↑ 向量
     vx *= speed
     vy *= speed
     m = body.stats.roll_rocket_vx_mult
     c0.vx = vx * m
-    c0.vy = -vy  # y 翻
+    c0.vy = -vy  # 换成 y↓
     c1.vx = vx * m
     c1.vy = -vy
     body.animation = "RocketJump"
@@ -80,7 +80,7 @@ def _roll_to_rocket(body, c0, c1, rd) -> None:
 
 
 def _belly_to_flip_or_rocket(body, c0, c1, rd, inp0) -> None:
-    """BellySlide 跳出：whiplash||反向x → Flip 路径1（后空翻）；否则 RocketJump 路径2（滑铲火箭）。"""
+    """腹滑中起跳：whiplash 或反向按方向时后空翻（Flip），否则滑铲火箭跳（RocketJump）。"""
     s = body.stats
     if body._ctrl_whiplash or inp0.x == -rd:
         body.animation = "Flip"
@@ -110,7 +110,7 @@ def _belly_to_flip_or_rocket(body, c0, c1, rd, inp0) -> None:
 
 
 def _standard_jump(body, c0, c1) -> None:
-    """站立跳（y 翻），按种族取速度，不碰 vx。"""
+    """站立跳，速度按猫种取，不改 vx。"""
     body.feet_stuck = None
     body.crawl_anchor = None
     body.crawl_pose = 0.0
@@ -120,7 +120,7 @@ def _standard_jump(body, c0, c1) -> None:
 
 
 def _crouch_jump(body, c0, c1, inp0) -> None:
-    """趴/蹲跳 + 超级扑跳（y 翻），蓄力满 20 触发扑射。"""
+    """趴着或蹲着起跳；蓄力满 20 时变成超级扑跳。"""
     pounce_speed = 1.5
     dir_x = inp0.x
     if body._ctrl_super_launch >= 20:

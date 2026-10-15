@@ -1,4 +1,4 @@
-"""HUD 单猫行：体征 + 左键弹菜单/拖动移 HUD。"""
+"""HUD 里一只猫的一行：体征，左键弹菜单，拖动移 HUD。"""
 
 from __future__ import annotations
 import math
@@ -169,7 +169,7 @@ class PetRow(QFrame):
         grid.addWidget(self.cold_lbl, 5, 0)
         grid.addWidget(self.cold_bar, 5, 1)
         self._cold_visible = False
-        self._karma_frame = None  # 已显示帧名，去重防重复渲染
+        self._karma_frame = None  # 已显示的帧名，没变不重设
         self.cold_lbl.setVisible(False)
         self.cold_bar.setVisible(False)
 
@@ -194,7 +194,7 @@ class PetRow(QFrame):
     def refresh(self) -> bool:
         """刷新本行，返回尺寸是否可能变了（名字、寒冷 / 氧气条显隐）。"""
         pets = list(getattr(self.pet.window, "pets", [self.pet]))
-        label = pet_label(self.pet, pets)
+        label = pet_label(self.pet, pets) + (t("hud_held") if self.pet.held is not None else "")
         renamed = label != self.name.text()
         if renamed:
             self.name.setText(label)

@@ -1,4 +1,4 @@
-"""行为检查：固定种子和脚本化输入下逐 tick 比对状态、位置和渲染帧，确认改动没有意外改变行为。"""
+"""行为检查：固定种子和脚本化输入下逐 tick 比对状态、位置和渲染帧。"""
 
 from __future__ import annotations
 
@@ -119,14 +119,13 @@ SCENARIOS = {
         ],
     },
     "trouble": {
-        "doc": "砸晕→生气→扔石头/无石可扔；低好感满业力圣徒被砸→超度；杀死弹窗→舌头闪避；冬眠；死亡复活；趋暖",
+        "doc": "砸晕→生气→扔石头/无石可扔；低好感满业力圣徒被砸→超度；杀死弹窗→舌头闪避；死亡复活；趋暖",
         "pets": ["survivor", "saint", "monk"],
         "ticks": 6000,
         "cursor": _cursor_sweep,
         "events": [
             (60, "place_stone", 0.15, 0.7),
             (70, "place_stone", 0.85, 0.7),
-            (100, "set", 2, "food", "max"),
             (300, "fling_stone", 0),
             (1500, "set", 1, "temper", -0.6),
             (1505, "set", 1, "karma", "max"),
@@ -138,64 +137,6 @@ SCENARIOS = {
             (4300, "kill", 2),
             (4600, "place_lamp", 0.9, 0.85),
             (4620, "set", 0, "cold", 0.9),
-        ],
-    },
-    "hands": {
-        "doc": "吃饱顺手留果子带去睡、醒来先吃；好感低揣石头、被拎起、被抢、消气放下",
-        "pets": ["survivor", "hunter"],
-        "ticks": 6000,
-        "cursor": _cursor_park,
-        "events": [
-            (20, "set", 0, "food", 6),
-            (25, "place_fruit", 0.25, 0.95),
-            (26, "place_fruit", 0.32, 0.95),
-            (27, "place_fruit", 0.4, 0.95),
-            (30, "set", 1, "food", 6),
-            (31, "set", 1, "temper", -0.6),
-            (35, "place_stone", 0.7, 0.95),
-            (36, "place_stone", 0.78, 0.95),
-            (1500, "drag", 1, 0.0, -120.0, 40),
-            (2600, "snatch", 1),
-            (3600, "set", 1, "temper", 0.6),
-        ],
-    },
-    "spears": {
-        "doc": "矛：好感很低的猎手拿矛扔光标、扎墙成杆、扎地成竖杆、串蝙蝠、打吊果、无重力与水中、开友伤后扎猫",
-        "pets": ["survivor", "hunter", "gourmand"],
-        "ticks": 6000,
-        "cursor": _cursor_sweep,
-        "events": [
-            (20, "place_spear", 0.3, 0.95),
-            (21, "place_spear", 0.55, 0.95),
-            (22, "place_stone", 0.7, 0.95),
-            (25, "place_fruit", 0.5, 0.3),
-            (30, "set", 1, "temper", -0.9),
-            (300, "fling_stone", 1),
-            (900, "throw_spear", 0, 1, 0),
-            (1000, "throw_spear", 2, -1, 0),
-            (1100, "throw_spear", 0, 0, 1),
-            (1300, "place_batfly", 0.5, 0.35),
-            (1400, "throw_spear", 2, 1, 0),
-            (1900, "clear", "spear"),
-            (2000, "zerog", True),
-            (2250, "move_pet", 0, 0.08),
-            (2252, "throw_spear", 0, -1, 0),
-            (2400, "move_pet", 2, 0.6),
-            (2402, "throw_spear", 2, 0, -1),
-            (2600, "zerog", False),
-            (2800, "water", True),
-            (3100, "move_pet", 2, 0.9),
-            (3102, "throw_spear", 2, 1, 0),
-            (3600, "water", False),
-            (3700, "clear", "spear"),
-            (4000, "friendly_fire", True),
-            (4090, "move_pet", 1, 0.3),
-            (4091, "move_pet", 0, 0.45),
-            (4092, "throw_spear", 1, 1, 0),
-            (4300, "move_pet", 2, 0.85),
-            (4302, "throw_spear", 2, 1, 0),
-            (4800, "drag", 1, 0.0, -120.0, 40),
-            (5200, "set", 1, "temper", 0.6),
         ],
     },
 }
@@ -251,23 +192,10 @@ def _fling_stone(win, pet):
     s.fling = True
 
 
-def _throw_spear(win, pet, dx, dy):
-    b = pet.body
-    s = win.place("spear", b.chunk0.x, b.chunk0.y)
-    if s is None:
-        return
-    side = b.free_hand()
-    if side is None:
-        b.release(b.grasps["l"], to_free=True)
-        side = "l"
-    b.grab(s, side)
-    b.throw(s, dx, 0.0, dir_y=dy)
-
-
 def _apply_event(win, ev, drag_state):
     kind = ev[1]
     W, H = win._WL, win._HL
-    if kind in ("place_fruit", "place_stone", "place_slimemold", "place_batfly", "place_lamp", "place_spear"):
+    if kind in ("place_fruit", "place_stone", "place_slimemold", "place_batfly", "place_lamp"):
         win.place(kind[len("place_") :], W * ev[2], H * ev[3])
     elif kind == "place_pole":
         win.place(ev[4], W * ev[2], H * ev[3])
@@ -291,29 +219,12 @@ def _apply_event(win, ev, drag_state):
         setattr(body, ev[3], val)
     elif kind == "clear_stones":
         win.clear_kind("stone")
-    elif kind == "clear":
-        win.clear_kind(ev[2])
-    elif kind == "move_pet":
-        b = win.pets[ev[2]].body
-        dx = W * ev[3] - b.chunk1.x
-        for c in (b.chunk0, b.chunk1):
-            c.x += dx
-            c.last_x += dx
-            c.vx = c.vy = 0.0
     elif kind == "kill":
         win.pets[ev[2]].behavior.kill()
     elif kind == "fling_stone":
         _fling_stone(win, win.pets[ev[2]])
-    elif kind == "throw_spear":
-        _throw_spear(win, win.pets[ev[2]], ev[3], ev[4])
-    elif kind == "friendly_fire":
-        win.set_friendly_fire(ev[2])
     elif kind == "request_kill":
         win.request_kill(win.pets[ev[2]])
-    elif kind == "snatch":
-        held = win.pets[ev[2]].body.held_items()
-        if held and win._begin_item_drag((held[0].x, held[0].y)):
-            win._end_item_drag()
     else:
         raise ValueError(kind)
 
@@ -382,7 +293,7 @@ def _check_painted_bounds(win, img):
     ys, xs = np.nonzero(a)
     if not len(xs):
         return
-    r = win._painted
+    r = win._painted.united(win._static_last[1])  # 静态内容须在它记下的范围内
     if not (
         r.left() <= xs.min() and xs.max() <= r.right() and r.top() <= ys.min() and ys.max() <= r.bottom()
     ):

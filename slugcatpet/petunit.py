@@ -1,4 +1,4 @@
-"""单只宠物实例。"""
+"""一只猫：组装身体、图形、能力、配件和状态机，每 tick 推进。"""
 
 from __future__ import annotations
 import math
@@ -16,7 +16,7 @@ from .rendering.graphics import SlugcatGraphics
 from .rendering.layout import Layout
 from .core.tail import Tail
 from .core.units import clampf, inv_lerp, lerp, K_VEL
-from .items.base import WARM
+from .items.base import CLIMBABLE, WARM
 
 TAIL_SNAP = 40.0
 
@@ -51,11 +51,11 @@ class PetUnit:
         self.name = name  # 用户起的名字，空=用猫种名
         self.hidden = False  # 收起：不在场景里，但保留状态
         self._reincarnate_pending = False
-        self._cramp_delay = -1  # <0 才可再抽
+        self._cramp_delay = -1  # 抽筋间隔，<0 时可再抽
         self._cold_rng = random.Random(0xC01D + index)
         self._kill_dialog = None
         self._kill_cancel_by_self = False
-        self._kill_dismiss_silent = False  # 静默消解，跳过扣好感
+        self._kill_dismiss_silent = False  # 静默关闭，不扣好感
         self.controlled = False
         self.grasp_ctrl = None  # 操控态的手部输入，进入操控时新建
         self.behavior = None
@@ -87,6 +87,7 @@ class PetUnit:
         for ab in self.abilities.values():
             ab.attach_body(self, self.body)
         self.body.cold = float(init_state.get("cold", 0.0))
+        self.body.sleepiness = float(init_state.get("sleepiness", tuning.SLEEPY_INIT))
         self.body.visual_floor_y = floor_y
         from .core import chunkphys as _cp
 
@@ -116,6 +117,8 @@ class PetUnit:
         self._build_accessories()
         self.body.impact_cb = w._shake_impact
         self.body.on_hurt = self._on_hurt
+        self.buffeted_until = 0  # 受大雨等外力甩打的截止 tick，期间撞击不致死、不记仇
+        self.held = None  # 定身设置（behaviors.hold.HoldSpec），None 为没定身
         self._zerog_tail_phase = 0.0
 
     def _build_accessories(self):
@@ -132,13 +135,16 @@ class PetUnit:
                 layers[slot].append(fn)
 
     def _on_hurt(self, kind, ticks):
-        """撞击伤害交给行为层；吊挂着时不算。"""
+        """撞击伤害交给行为层；吊挂时不算，受外力甩打时只晕、不记仇。"""
         if self.behavior is None or self.body.suspended:
             return
-        if kind == "die":
+        buffeted = self.window.world_tick < self.buffeted_until
+        if kind == "die" and not buffeted:
             self.behavior.kill()
+        elif kind == "die":
+            self.behavior.apply_stun(tuning.FALL_STUN_MAX, blame=False)
         else:
-            self.behavior.apply_stun(ticks)
+            self.behavior.apply_stun(ticks, blame=not buffeted)
 
     def release_organs(self):
         """状态被打断、晕、死时：各能力收回器官，解除吊挂。"""
@@ -154,12 +160,21 @@ class PetUnit:
                 return cls(self)
         return None
 
+    def set_held(self, on):
+        """定身开关。"""
+        if on and self.held is None:
+            from .behaviors.hold import HoldSpec
+
+            self.held = HoldSpec()
+        elif not on:
+            self.held = None
+
     def can_eat(self, obj) -> bool:
         """这只猫能用嘴吃 obj：有嘴、obj 能吃、食性允许。"""
         return MOUTH in self.tags and getattr(obj, "edible", False) and self.traits.eats(obj)
 
     def _make_atlas(self):
-        """皮肤 → 原版。"""
+        """按外观选部位图集，皮肤缺的部位用原皮。"""
         from . import skins
 
         return skins.resolver_for(self.window.atlas, self.look, self.cat.key)
@@ -198,7 +213,7 @@ class PetUnit:
 
     def respawn(self, preserve=False):
         """重置本猫（preserve=True 保留体征）。"""
-        if self.controlled:  # 先退控制，防丢 provider
+        if self.controlled:  # 先退出手动控制，免得丢掉输入源
             from .control.session import exit_control
 
             exit_control(self)
@@ -213,6 +228,7 @@ class PetUnit:
                 "food": b.food,
                 "food_q": b.food_q,
                 "karma": b.karma,
+                "sleepiness": b.sleepiness,
             }
         else:
             init_state = {"energy": 1.0, "temper": 0.0, "food": tuning.FOOD_INIT, "karma": tuning.KARMA_INIT}
@@ -250,9 +266,18 @@ class PetUnit:
             self._kill_dismiss_silent = True
             box.reject()  # 触发 finished 回调
 
+    def check_grip(self):
+        """抓着的杆没了就松手，让行为收尾。"""
+        b = self.body
+        if (b.on_pole or b.zerog_pole is not None) and b.drop_lost_pole(
+            self.window.items_affording(CLIMBABLE)
+        ):
+            if self.behavior is not None and not self.controlled:
+                self.behavior.pole_lost()
+
     def step(self, cursor, cycle_prog):
         if self.controlled and self.body.dead:
-            # 死须先退控制再转世
+            # 死了要先退出手动控制再转世
             from .control.session import exit_control
 
             exit_control(self)
@@ -263,7 +288,7 @@ class PetUnit:
         w = self.window
         b, g = self.body, self.gfx
         if self.controlled:
-            # FSM 冻结期同步晕态
+            # 手动控制时状态机不跑，在这里同步晕的显示
             g.stunned = b.stun > 0
             g.look_at = None
         elif self.behavior is not None:
@@ -279,7 +304,6 @@ class PetUnit:
         rg = w.room_gravity
         b.room_gravity = rg
         b.zerog = rg < ZEROG_ROOM_GRAVITY
-        self._feed_swim_neighbors()
 
         b.step()
         if self.controlled and self.grasp_ctrl is not None:
@@ -292,24 +316,6 @@ class PetUnit:
             acc.post_step(self)
         self._tick_tail()
 
-    def _feed_swim_neighbors(self):
-        b = self.body
-        sp = b.swim_pass
-        sp.rank = self.index
-        if not b.swimming:
-            sp.reset()
-            return
-        r = tuning.SWIM_AVOID_TRIGGER_DIST
-        sp.neighbors = [
-            o.body.swim_pass.as_neighbor()
-            for o in self.window.pets
-            if o is not self
-            and o.body.swimming
-            and not o.body.dead
-            and abs(o.body.chunk0.x - b.chunk0.x) <= r
-            and abs(o.body.chunk0.y - b.chunk0.y) <= r
-        ]
-
     def resize(self, floor_y):
         self.tail.floor_y = floor_y
         for ab in self.abilities.values():
@@ -319,7 +325,7 @@ class PetUnit:
         w = self.window
         b = self.body
 
-        if b.dead:
+        if b.dead or self.held is not None:
             b.cold_gain = 0.0
             return
 
@@ -380,7 +386,9 @@ class PetUnit:
         if math.hypot(rx - self._prev_root[0], ry - self._prev_root[1]) > TAIL_SNAP:
             self.tail.snap_to(rx, ry)
         # 松弛度：1=下垂摆动，0=贴流线
-        if b.chunk0.pinned or b.chunk1.pinned or b.suspended or b.hover:
+        if b.bodyMode == "ClimbingOnBeam" and b.animation == "StandOnBeam":
+            looseness = 1.0 - clampf((abs(b.chunk1.vx) / K_VEL - 1.0) * 0.3, 0.0, 1.0)
+        elif b.chunk0.pinned or b.chunk1.pinned or b.suspended or b.hover:
             looseness = 1.0
         elif b.bodyMode == "Stand":
             vx_norm = abs(b.chunk1.vx) / K_VEL
@@ -388,9 +396,9 @@ class PetUnit:
         elif b.bodyMode == "Crawl":
             looseness = 1.0
         elif b.bodyMode == "ClimbingOnBeam":
-            looseness = 1.0  # 漏此分支尾巴发僵
+            looseness = 1.0
         elif b.bodyMode == "ZeroG":
-            looseness = 1.0  # 漏此分支尾巴发僵
+            looseness = 1.0
         else:
             looseness = 0.0  # 空中无动画
         ref_x, ref_y = b.chunk0.x, b.chunk0.y

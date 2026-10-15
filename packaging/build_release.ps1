@@ -126,6 +126,7 @@ $pyi = @(
   "--add-data", "$repo\slugcatpet\resources\characters;slugcatpet/resources/characters",
   "--add-data", "$repo\slugcatpet\resources\layouts;slugcatpet/resources/layouts",
   "--add-data", "$repo\slugcatpet\resources\icons;slugcatpet/resources/icons",
+  "--add-data", "$repo\slugcatpet\resources\arcs.json.gz;slugcatpet/resources",
   "--add-data", "$repo\slugcatpet\audio\LICENSE.python-fsb5;slugcatpet/audio",   # 第三方许可随包
   "--add-data", "$repo\slugcatpet\audio\LICENSE.libvorbis;slugcatpet/audio"
 )

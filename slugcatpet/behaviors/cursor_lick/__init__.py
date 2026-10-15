@@ -111,7 +111,7 @@ def _mount(fsm, p):
         if (
             fsm.state == "IdleStand"
             and not fsm.grab.active
-            and not fsm._exhausted
+            and not fsm.ask("exhausted")
             and not fsm._zerog()
             and lick.cooldown <= 0
             and fsm._dwell >= need

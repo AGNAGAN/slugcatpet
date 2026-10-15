@@ -1,4 +1,4 @@
-"""把 FSB5 里的 Vorbis 数据原样重新封装成 Ogg，不解码、不依赖原生库。
+"""把 FSB5 里的 Vorbis 数据原样重新封装成 Ogg，PCM16 数据封装成 WAV，不解码、不依赖原生库。
 
 FSB5 头解析与重建流程改写自 python-fsb5（MIT，见同目录 LICENSE.python-fsb5），
 setup 头取自 vorbis_setups（由 tools/gen_vorbis_setups.py 用 libvorbis 生成，BSD，见 LICENSE.libvorbis）。
@@ -9,6 +9,7 @@ from __future__ import annotations
 import struct
 import zlib
 
+PCM16_FORMAT = 2
 VORBIS_FORMAT = 15
 _CHUNK_FREQUENCY = 2
 _CHUNK_VORBISDATA = 11
@@ -22,13 +23,13 @@ def _bits(v, start, n):
     return (v >> start) & ((1 << n) - 1)
 
 
-def parse_fsb5(data: bytes) -> dict:
-    """单样本 FSB5 → {channels, rate, crc32, frames, 包数据}。"""
+def parse_fsb5(data: bytes, want: int = VORBIS_FORMAT) -> dict:
+    """单样本 FSB5 → {channels, rate, crc32, frames, 数据}；want 是要求的编码。"""
     if data[:4] != b"FSB5":
         raise ValueError("not FSB5")
     version, nsamples, shdr_size, name_size, data_size, mode = struct.unpack_from("<6I", data, 4)
-    if mode != VORBIS_FORMAT:
-        raise ValueError(f"not Vorbis (mode {mode})")
+    if mode != want:
+        raise ValueError(f"unexpected codec (mode {mode})")
     if nsamples != 1:
         raise ValueError(f"expected 1 sample, got {nsamples}")
     pos = 60 + (4 if version == 0 else 0)
@@ -50,7 +51,7 @@ def parse_fsb5(data: bytes) -> dict:
         elif kind == _CHUNK_VORBISDATA:
             (crc,) = struct.unpack_from("<I", data, pos)
         pos += size
-    if crc is None or rate is None:
+    if rate is None or (crc is None and want == VORBIS_FORMAT):
         raise ValueError("missing vorbis/frequency info")
     start = head_end + name_size + offset
     return {
@@ -189,3 +190,19 @@ def fsb_to_ogg(data: bytes) -> bytes:
         st.packetin(pkt, granule, eos=not size)
         st.pageout()
     return bytes(st.out)
+
+
+def fsb_to_wav(data: bytes) -> bytes:
+    """PCM16 的 FSB5 → WAV 字节。"""
+    import io
+    import wave
+
+    s = parse_fsb5(data, PCM16_FORMAT)
+    pcm = s["data"][: s["frames"] * s["channels"] * 2]
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(s["channels"])
+        w.setsampwidth(2)
+        w.setframerate(s["rate"])
+        w.writeframes(pcm)
+    return buf.getvalue()

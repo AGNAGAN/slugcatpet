@@ -1,10 +1,10 @@
-"""规划目标：pos()/valid()/key()；radius 为达成容差（仅 can_stay 采信）。"""
+"""规划目标。"""
 
 from __future__ import annotations
 
 
 class Goal:
-    """目标：pos()/valid()/key() + radius 到位容差；contact 声明达成方式，仅补救层读。"""
+    """目标：pos()、valid()、key()。radius 是到位容差，只有 can_stay 用；contact 是达成方式，只有补救层读。"""
 
     __slots__ = ("obj", "radius", "contact", "_pos_fn", "_valid_fn", "_key")
 

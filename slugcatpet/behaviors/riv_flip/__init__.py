@@ -14,10 +14,10 @@ from ...brain.state import T_ACTIVITY, VIGOROUS
 from ..base import Behavior, mood_candidate, mood_params
 
 ARRIVE_X = 8.0  # px
-LAUNCH_TIMEOUT = 80  # 起跳未腾空兜底 tick
+LAUNCH_TIMEOUT = 80  # 起跳后这么久还没离地就收工
 FLIP_TIMEOUT = 1200  # tick
 POLE_X_MARGIN = 10.0  # 离杆端余量 px
-AIM_BAND = GRIP_DIST - 4.0  # 贴杆瞄准带，留 sim 残差余量
+AIM_BAND = GRIP_DIST - 4.0  # 弧线离杆线这么近算对准，比抓杆距离小一点留出模拟误差
 
 
 class RivFlip(Behavior):
@@ -51,7 +51,7 @@ def _pole_reachable(fsm):
 
 
 def _pole_plan(fsm):
-    """选可达横杆：杆线在起跳 chunk0 上方且 apex+GRIP_DIST 够到 → (pole, d, launch_x)；无 → None。"""
+    """挑一根后空翻够得着的横杆：返回 (杆, 方向, 起跳 x)，没有返回 None。"""
     stats = fsm.win.cat.stats
     launch_y = fsm.HL - takeoff_c0_h(stats)
     b = fsm.body
@@ -72,7 +72,7 @@ def _pole_plan(fsm):
                 if arc.apex + GRIP_DIST < rise:
                     continue
                 for px, py in arc.points:
-                    if launch_y + py < TOP_CLEAR:  # 越窗顶余量：其后命中被 clamp 失真，弃该弧
+                    if launch_y + py < TOP_CLEAR:  # 弧线越过窗顶后会被截住、不准，这条弧不用
                         break
                     if abs(launch_y + py - pole.ay) <= AIM_BAND:
                         lx = ax_t - px
@@ -144,7 +144,7 @@ def _mount(fsm, p):
             b.move_dir = flip.d
             if pole is not None and _near_pole(b, pole):
                 b.stop_walk()
-                flip.dirty = False  # animation 交 HPole 生命周期接管
+                flip.dirty = False  # 动画交给 HPole 管
                 fsm.social.claim(fsm.win, "hpole", pole)
                 fsm._transition("HPole")
             return

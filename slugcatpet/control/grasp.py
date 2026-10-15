@@ -1,9 +1,10 @@
-"""操控态的手部输入：拾取、丢下、双击换手、投掷、站定长按啃食。"""
+"""手动控制时的手部操作：拾取、丢下、双击换手、投掷、站定长按吃、按住啃尸体。"""
 
 from __future__ import annotations
 
 import math
 
+from ..behaviors.fetch.chew import Chew
 from ..items.base import CARRYABLE
 
 PICKUP_BUFFER = 5  # 拾取 / 投掷键的输入缓冲帧
@@ -29,6 +30,7 @@ class GraspControl:
         self.no_pickup_on_release = 0
         self.dont_grab = 0
         self.eat_counter = EAT_COUNTER_MAX
+        self.meat = Chew()
         self.candidate = None
         self.forbidden = {}
 
@@ -50,8 +52,44 @@ class GraspControl:
                     self.want_pickup = 0
                     self.no_pickup_on_release = NO_PICKUP_ON_RELEASE
 
+        meat = next(
+            (
+                o
+                for o in b.held_items()
+                if getattr(o, "carcass", False) and (self.pet.can_eat(o) or self.meat.counter)
+            ),
+            None,
+        )
+        if meat is not None:
+            self.meat.hold_meat(self.pet, meat, i0.pckp)
+            self._update_eat(False, None)
+        else:
+            food = next((o for o in b.held_items() if self.pet.can_eat(o)), None)
+            self._eat_input(inp, food, press, still)
+
+        self._tick_forbidden()
+        self.candidate = self._pickup_candidate() if self.dont_grab < 1 else None
+        for k in ("switch_counter", "want_pickup", "want_throw", "no_pickup_on_release", "dont_grab"):
+            v = getattr(self, k)
+            if v > 0:
+                setattr(self, k, v - 1)
+
+        if i0.thrw and not i1.thrw:
+            self.want_throw = PICKUP_BUFFER
+        if self.want_throw > 0:
+            for obj in b.held_items():
+                self._throw(obj, i0)
+                self.want_throw = 0
+                break
+
+        if self.want_pickup > 0:
+            self._do_pickup(inp)
+
+    def _eat_input(self, inp, food, press, still):
+        """站定长按拾取键吃手里的东西；轻点拾取键换成去捡别的。"""
+        b = self.pet.body
+        i0 = inp[0]
         eating = False
-        food = next((o for o in b.held_items() if self.pet.can_eat(o)), None)
         if still:
             if food is not None and self.no_pickup_on_release < 1:
                 if not i0.pckp:
@@ -77,24 +115,6 @@ class GraspControl:
         elif press:
             self._pickup_pressed()
         self._update_eat(eating, food if b.hand_of(food) else None)
-
-        self._tick_forbidden()
-        self.candidate = self._pickup_candidate() if self.dont_grab < 1 else None
-        for k in ("switch_counter", "want_pickup", "want_throw", "no_pickup_on_release", "dont_grab"):
-            v = getattr(self, k)
-            if v > 0:
-                setattr(self, k, v - 1)
-
-        if i0.thrw and not i1.thrw:
-            self.want_throw = PICKUP_BUFFER
-        if self.want_throw > 0:
-            for obj in b.held_items():
-                self._throw(obj, i0)
-                self.want_throw = 0
-                break
-
-        if self.want_pickup > 0:
-            self._do_pickup(inp)
 
     def _pickup_pressed(self):
         self.want_pickup = PICKUP_BUFFER
@@ -182,10 +202,9 @@ class GraspControl:
         d = b.throw_direction(i0.x)
         tossed = getattr(obj, "pierces", False) and b.stats.spear_toss
         if getattr(obj, "throwable", False) and not tossed:
-            from ..behaviors.anger.thrower import THROW_SPEED_FRAC, THROW_SPEED_MIN
+            from ..brain.skills.throw import throw_speed
 
-            base = max(THROW_SPEED_MIN, self.pet._WL * THROW_SPEED_FRAC)
-            b.throw(obj, d, base, up=3.0, dir_y=_vertical_throw(b, i0))
+            b.throw(obj, d, throw_speed(self.pet), up=3.0, dir_y=_vertical_throw(b, i0))
             self.pet.gfx.blink = 15
         else:
             ang, power = 45.0, 4.0
@@ -202,7 +221,7 @@ class GraspControl:
 
 
 def _vertical_throw(b, i0):
-    """后空翻中只按上 / 下、或无重力时按了上下：武器竖着扔（y↓）；否则 0。"""
+    """后空翻中只按上下、或失重时按了上下，返回竖直出手方向（y↓），否则返回 0。"""
     if i0.y == 0:
         return 0
     if (b.animation == "Flip" and i0.x == 0) or b.bodyMode == "ZeroG":

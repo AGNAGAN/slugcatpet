@@ -241,7 +241,7 @@ def _draw_one(win, p, m, dm):
 
 
 def _draw_tendrils(win, p, m, body):
-    """逐根触须画锯齿团；alpha 值当形状种子，非透明度。"""
+    """逐根画锯齿状触须；触须的 alpha 字段只当形状种子。"""
     ts = win._ts
     T = m.tendrils
     n = len(T)

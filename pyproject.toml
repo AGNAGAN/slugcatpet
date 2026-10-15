@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "slugcatpet"
-version = "1.1.0"
+version = "1.2.0"
 description = "Slugcat desktop pet for Windows: Rain World slugcat companions, bilingual (zh/en)."
 readme = "README.md"
 license = "MIT"
@@ -42,7 +42,12 @@ slugcatpet = "slugcatpet.main:main"
 include = ["slugcatpet*"]
 
 [tool.setuptools.package-data]
-slugcatpet = ["resources/icons/*.svg", "resources/layouts/*.json"]
+slugcatpet = [
+    "resources/icons/*.svg",
+    "resources/layouts/*.json",
+    "resources/characters/*.json",
+    "resources/arcs.json.gz",
+]
 
 [tool.ruff]
 line-length = 110

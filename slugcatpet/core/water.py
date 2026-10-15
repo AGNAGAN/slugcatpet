@@ -1,4 +1,4 @@
-"""水面波形内核：一维阻尼波方程点链，坐标 y↓。"""
+"""水面波形：一维阻尼波方程点链，坐标 y↓。"""
 
 from __future__ import annotations
 import random
@@ -41,7 +41,7 @@ class WaterSurface:
         self.spacing = float(spacing)
         self.n = max(3, int(round(self.width / self.spacing)) + 1)
         self.spacing = self.width / (self.n - 1)  # 均分到末点正好落在右边界
-        # Courant 数，须 R<1 保稳定
+        # Courant 数，R<1 才稳定
         dx = DX_FACTOR * self.spacing
         self.r = WAVE_SPEED_C * DT / dx
         assert self.r < 1.0, f"R={self.r:.3f} must be < 1 for stability (spacing={self.spacing})"

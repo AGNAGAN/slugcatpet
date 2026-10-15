@@ -1,4 +1,4 @@
-"""放弃目标冷却注册表：时长到期或世界结构版本变更即清除。"""
+"""放弃过的目标的冷却：到时或世界结构变了就清掉。"""
 
 from __future__ import annotations
 import time

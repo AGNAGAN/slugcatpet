@@ -5,8 +5,8 @@ import math
 
 from .units import K_IMP, K_VEL, clampf, damp60, lerp
 
-RAD0 = 9.0  # chest
-RAD1 = 8.0  # hips
+RAD0 = 9.0  # 胸
+RAD1 = 8.0  # 臀
 MASS = 0.35
 DIST_STAND = 17.0
 DIST_CRAWL = 17.0
@@ -305,7 +305,7 @@ def aabb_wall_collide(obj, WL, HL, impact=None):
 
 
 def collide_objects(entities) -> None:
-    """通用 chunk 碰撞 pass，层 0 不自碰。"""
+    """同一碰撞层的物体两两推开，层 0 不参与。"""
     buckets: dict[int, list] = {}
     for e in entities:
         layer = e.collision_layer

@@ -15,7 +15,7 @@ from ...planning.jump_arc import PYRO_INPUTS
 from ..base import Behavior, mood_candidate, mood_params
 
 ARRIVE_X = 8.0  # px
-LAUNCH_TIMEOUT = 80  # 起跳未腾空兜底 tick（被顶/卡住）
+LAUNCH_TIMEOUT = 80  # 起跳后这么久还没离地（被顶住、卡住）就收工
 ROMP_TIMEOUT = 1200  # tick
 
 
@@ -130,7 +130,6 @@ def _mount(fsm, p):
     energy_gate = fsm.traits.play_gate
 
     def gate(ctx):
-        # 燃料够一整轮；泳/零重力退避；体力过门
         return (
             not ctx.submerged
             and not getattr(fsm.body, "zerog", False)

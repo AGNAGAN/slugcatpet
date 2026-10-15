@@ -1,4 +1,4 @@
-"""找横杆：低杆直接舌钩，高杆先到墙脚舌爬再钩，钩住后交 HPole。"""
+"""找横杆：低杆直接用舌头钩，高杆先到墙脚爬上去再钩，钩住后交给 HPole。"""
 
 from __future__ import annotations
 
@@ -146,7 +146,7 @@ class SeekHPole(State):
         self._hp_phase = None
 
     def _hp_reclimb(self, b):
-        """高杆够不着→回墙脚重爬(限次)；低杆/超限→放弃回 idle。"""
+        """高杆钩不着就回墙脚重爬，有次数上限；低杆或次数用完就放弃。"""
         fsm = self.fsm
         fsm.release_organs()
         fsm.climb = None

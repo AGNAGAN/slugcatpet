@@ -1,25 +1,29 @@
-"""横杆借力控制器：上杆（能力提供的 hpole_mount 或徒手抓）→grip→pullup→stand；update() 返回 True=结束。"""
+"""上横杆控制器：抓杆、吊着、翻上去、站着；update() 返回 True 结束。"""
 
 from __future__ import annotations
 
 import math
 
-from ... import tuning
+from ...planning.climbmoves import PullUpMotion, hang_tick, release, stand_tick
 
 RUNNING, GRIP, GIVEUP = "running", "grip", "giveup"  # hpole_mount.update(锚点) 的返回值
 
-CONN = 17.0
 GRIP_DIST = 16.0
 HANG_TICKS = 28
-PULLUP_TICKS = 22
-STAND_HOVER = 5.0
 STAND_TICKS = 200
-WALK_SPEED = 1.4
 WALK_MARGIN = 14.0
-TURN_PERIOD = 20
-TURN_PROB = 0.5
 JUMP_DOWN_VY = 2.0
 AIRGRAB_TIMEOUT = 90
+
+
+class _Beam:
+    """横杆物件的杆上动作视图。"""
+
+    def __init__(self, pole):
+        self.obj = pole
+        self.x0, self.x1 = min(pole.ax, pole.bx), max(pole.ax, pole.bx)
+        self.y = pole.ay
+        self.lo, self.hi = self.x0 + WALK_MARGIN, self.x1 - WALK_MARGIN
 
 
 class HPoleController:
@@ -29,26 +33,17 @@ class HPoleController:
         self.gfx = win.gfx
         self.mount = win.skill("hpole_mount")
         self.pole = pole
+        self.bar = _Beam(pole)
         self.rng = rng
         self.phase = "mount" if self.mount is not None else "airgrab"
         self.timer = 0
         self.giveup = False
-        self._walk_dir = 1
-        self._stand_t = 0
-        self._pause = 0
-        self._swing_t = 0
-        self.disbalance = 0.0
-        self._sway_c = 0.0
-        self._wobble_target = 45.0
-        lo, hi = self._extent()
+        lo, hi = self.bar.x0, self.bar.x1
         if self.mount is not None:
             ax = self.mount.anchor_x((lo + hi) * 0.5)
         else:
             ax = self.body.chunk0.x
         self._anchor = (max(lo + 2.0, min(hi - 2.0, ax)), pole.ay)
-
-    def _extent(self):
-        return min(self.pole.ax, self.pole.bx), max(self.pole.ax, self.pole.bx)
 
     def update(self):
         self.timer += 1
@@ -59,14 +54,11 @@ class HPoleController:
 
     def _phase_airgrab(self):
         b = self.body
-        lo, hi = self._extent()
-        ax = max(lo + 2.0, min(hi - 2.0, b.chunk0.x))
+        ax = max(self.bar.x0 + 2.0, min(self.bar.x1 - 2.0, b.chunk0.x))
         ay = self.pole.ay
         if math.hypot(b.chunk0.x - ax, b.chunk0.y - ay) <= GRIP_DIST:
             self._anchor = (ax, ay)
-            self._grip(ax, ay)
-            self.phase = "hang"
-            self.timer = 0
+            self._grip(ax)
             return False
         if self.timer > AIRGRAB_TIMEOUT:
             self.giveup = True
@@ -79,172 +71,55 @@ class HPoleController:
             self.giveup = True
             return True
         if r == GRIP:
-            self._grip(*self._anchor)
-            self.phase = "hang"
-            self.timer = 0
+            self._grip(self._anchor[0])
         return False
 
-    def _grip(self, ax, ay):
+    def _grip(self, ax):
         b = self.body
-        c0, c1 = b.chunk0, b.chunk1
         self.win.release_organs()
-        b.on_pole = True
-        b.standing = True
-        b.animation = "HangFromBeam"
-        b.pole_x = ax
-        b.pole_y = ay
-        b.facing = 1 if c0.x >= c1.x else -1
-        c0.pinned = True
-        c0.x = ax
-        c0.y = ay
-        c0.vx = c0.vy = 0.0
-        c1.pinned = False
+        b.facing = 1 if b.chunk0.x >= b.chunk1.x else -1
+        b.chunk0.x, b.chunk0.vx = ax, 0.0
+        hang_tick(b, self.bar, 0)
+        self.phase = "hang"
+        self.timer = 0
 
     def _phase_hang(self):
-        b = self.body
-        c0 = b.chunk0
-        ax, ay = b.pole_x, self.pole.ay
-        c0.x = ax
-        c0.y = ay
-        c0.vx = c0.vy = 0.0
+        hang_tick(self.body, self.bar, 0)
         if self.timer > HANG_TICKS:
+            face = 1 if (self.rng is None or self.rng.random() < 0.5) else -1
+            self._motion = PullUpMotion(self.body, self.bar, face)
             self.phase = "pullup"
             self.timer = 0
-            self._pullup_from = (b.chunk1.x, b.chunk1.y)
         return False
 
     def _phase_pullup(self):
-        b = self.body
-        c0, c1 = b.chunk0, b.chunk1
-        b.animation = "GetUpOnBeam"
-        ax, ay = b.pole_x, self.pole.ay
-        t = min(1.0, self.timer / float(PULLUP_TICKS))
-        tt = t * t * (3.0 - 2.0 * t)
-        c1.pinned = True
-        feet_top_y = ay - STAND_HOVER
-        body_top_y = feet_top_y - CONN
-        fx0, fy0 = self._pullup_from
-        c1.x = ax
-        c1.y = fy0 + (feet_top_y - fy0) * tt
-        c1.vx = c1.vy = 0.0
-        c0.x = ax
-        c0.y = ay + (body_top_y - ay) * tt
-        c0.vx = c0.vy = 0.0
-        if self.timer >= PULLUP_TICKS:
+        r = self._motion.step()
+        if r is None:
+            self.giveup = True
+            return True
+        if r:
             self.phase = "stand"
             self.timer = 0
-            self._stand_t = 0
-            b.animation = "StandOnBeam"
-            self._walk_dir = 1 if (self.rng is None or self.rng.random() < 0.5) else -1
         return False
 
     def _phase_stand(self):
         b = self.body
-        c0, c1 = b.chunk0, b.chunk1
-        ax_lo, ax_hi = self._extent()
-        ay = self.pole.ay
-        self._stand_t += 1
-        feet_y = ay - STAND_HOVER
-        lo, hi = ax_lo + WALK_MARGIN, ax_hi - WALK_MARGIN
-        can_walk = hi > lo
-        if can_walk and self._pause <= 0 and self.rng is not None and self.rng.random() < tuning.HP_HANG_PROB:
-            self._enter_swing_under()
-            return False
-        if self._pause > 0:
-            self._pause -= 1
-            walking = False
-        else:
-            walking = can_walk
-            if can_walk and self.rng is not None and self.rng.random() < tuning.HP_PAUSE_PROB:
-                self._pause = self.rng.randint(tuning.HP_PAUSE_MIN, tuning.HP_PAUSE_MAX)
-                walking = False
-        if walking:
-            if self._stand_t % TURN_PERIOD == 0 and self.rng is not None and self.rng.random() < TURN_PROB:
-                self._walk_dir = -self._walk_dir
-            nx = c1.x + WALK_SPEED * self._walk_dir
-            if nx <= lo:
-                nx, self._walk_dir = lo, 1
-            elif nx >= hi:
-                nx, self._walk_dir = hi, -1
-            c1.x = nx
-            b.facing = 1 if self._walk_dir > 0 else -1
-        c1.y = feet_y
-        c1.vx = WALK_SPEED * (1.0 if walking else 0.0) * b.facing
-        c1.vy = 0.0
-        if walking:
-            if self._stand_t % tuning.HP_RETARGET_TICKS == 0 and self.rng is not None:
-                self._wobble_target = self.rng.uniform(tuning.HP_WOBBLE_MIN, tuning.HP_WOBBLE_MAX)
-            target = self._wobble_target
-        else:
-            target = 0.0
-        self.disbalance += (target - self.disbalance) * 0.1
-        roll = self.rng.random() if self.rng is not None else 0.5
-        self._sway_c += 1.0 + self.disbalance / 40.0 * (1.0 + roll)
-        if self._sway_c > tuning.BAL_COUNTER_WRAP:
-            self._sway_c -= tuning.BAL_COUNTER_WRAP
-        # 平衡摆动只在绘制层加，避免物理层重复偏移
-        c0.x = c1.x
-        c0.y = feet_y - CONN
-        c0.vx = c0.vy = 0.0
-        self.gfx.disbalance = self.disbalance
-        self.gfx.balance_counter = self._sway_c
-        self.gfx.look_at = (c0.x + b.facing * 60.0, c0.y)
-        if self._stand_t > STAND_TICKS:
-            self._jump_down()
+        stand_tick(b, self.bar, 0)
+        self.gfx.look_at = (b.chunk0.x + b.facing * 60.0, b.chunk0.y)
+        if self.timer > STAND_TICKS:
+            release(b)
+            b.chunk0.vy += JUMP_DOWN_VY
+            b.chunk1.vy += JUMP_DOWN_VY
+            b.chunk0.vx += b.facing * 1.0
+            self._reset_pose()
             return True
         return False
-
-    def _enter_swing_under(self):
-        b = self.body
-        c0, c1 = b.chunk0, b.chunk1
-        b.animation = "HangFromBeam"
-        b.pole_x = c1.x
-        b.pole_y = self.pole.ay
-        c0.pinned = True
-        c0.x = c1.x
-        c0.y = self.pole.ay
-        c0.vx = c0.vy = 0.0
-        c1.pinned = False
-        self._swing_t = 0
-        self.phase = "swing_under"
-
-    def _phase_swing_under(self):
-        b = self.body
-        c0, c1 = b.chunk0, b.chunk1
-        c0.pinned = True
-        c0.x = b.pole_x
-        c0.y = self.pole.ay
-        c0.vx = c0.vy = 0.0
-        self._swing_t += 1
-        c1.vx += 0.4 * (1.0 if (self._swing_t // 14) % 2 == 0 else -1.0)
-        if self._swing_t > tuning.HP_HANG_TICKS:
-            self.phase = "pullup"
-            self.timer = 0
-            self._pullup_from = (c1.x, c1.y)
-        return False
-
-    def _jump_down(self):
-        b = self.body
-        c0, c1 = b.chunk0, b.chunk1
-        c0.pinned = False
-        c1.pinned = False
-        b.on_pole = False
-        b.animation = None
-        c1.vy += JUMP_DOWN_VY
-        c0.vy += JUMP_DOWN_VY
-        c0.vx += b.facing * 1.0
-        self._reset_pose()
 
     def _reset_pose(self):
         self.gfx.hand_aim["l"] = None
         self.gfx.hand_aim["r"] = None
-        self.gfx.disbalance = 0.0
 
     def release(self):
-        b = self.body
-        b.chunk0.pinned = False
-        b.chunk1.pinned = False
-        b.on_pole = False
-        b.animation = None
+        release(self.body)
         self.win.release_organs()
         self._reset_pose()

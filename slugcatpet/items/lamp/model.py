@@ -1,4 +1,4 @@
-"""暖灯：串杆+灯泡+flicker；暖区半径物理/行为两层共用。"""
+"""暖灯：灯杆、灯泡和闪烁；暖区半径由物理和行为共用。"""
 
 from __future__ import annotations
 import math
@@ -11,7 +11,7 @@ GLOW_BASE_RADIUS = 250.0 * COLD_LAMP_SCALE
 
 WARM_RADIUS = COLD_LAMP_RANGE * COLD_LAMP_SCALE
 WARM_INNER = COLD_WARMTH_INNER * COLD_LAMP_SCALE
-ARRIVE_RADIUS = WARM_RADIUS * COLD_ARRIVE_FRAC  # 比暖区更严，防越界停留
+ARRIVE_RADIUS = WARM_RADIUS * COLD_ARRIVE_FRAC  # 比暖区小，免得停在暖区边缘
 
 
 def _lerp_tick(frm: float, to: float, fac: float, tick: float) -> float:
@@ -25,7 +25,7 @@ class Lamp:
     warm_radius = WARM_RADIUS
     warm_inner = WARM_INNER
     arrive_radius = ARRIVE_RADIUS
-    """单盏暖灯：anchor=挂载边端，bulb=灯泡端(暖源)。"""
+    """一盏暖灯：anchor 是挂在屏幕边的一端，bulb 是灯泡（暖源）。"""
 
     __slots__ = ("anchor_x", "anchor_y", "bulb_x", "bulb_y", "edge", "state", "_id", "_rng", "_flicker")
 

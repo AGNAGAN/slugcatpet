@@ -1,4 +1,4 @@
-"""竖/横杆几何实体；攀爬逻辑见 pole_climb.py。"""
+"""竖杆、横杆的几何；攀爬在 brain/skills/pole_climb.py。"""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ TOP_MARGIN = 48.0
 
 
 class Pole:
-    """单根杆子：端点+攀爬标记（ax/ay=锚边端，bx/by=光标端）。"""
+    """一根杆：ax/ay 是贴边或着地的一端，bx/by 是放置时光标那端。"""
 
     __slots__ = ("kind", "ax", "ay", "bx", "by", "state", "has_been_climbed", "_id")
     grounded = True  # 竖杆底端着地

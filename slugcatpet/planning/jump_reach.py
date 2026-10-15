@@ -1,4 +1,4 @@
-"""跳跃够取：走到起跳点→驻停→按档起跳，空中持向漂移。"""
+"""跳起来够：走到起跳点，停稳后按档起跳，空中保持横向输入。"""
 
 from __future__ import annotations
 
@@ -8,13 +8,13 @@ from .reach import Reach, Estimate, RUNNING, DONE, GIVEUP, reach_assist, walk_ba
 from .jump_arc import get_arc, sweep_hit
 
 SETTLE_VX = 0.3
-SETTLE_MAX = 40  # 驻停等待上限，超时按当前状态起跳
-# 预留走位残差，防"规划说行/临跳说不行"死循环
+SETTLE_MAX = 40  # 最多等这么久停稳，到时直接起跳
+# 留出走位误差，免得规划时能跳、到了起跳点又不能跳，反复重来
 PLAN_HIT_RADIUS = tuning.GRAB_REACH - tuning.PLAN_JUMP_TAKEOFF_EPS
 
 
 def _free_launch_hit(arc, gx, gy, launch_y, xmin, xmax, radius):
-    """定 launch_y、自由 launch_x∈[xmin,xmax]：找命中 (gx,gy) 的 (launch_x, tick)；无则 None。"""
+    """起跳高度固定为 launch_y，在 [xmin, xmax] 里找能命中 (gx, gy) 的 (launch_x, tick)，没有返回 None。"""
     for i, (px, py) in enumerate(arc.points):
         lx = gx - px
         if xmin <= lx <= xmax and abs((launch_y + py) - gy) <= radius:
@@ -72,7 +72,11 @@ class JumpReach(Reach):
 
 
 class JumpReachController:
-    """走到起跳 x → 驻停 → 起跳时以实际 chunk0 重选 (档,横向)。"""
+    """走到起跳点、停稳，起跳时按实际 chunk0 位置重选档位和横向输入。"""
+
+    def on_geometry(self):
+        """只在地上走、跳，不受杆增删影响。"""
+        return True
 
     def __init__(self, pet, goal):
         self.pet = pet

@@ -1,4 +1,4 @@
-"""躲杀控制器：舌头点掉「杀死」确认弹窗的"取消"按钮。"""
+"""躲杀控制器：用舌头点杀死确认弹窗的「取消」。"""
 
 from __future__ import annotations
 import math

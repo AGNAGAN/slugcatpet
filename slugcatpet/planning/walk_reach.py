@@ -1,4 +1,4 @@
-"""走够能力：沿地面走到目标 x。"""
+"""走过去够：沿地面走到目标 x。"""
 
 from __future__ import annotations
 import math
@@ -52,6 +52,10 @@ class WalkReach(Reach):
 
 
 class WalkReachController:
+    def on_geometry(self):
+        """只在地上走、跳，不受杆增删影响。"""
+        return True
+
     def __init__(self, pet, goal):
         self.pet = pet
         self.goal = goal

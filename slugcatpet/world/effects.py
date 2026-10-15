@@ -1,4 +1,4 @@
-"""Runtime visual effects and cursor hijack helpers for ``PetWindow``."""
+"""窗口上的火花、冲击波等特效，以及劫持光标。"""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""果子+Stalk 物理核心；y↓ 坐标；积分顺序 重力→空气阻尼→积分→碰撞。"""
+"""果子与果柄的物理；y↓，每 tick 依次算重力、空气阻尼、积分、碰撞。"""
 
 from __future__ import annotations
 import math
@@ -30,12 +30,12 @@ PLACE_HANGING_FRAC = 0.7
 
 
 def _perp(nx, ny):
-    """垂向量（y↓ 坐标系）：perp(dx,dy)=(dy,-dx)。"""
+    """y↓ 下的垂直向量：(dx, dy) → (dy, -dx)。"""
     return (ny, -nx)
 
 
 class Fruit:
-    collision_layer = 1  # 与 Saint/黏菌同层互推
+    collision_layer = 1  # 与 Saint、黏菌同层互推
     edible = True
     throwable = False
 
@@ -81,7 +81,7 @@ class Fruit:
         self.surface_friction = SURFACE_FRICTION
         self.buoyancy = BUOYANCY
         self.water_friction = WATER_FRICTION
-        self.water_y = None  # 外部每 tick 注入水面高；None=无水
+        self.water_y = None  # 水面高度，由外部每 tick 写入；None 为无水
         self.room_gravity = 1.0
         self.bites = BITES
         self.state = ItemState.FREE
@@ -92,8 +92,8 @@ class Fruit:
         self.collide_with_objects = True
         self._id = int(seed)
         self._contact_floor = False
-        self._contact_x = 0  # batfly 用，本体不读
-        self._impact_cb = None  # 窗口抖动回调；None=不触发
+        self._contact_x = 0  # 蝙蝠用，这里不读
+        self._impact_cb = None  # 撞击时的窗口抖动回调；None 不抖
 
     @property
     def pos(self):
@@ -109,12 +109,12 @@ class Fruit:
     def set_rotation_to_grabber(self, gx: float, gy: float) -> None:
         dx, dy = _dirvec(self.x, self.y, gx, gy)
         px, py = _perp(dx, dy)
-        # y↓ 取负绝对值，尖朝上
+        # y 取负绝对值，尖朝上
         self.rotation = (px, -abs(py))
 
     def step(self, WL: float, HL: float) -> None:
         if self.state in (ItemState.CARRIED, ItemState.MOUSE):
-            # kinematic：last 由外部存，这里存了会插值硬跳
+            # 位置和 last 都由外部写，这里再存 last 插值会跳
             self._contact_floor = False
             return
 
@@ -154,7 +154,7 @@ class Fruit:
 
 
 class Stalk:
-    """Verlet 软绳；拴住吊着的果子。step 返回 True=已 detach。"""
+    """拴着吊挂果子的 Verlet 软绳；step 返回 True 表示已脱落。"""
 
     __slots__ = ("stuck_pos", "rope_length", "segs", "conn_rad", "displacements", "release_counter", "_n")
 
@@ -208,7 +208,7 @@ class Stalk:
         if rx != 0.0 or ry != 0.0:
             fruit.rotation = (rx, ry)
 
-        # 释放判定：拉锚过远/bites<3/counter==1
+        # 离锚点太远、被咬过或计时到 1 时脱落
         sx, sy = self.stuck_pos
         if (
             not _dist(fruit.x, fruit.y, sx, sy) < self.rope_length * STALK_RELEASE_FACTOR + STALK_RELEASE_PAD

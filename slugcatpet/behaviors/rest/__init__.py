@@ -3,22 +3,37 @@
 from __future__ import annotations
 
 from ... import tuning
-from ...brain.state import EXHAUST
+from ...brain.intent import smooth
+from ...brain.state import EXHAUST, SLEEPY
 from ..base import Behavior
-from .states import LieDown, Sleep, WakeSequence, too_cold_to_sleep
+from .states import (
+    EXHAUST as WHY_EXHAUST,
+    HIBERNATE,
+    NAP,
+    REST_A_BIT,
+    SLEEPS,
+    LieDown,
+    Sleep,
+    WakeSequence,
+    lie_down,
+    lying_for,
+    too_cold_to_sleep,
+)
 
 
-def enter_exhaustion(fsm):
-    """体力告急：中断当前动作、收手，回地面准备趴下。"""
-    fsm._break_active_controllers()
-    fsm._clear_hands()
-    fsm._transition("LieDown" if fsm.body.on_floor() else "Airborne")
+def sleep_now(fsm):
+    """困了睡：食物够就冬眠，不够就打盹。"""
+    b = fsm.body
+    return lie_down(fsm, HIBERNATE if b.food >= b.food_hibernate else NAP)
 
 
 class Rest(Behavior):
     key = "rest"
     title = {"zh": "休息", "en": "Rest"}
-    doc = "体力告急强制趴下；困了睡觉、被叫醒；饱食满了冬眠。"
+    doc = (
+        "累了歇一会，体力告急强制趴下。困了睡：食物够就冬眠（扣食物、回满体力），不够就打个盹；"
+        "困到撑不住就地睡。"
+    )
     essential = True
 
     def mount(self, fsm):
@@ -26,32 +41,55 @@ class Rest(Behavior):
             fsm.add_state(cls)
         b = fsm.body
 
+        def calm():
+            return not fsm.grab.active and not fsm._zerog() and not b.swimming
+
+        def exhausted():
+            return b.energy < tuning.EXHAUST_ENTER_ENERGY or lying_for(fsm) == WHY_EXHAUST
+
         def exhaust(cursor):
             if (
-                not fsm._exhausted
-                and not fsm._hibernating
-                and not fsm.grab.active
+                b.energy < tuning.EXHAUST_ENTER_ENERGY
+                and lying_for(fsm) is None
+                and fsm.state != "Airborne"
+                and calm()
                 and not fsm.ask("cold_urgent")
-                and not fsm._zerog()
-                and b.energy < tuning.EXHAUST_ENTER_ENERGY
                 and not fsm.blocked(EXHAUST)
             ):
-                fsm._exhausted = True
-                enter_exhaustion(fsm)
+                fsm._break_active_controllers()
+                fsm._clear_hands()
+                if b.on_floor():
+                    lie_down(fsm, WHY_EXHAUST)
+                else:
+                    fsm.settle()
+                    if fsm.state == "Airborne":
+                        fsm._states["Airborne"].land_then = lambda: lie_down(fsm, WHY_EXHAUST)  # 落定后再趴下
 
-        def hibernate(cursor):
+        def sleepy(cursor):
             if (
-                not fsm._hibernating
-                and not fsm.grab.active
-                and not fsm._exhausted
-                and not too_cold_to_sleep(fsm)
-                and not fsm._zerog()
-                and b.food >= b.food_max
-                and fsm.state in ("IdleStand", "LieDown")
+                b.sleepiness < 1.0
+                or lying_for(fsm) in SLEEPS
+                or not calm()
+                or not b.on_floor()
+                or too_cold_to_sleep(fsm)
             ):
-                fsm._hibernating = True
-                if fsm.state == "IdleStand":
-                    fsm._transition("LieDown")
+                return
+            if lying_for(fsm) is not None:
+                sleep_now(fsm)  # 趴着歇的时候困到撑不住，就接着睡
+            elif not fsm.blocked(SLEEPY):
+                fsm._break_active_controllers()
+                sleep_now(fsm)
 
+        def want_sleep():
+            if too_cold_to_sleep(fsm):
+                return 0.0
+            return smooth(tuning.SLEEP_WANT_LO, tuning.SLEEP_WANT_HI, b.sleepiness)
+
+        def want_rest():
+            return smooth(tuning.REST_WANT_HI, tuning.REST_WANT_LO, b.energy)
+
+        fsm.provide("exhausted", exhausted)
         fsm.register_rule(exhaust, EXHAUST)
-        fsm.register_rule(hibernate)
+        fsm.register_rule(sleepy, SLEEPY)
+        fsm.intents.add("sleep", want_sleep, lambda: sleep_now(fsm))
+        fsm.intents.add("rest", want_rest, lambda: lie_down(fsm, REST_A_BIT))

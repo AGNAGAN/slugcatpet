@@ -28,7 +28,7 @@ LAUNCH_TIMEOUT = 80
 SNATCH_MIN_ABOVE = 35.0
 SNATCH_MAX_ABOVE = 180.0
 MIN_LAUNCH_DX = 25.0  # 起跳点至少离光标这么远，免得原地直上
-# 携带期异常态即提前释放
+# 带着光标时进入这些状态就放开
 _CARRY_BREAK = frozenset(("Dragged", "Stunned", "Dead", "Swimming"))
 
 
@@ -56,7 +56,7 @@ def _mount(fsm, p):
     snatch.dirty = False
     snatch.plan = None
     snatch.carry = 0
-    snatch.dwell = 0  # 光标在本行为高度带内静止的 tick 数
+    snatch.dwell = 0  # 光标在高度带内静止的 tick 数
 
     def in_band(cursor):
         return cursor is not None and SNATCH_MIN_ABOVE <= fsm.HL - cursor[1] <= SNATCH_MAX_ABOVE
@@ -64,7 +64,7 @@ def _mount(fsm, p):
     def plan(cursor):
         if not in_band(cursor):
             return None
-        # boosted 后空翻双方向选起跳点；无解=光标太高/太远
+        # 两个方向的加力后空翻都试，挑起跳点；没有说明光标太高或太远
         cx, cy = cursor
         stats = fsm.win.cat.stats
         launch_y = fsm.HL - takeoff_c0_h(stats)
@@ -85,7 +85,7 @@ def _mount(fsm, p):
             fsm.state == "IdleStand"
             and fsm.cursor is not None
             and not fsm.grab.active
-            and not fsm._exhausted
+            and not fsm.ask("exhausted")
             and not fsm._zerog()
             and not b.swimming
             and fsm.win.cursor_hijack is None

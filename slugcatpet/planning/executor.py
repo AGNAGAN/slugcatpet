@@ -1,4 +1,4 @@
-"""计划执行器：驱动候选控制器，续跑优先，进展判失败，2+2 放弃进冷却。"""
+"""计划执行器：按候选顺序跑控制器，失败就换方案，失败太多就放弃并进冷却。"""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from .reach import DONE, GIVEUP, HOLD, HOLDING, MODE_STAY, MODE_TOUCH, RUNNING
 
 
 class PlanExecutor:
-    """update() -> "running"|"holding"|"giveup"；mode 决定问 touch 还是 stay 候选。接触/抓取由消费方每 tick 自查并终止。"""
+    """update() 返回 running / holding / giveup；mode 决定用 touch 还是 stay 候选。碰没碰到、抓没抓到由调用方每 tick 自己判断。"""
 
     def __init__(self, pet, planner, goal, mode=MODE_TOUCH):
         self.pet = pet
@@ -15,7 +15,7 @@ class PlanExecutor:
         self.goal = goal
         self.mode = mode
         self._fails = {}  # ability_key -> 失败次数
-        self._exhausted = set()  # 已 2 败踢出的方案
+        self._exhausted = set()  # 失败次数到上限、不再用的方案
         self._schemes_burned = 0
         self._active = None
         self._controller = None
@@ -26,21 +26,26 @@ class PlanExecutor:
         self._snap_wv = None
         self._snap_zerog = None
         self._given_up = False
-        self._holding = False  # 上一 tick 报 HOLD，本 tick 免破裂检查
+        self._holding = False  # 上一 tick 是 HOLD，这一 tick 不查世界变化
 
     def update(self):
         if self._given_up:
             return GIVEUP
         if not self.goal.valid():
-            # 目标消亡：终止但不入冷却
+            # 目标没了：停下，不进冷却
             self._abort_controller()
             self._given_up = True
             return GIVEUP
         if self._controller is not None and not self._holding and self._structural_changed():
-            self._replans += 1
-            if self._replans > tuning.PLAN_REPLAN_BUDGET:
-                return self._give_up()
-            self._abort_controller()
+            adapt = getattr(self._controller, "on_geometry", None)
+            same_gravity = getattr(self.pet.body, "zerog", False) == self._snap_zerog
+            if same_gravity and adapt is not None and adapt():
+                self._resnapshot()
+            else:
+                self._replans += 1
+                if self._replans > tuning.PLAN_REPLAN_BUDGET:
+                    return self._give_up()
+                self._abort_controller()
         if self._controller is None and not self._plan():
             return self._give_up()
 
@@ -50,7 +55,7 @@ class PlanExecutor:
             status = HOLD
         self._holding = status == HOLD
         if status == HOLD:
-            # 驻留中快照保鲜，防世界变更误判破裂
+            # 待着时持续更新快照，免得世界变化被当成计划失效
             self._step_ticks = 0
             self._resnapshot()
             return HOLDING
@@ -120,7 +125,7 @@ class PlanExecutor:
         return True
 
     def _count_fail(self):
-        """记 1 败；2 败踢方案换次优，2+2 触顶放弃（回 False）。"""
+        """记一次失败。一个方案失败 PLAN_FAILS_PER_SCHEME 次就换下一个，用掉 PLAN_SCHEMES_MAX 个就放弃并返回 False。"""
         key = self._active.ability_key
         n = self._fails.get(key, 0) + 1
         self._fails[key] = n

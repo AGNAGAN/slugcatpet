@@ -28,6 +28,7 @@
     "activity": 0.65,
     "stamina": 1.05,
     "sociability": 0.3,
-    "diet": "carnivore"
+    "diet": "carnivore",
+    "meat": 4
   }
 }

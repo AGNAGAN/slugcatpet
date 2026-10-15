@@ -1,4 +1,4 @@
-"""单实例锁：文件锁 + 本地 socket；后启实例通知主实例后自退，崩溃陈旧锁自动回收。"""
+"""单实例锁：文件锁加本地 socket，后启动的实例通知主实例后退出，崩溃留下的旧锁自动回收。"""
 
 from __future__ import annotations
 from PySide6.QtCore import QObject, QLockFile
@@ -25,11 +25,11 @@ class SingleInstance(QObject):
         if not self._try_lock():
             return False
         self._server = QLocalServer(self)
-        QLocalServer.removeServer(self._key)  # 清崩溃残留 server
+        QLocalServer.removeServer(self._key)  # 清掉崩溃残留的 server
         if self._server.listen(self._key):
             self._server.newConnection.connect(self._on_new_connection)
         else:
-            self._server = None  # 监听失败仍算主
+            self._server = None  # 监听失败也算主实例
         return True
 
     def _try_lock(self) -> bool:
@@ -56,7 +56,7 @@ class SingleInstance(QObject):
         if self._server is not None:
             sock = self._server.nextPendingConnection()
             if sock is not None:
-                # lambda 排空，避免直连触发 PySide 告警
+                # 经 lambda 读空，直接连 readAll 会触发 PySide 警告
                 sock.readyRead.connect(lambda s=sock: s.readAll())
                 sock.disconnected.connect(sock.deleteLater)
         if callable(self.on_secondary_attempt):

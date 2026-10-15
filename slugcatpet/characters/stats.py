@@ -1,4 +1,4 @@
-"""SlugStats：每种族的移动因子/体重/饱食/动作冲量数值；DEFAULT_STATS=现值基线。"""
+"""SlugStats：各猫种的身体数值（移动、体重、饱食、动作冲量等），DEFAULT_STATS 为默认值。"""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ class SlugStats:
     weight_fac: float = 1.0
     # 隧道爬速因子留白：无对应玩法，趴行恒 2.5 不分种族
 
-    # 饱食：上限/冬眠阈（整数格）
+    # 饱食上限、冬眠所需食物，单位整格
     max_food: int = 5
     food_hibernate: int = 4
 
@@ -28,33 +28,29 @@ class SlugStats:
 
     roll_rocket_vx_mult: float = 1.0
 
-    # 后空翻 Belly→Flip；backflip_vx 用作 rd*(-backflip_vx)
+    # 滑铲转后空翻的冲量，横向速度为 -backflip_vx × 滑铲方向
     backflip_vx: float = 7.0
     backflip_c0_vy: float = -10.0
     backflip_c1_vy: float = -11.0
 
-    # 滑铲火箭 Belly→Rocket；belly_rocket_vy 用作 -y
+    # 滑铲转火箭跳的冲量，belly_rocket_vy 向上，写入时取负
     belly_rocket_vx: float = 9.0
     belly_rocket_vy: float = 8.5
 
-    # 超级扑跳冲量；普通扑跳 1.5 无差异，写死
+    # 超级扑跳冲量；普通扑跳各猫相同，固定 1.5
     pounce_super: float = 9.0
 
-    # 滑铲前冲正弦峰值；belly_no_kick=省略起始后蹬（仅溪流）
+    # 滑铲前冲的正弦峰值；belly_no_kick 为真时不做起始后蹬（溪流）
     belly_slide_spd: float = 18.1
     # 累倒时的滑铲正弦峰值
     belly_slide_spd_tired: float = 18.1
     belly_no_kick: bool = False
 
-    # 计时<此值按跳键=取消滑铲
+    # 滑铲开始这么多 tick 内按跳取消滑铲
     belly_jump_cancel_window: int = 12
-    # 同向跑 tick 数>此值才可起刹
+    # 同向跑超过这么多 tick 才能急刹
     skid_init_thresh: int = 10
-    # 被顶时跳起让路：持跳 tick、横向让开速度
-    makeway_hop_hold: int = 8
-    makeway_evade_vx: float = 2.8
-
-    # 竖杆跳 beam jump：无持跳续力，y↓取负
+    # 竖杆跳的冲量，没有长按续力；y↓，向上为负
     pole_jump_head_vx: float = 6.0
     pole_jump_head_vy: float = -8.0
     pole_jump_feet_vx: float = 5.0
@@ -66,7 +62,7 @@ class SlugStats:
     swim_boost_cost: float = 0.2
     swim_boost_cd: int = 20
     swim_surface_speed: float = 2.7
-    drown_threshold: float = 1.0 / 3.0  # 缺氧挣扎/自救阈
+    drown_threshold: float = 1.0 / 3.0  # 气量低于此值开始挣扎自救
     swim_force_fac: float = 1.0
     bubble_fac: float = 1.0
     swim_leap_fac: float = 1.0  # 水里错开时上跳的力度
@@ -84,7 +80,7 @@ class SlugStats:
     # 睡着时也睁着眼，只偶尔眨一下
     sleep_eyes_open: bool = False
 
-    # 0-based，HUD 显示 +1；None=用全局 KARMA_MAX
+    # 业力上限，从 0 数，HUD 显示时加 1；None 用全局 KARMA_MAX
     karma_cap: int | None = None
 
     # 投矛力气 0/1/2：0 飞得近、伤害低，2 飞得远、伤害高

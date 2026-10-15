@@ -1,4 +1,4 @@
-"""溪流招牌鳃：6 片鳞锚头 chunk，随视线/体轴扇形摆动。内部 y↑，入口/渲染各转一次 y。"""
+"""鳃的物理：6 片鳞锚在头部，随视线和体轴扇形摆动。内部用 y↑，进出时各翻一次 y。"""
 
 from __future__ import annotations
 import math
@@ -46,17 +46,17 @@ def _inv_lerp(a, b, v):
     return 0.0 if t < 0.0 else (1.0 if t > 1.0 else t)
 
 
-_GILL_RIGOR = 0.5873646  # 拉拽响应/阻尼插值 t
-_GILL_SIZE_FAC = 1.310689  # 长/宽插值共乘
+_GILL_RIGOR = 0.5873646  # 拉拽响应和阻尼的插值系数
+_GILL_SIZE_FAC = 1.310689  # 长、宽插值共用的系数
 _GILL_WIDTH_FAC = 0.1542603
-_GILL_BACK_FAC = 0.1759363  # ×每排后倾率=该排后倾度
+_GILL_BACK_FAC = 0.1759363  # 乘每排的后倾率得该排后倾度
 _GILL_ROW_ANCHOR_Y = (0.03570603, 0.02899241, 0.02639332)  # 每排锚高（占身高比例）
 _GILL_ROW_LEN_FAC = (0.9722961, 0.6056554, 0.7223744)
 _GILL_ROW_BACK_FAC = (0.3644831, 0.9129724, 0.4567381)
 
 
 class _Scale:
-    """单片鳃鳞：显式速度质点 + 定长点约束（内部 y↑）。"""
+    """一片鳃鳞：带速度的质点，和锚点保持定长；内部 y↑。"""
 
     __slots__ = ("x", "y", "lx", "ly", "vx", "vy", "length", "width")
 
@@ -87,13 +87,13 @@ class _Scale:
 
 class Gills:
     def __init__(self, head_x, head_y, hip_x, hip_y, graphic_height):
-        self.flat = 0.0  # 1=鳃锚退回世界水平（趴/睡）
+        self.flat = 0.0  # 1 为鳃锚退回世界水平（趴下、睡着时）
         self.rigor = _GILL_RIGOR
         self.graphic_height = graphic_height
         self.scales: list[_Scale] = []
         self.scales_y: list[float] = []
         self.backwards: list[float] = []
-        hx, hy = head_x, -head_y  # y↓→y↑；初值锚头避免出生闪跳
+        hx, hy = head_x, -head_y  # y↓ 转 y↑；初始放在头上，免得刚出生时闪一下
         for row in range(len(_GILL_ROW_ANCHOR_Y)):
             length = _lerp(2.5, 15.0, _GILL_SIZE_FAC * _GILL_ROW_LEN_FAC[row])
             width = _lerp(0.65, 1.2, _GILL_WIDTH_FAC * _GILL_SIZE_FAC)
@@ -115,7 +115,7 @@ class Gills:
         gap_deg = fan_deg / half
         pull_denom = _lerp(5.0, 1.5, rigor)
         vel_damp = _lerp(1.0, 0.8, rigor)
-        # 用体轴代替世界上向：桌宠会横身/反重力
+        # 用体轴代替世界的上方：猫会横过来或倒过来
         hip_d = math.hypot(hx0 - hipx, hy0 - hipy)
         hipx, hipy = _lerp_vec(hipx, hipy, hx0, hy0 - hip_d, flat_anchor)
         bux, buy = _dir_vec(hipx, hipy, hx0, hy0)
@@ -132,7 +132,7 @@ class Gills:
             fanx, fany = _rotate_vec_deg(bux, buy, base)
             dvx, dvy = _dir_vec(hipx, hipy, posx, posy)
             ax, ay = _lerp_vec(fanx, fany, dvx, dvy, look_amt)
-            if self.scales_y[i] < 0.2:  # 恒真：低位鳞外推
+            if self.scales_y[i] < 0.2:  # 恒为真：低处的鳞往外推
                 factor = (_inv_lerp(0.2, 0.0, self.scales_y[i]) ** 2) * 2.0
                 ax -= outx * factor
                 ay -= outy * factor

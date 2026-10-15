@@ -29,6 +29,13 @@ def _ends(win, kind, lx, ly):
     return ax, ly, end, ly
 
 
+def _static(p, on):
+    """把杆标成静态内容。"""
+    fn = getattr(p, "static_begin" if on else "static_end", None)
+    if fn is not None:
+        fn()
+
+
 def _rod(p, ax, ay, bx, by):
     core = QPen(QColor(*POLE_COLOR))
     core.setWidthF(POLE_RAD * 2.0)
@@ -81,10 +88,15 @@ class PoleKind(ItemKind):
                     pl.ay = new
 
     def draw(self, win, p):
+        _static(p, True)
         p.save()
         for pl in win.poles:
             _rod(p, pl.ax, pl.ay, pl.bx, pl.by)
         p.restore()
+        _static(p, False)
+
+    def static_sig(self, win):
+        return tuple((id(pl), pl.ax, pl.ay, pl.bx, pl.by) for pl in win.poles)
 
     def draw_hint(self, win, p, cx, cy):
         p.save()

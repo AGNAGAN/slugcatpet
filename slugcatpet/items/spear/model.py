@@ -1,4 +1,4 @@
-"""矛物理内核：单点质点，自由 / 投掷 / 扎墙 / 扎身四种形态；y↓。"""
+"""矛的物理：单个质点，分自由、投掷、扎墙、扎身四种形态；y↓。"""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ WEAK_THROW_FRAMES = 18
 WEAK_VX = 0.77
 STRONG_VX = 1.2
 UP_VY = 0.87
-AIM_MAX_DEG = 60.0
+AIM_MAX_DEG = 41.4  # 同拾荒者：目标方向水平分量 ≥ 0.75 才扔
 
 STICK_RANGE = 560.0  # 离出手点多远以内才可能扎墙
 SURE_STICK = 140.0  # 此距离内必扎，外面按概率
@@ -93,6 +93,7 @@ class Spear:
         "vibrate",
         "fling",
         "thrown_by",
+        "spare_cursor",
         "thrown_x",
         "thrown_y",
         "throw_dir",
@@ -106,6 +107,11 @@ class Spear:
         "stuck_ang",
         "pinned_to_wall",
         "impaled",
+        "needle",
+        "feeds",
+        "fade",
+        "idle",
+        "dissolve",
         "geom_dirty",
         "has_been_climbed",
         "collision_layer",
@@ -134,7 +140,7 @@ class Spear:
         self.surface_friction = SURFACE_FRICTION
         self.buoyancy = BUOYANCY
         self.water_friction = WATER_FRICTION
-        self.water_y = None  # 外部每 tick 注入水面高；None=无水
+        self.water_y = None  # 水面高度，由外部每 tick 写入；None 为无水
         self.room_gravity = 1.0
         self.state = ItemState.FREE
         self.mode = FREE
@@ -147,6 +153,7 @@ class Spear:
         self.vibrate = 0
         self.fling = False  # 被光标甩出
         self.thrown_by = None  # 扔出它的猫身体
+        self.spare_cursor = False  # 这次扔出不打光标（打猎）
         self.thrown_x = self.thrown_y = 0.0
         self.throw_dir = (0, 0)
         self.throw_frames = -1
@@ -159,6 +166,11 @@ class Spear:
         self.stuck_ang = 0.0  # 扎身：矛相对身体轴的角度
         self.pinned_to_wall = None  # 扎身且把这一节钉在墙上：钉点
         self.impaled = []  # 串在矛上的小东西 [(物体, 槽位)]
+        self.needle = -1  # 从身上长出的骨针：花纹 0..2；-1 为普通矛
+        self.feeds = None  # 还连着长出它的身体时为该身体，扎中活物给它进食
+        self.fade = 0  # 断开连接后褪色的剩余帧
+        self.idle = 0  # 断开后在地上躺了多久
+        self.dissolve = -1  # 碎掉消失的进度帧；-1 没在碎
         self.geom_dirty = False  # 扎进 / 拔出墙，路径前提变了
         self.has_been_climbed = False
         self.collision_layer = 2  # 自由态与石头同层互推，投掷 / 扎住时为 0
@@ -259,6 +271,12 @@ class Spear:
         t = math.radians(best)
         return (math.cos(t) * dir_x, -math.sin(t))
 
+    def flight_speed(self, body):
+        """body 横扔出去的速度（算提前量用）。"""
+        skill = body.stats.throw_skill
+        kx = WEAK_VX if skill == 0 else (STRONG_VX if skill == 2 else 1.0)
+        return THROW_SPEED * kx * (0.5 if body.exhausted else 1.0)
+
     def on_thrown(self, throw) -> None:
         """按投掷方向与力气定初速、投掷时长与伤害；throw.aim 给定时朝该方向出手，矛身仍取水平。"""
         by = throw.by
@@ -292,6 +310,7 @@ class Spear:
         self.mode = THROWN
         self.collision_layer = 0
         self.thrown_by = by
+        self.spare_cursor = getattr(throw, "spare_cursor", False)
         self.thrown_x, self.thrown_y = self.x, self.y
         self.throw_dir = (dx, dy)
         self.trace_from = (c0.x - dx * 10.0, c0.y - dy * 10.0)
@@ -438,6 +457,11 @@ class Spear:
         """矛尖位置。"""
         k = HALF_LEN * (1.0 - TIP_PIVOT) * 2.0 if self.pivot_at_tip() else HALF_LEN
         return self.x + self.rot[0] * k, self.y + self.rot[1] * k
+
+    def rear(self):
+        """矛尾位置。"""
+        k = HALF_LEN * 2.0 * TIP_PIVOT if self.pivot_at_tip() else HALF_LEN
+        return self.x - self.rot[0] * k, self.y - self.rot[1] * k
 
     def pivot_at_tip(self) -> bool:
         return self.mode in (THROWN, BODY)

@@ -5,6 +5,8 @@ import math
 
 from ... import tuning
 from ...planning import GIVEUP, PlanExecutor, obj_goal
+from ...planning.climbmap import locate, map_for
+from ...planning.climbmoves import hold_tick
 from ...characters.personality import NEUTRAL
 from ...core.vecmath import _dist
 from ...items.base import EDIBLE
@@ -50,7 +52,7 @@ def fetch_candidates(planner, edibles, traits=NEUTRAL):
 
 
 def fetch_ready(planner, edibles, traits=NEUTRAL):
-    """触发闸用：早退版 fetch_candidates，仅返回可达列表。"""
+    """fetch_candidates 的简化版，只返回够得着的东西，给触发判断用。"""
     out = []
     for f in edibles:
         if f.state not in _EDIBLE_STATES:
@@ -88,8 +90,9 @@ def _fetch_assist(pet):
 class FruitFetcher:
     """keep=True 时拿到落地就收工（留着待会儿吃），否则拿到就吃。"""
 
-    def __init__(self, win, planner, traits=NEUTRAL, keep=False, hands=None):
+    def __init__(self, win, planner, traits=NEUTRAL, keep=False, hands=None, state="FetchFruit"):
         self.win = win
+        self.state = state  # 占用登记在哪个状态名下
         self.body = win.body
         self.planner = planner
         self.traits = traits
@@ -102,6 +105,7 @@ class FruitFetcher:
         self.timer = 0
         self.grab_side = "r"
         self.chew = Chew()
+        self._hold = None  # 在杆上吃时抓着的 (杆, 姿势)
         self._executor = None
         self._giveup_pending = False
         self._goal = None
@@ -142,6 +146,7 @@ class FruitFetcher:
     def release(self):
         self._snatch.abort()
         self._drop_executor()
+        self.chew.stop(self.body)
         self.social.release(self.win, "food")
 
     def _free(self):
@@ -149,7 +154,10 @@ class FruitFetcher:
         return [
             f
             for f in self.win.items_affording(EDIBLE)
-            if self.social.free_for(self.win, f) and (hands is None or not hands.forbidden(f))
+            if self.social.free_for(self.win, f)
+            and (hands is None or not hands.forbidden(f))
+            and not self.win.rain.keeps_out(f.x, f.y)
+            and not (self.keep and getattr(f, "carcass", False))
         ]
 
     def start_with(self, f):
@@ -172,7 +180,7 @@ class FruitFetcher:
             self.giveup = self._giveup_pending
             return True
         self.target, goal, _ = cands[0]
-        self.social.claim(self.win, "food", self.target, "FetchFruit")
+        self.social.claim(self.win, "food", self.target, self.state)
         self.grab_side = self._pick_grab_side()
         self._giveup_pending = False
         self._goal = goal
@@ -196,7 +204,7 @@ class FruitFetcher:
             return False
         self._snatch.update(self._goal)
         if self._snatch.holding():
-            # 持有补救舌头时暂停 executor，防裸 retract 撕舌
+            # 补救的舌头还粘着时不推进执行器，免得它直接收舌
             return False
         if self._executor.update() == GIVEUP:
             self._snatch.abort()
@@ -211,7 +219,7 @@ class FruitFetcher:
         return self.target if self.body.hand_of(self.target) is not None else None
 
     def _phase_grabbed(self):
-        """抓到后停一 tick 再叼着落地。"""
+        """抓到后停一 tick 再开吃（在空中就先落地）。"""
         self.phase = "carry_fall"
         self.timer = 0
         return False
@@ -221,22 +229,42 @@ class FruitFetcher:
         if f is None:
             self.phase = "select"
             return False
-        # 悬空卡死兜底超时
+        # 挂在果柄上悬空太久就扯断果柄
         if self.timer > CARRY_FALL_TIMEOUT and f.stalk is not None:
             f.stalk = None
-        if self.body.on_floor():
+        perch = self._perch()
+        if perch is not None:
+            hold_tick(self.body, *perch)
+        if self.body.on_floor() or perch is not None:
             if self.keep:
                 return True
+            self._hold = perch
             self.phase = "eat"
             self.timer = 0
             self.chew.reset()
         return False
+
+    def _perch(self):
+        """在杆上：(杆, 姿势)；不在杆上 None。"""
+        if not self.body.on_pole:
+            return None
+        cm = map_for(self.win)
+        here = locate(cm, self.win)
+        if here is None or here[0] == "F":
+            return None
+        return cm.bars[here[1]], here[0]
 
     def _phase_eat(self):
         f = self.held_target()
         if f is None:
             self.phase = "select"
             return False
+        b = self.body
+        if self._hold is not None and b.on_pole:
+            hold_tick(b, *self._hold)
+        else:
+            b.stop_walk()
+            b.move_dir = 0
         if self.chew.step(self.win, f):
             if self.body.food >= self.body.food_max:
                 return True

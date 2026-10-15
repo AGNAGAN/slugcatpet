@@ -60,7 +60,9 @@ class DriftForage:
         fsm, b = self.fsm, self.fsm.body
         if b.food >= b.food_max:
             return None
-        return next((o for o in b.held_items() if fsm.win.can_eat(o)), None)
+        return next(
+            (o for o in b.held_items() if fsm.win.can_eat(o) and not getattr(o, "carcass", False)), None
+        )
 
     def _chew(self, f) -> bool:
         """啃一 tick；东西已不在手上的状态就松手，返回 False。"""
@@ -78,7 +80,7 @@ class DriftForage:
             return None
         best, bd = None, max_d
         for f in fsm.items(EDIBLE):
-            if f.state not in ("free", "hanging") or not fsm.win.can_eat(f):
+            if f.state not in ("free", "hanging") or not fsm.win.can_eat(f) or getattr(f, "carcass", False):
                 continue
             if ready_only and not getattr(f, "fetch_ready", True):
                 continue

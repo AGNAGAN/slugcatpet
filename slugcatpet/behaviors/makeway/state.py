@@ -1,11 +1,18 @@
-"""内置行为状态：被挡让路。"""
+"""让路状态：让别的猫过去。"""
 
 from __future__ import annotations
 
-from ... import tuning
-from .blocking import blocks_path
-from ...brain.skills.motor import WALL_MARGIN
-from ...brain.state import T_ACTIVITY, State, LIGHT
+from ...brain.social.traffic import CONTACT
+from ...brain.state import LIGHT, T_ACTIVITY, State
+from ...planning.climbmap import locate, map_for
+from ...planning.climbmoves import PullUpMotion, SwingUnderMotion, climb_tick, release, tip_up_tick
+
+LIE_MIN = 36  # 趴下至少趴这么久
+LIE_HASTE = 2.0  # 让路时趴下比平时快这么多倍
+TIMEOUT = 300
+STEP_OFF_H = 34.0  # 竖杆上臀离地这么近就下到地上
+CALM = 15  # 竖杆上对方这么久不再逼近才算让完
+CROSS_VX = 0.5  # 对方横向速度超过此值才算正从身上跨过
 
 
 class MakeWay(State):
@@ -15,85 +22,95 @@ class MakeWay(State):
 
     def __init__(self, fsm):
         super().__init__(fsm)
-        self._away = 0.0  # 跳起时横向让开方向
-        self._face = 0  # 趴下时的朝向（顺对方前进方向）
-        self._hop = False
-        self._lie_min = 0
-        self._look = None  # 最近一次看向对方的点，对方短暂丢失时沿用
+        self.kind = None
+        self.by = None  # 要过去的那只
+        self.dir = 0  # 它在通道上的去向
+        self.bar = None
+        self.motion = None
+        self.calm = 0
 
     def enter(self):
         fsm = self.fsm
         b = fsm.body
-        b.stop_walk()
-        cr = fsm.social.crowd(fsm.win)
-        ob = getattr(cr.yield_to, "body", None)
-        away = 0.0
-        if ob is not None and ob.walk_target_x is not None:
-            away = -1.0 if ob.walk_target_x >= ob.chunk1.x else 1.0
-        self._away = away
-        self._face = 0
-        self._lie_min = 0
-        self._look = None
-        if self._crowded() or self._near_edge():
-            self._hop = True
-        elif fsm.social.count() > tuning.MAKEWAY_CROWD_LIE_N:
-            self._hop = fsm.rng.random() < tuning.MAKEWAY_CROWD_HOP_PROB
-        else:
-            self._hop = fsm.rng.random() >= 0.5
-        if self._hop:
-            b.set_posture(True)
-            if away:
-                evx = b.stats.makeway_evade_vx
-                b.chunk0.vx += away * evx
-                b.chunk1.vx += away * evx
-            b.request_jump("stand", hold_ticks=b.stats.makeway_hop_hold)
-        else:
-            self._away = 0.0
-            self._face = int(-away)
-            self._lie_min = tuning.MAKEWAY_LIE_MIN_TICKS
+        o = fsm.social.order(fsm.win)
+        self.kind, self.by, self.dir = o.kind, o.by, o.dir
+        self.bar = self.motion = None
+        self.calm = 0
+        if self.kind == "lie":
+            b.stop_walk()
             b.set_posture(False)
-            if self._face:
-                b.facing = self._face
-        cr.shoved = 0
-        cr.yield_cd = tuning.MAKEWAY_COOLDOWN
+            b.lie_haste = LIE_HASTE
+            return
+        if self.kind == "stop":
+            self._done()
+            return
+        cm = map_for(fsm.win)
+        here = locate(cm, fsm.win)
+        if here is None or here[0] not in ("H", "S", "V") or (self.kind == "clear") != (here[0] == "V"):
+            self.kind = None  # 已经不在下指令时的那条通道上
+            return
+        self.bar = cm.bars[here[1]]
+        if self.kind == "swap":
+            if here[0] == "H":
+                self.motion = PullUpMotion(b, self.bar, b.facing or 1)
+            else:
+                self.motion = SwingUnderMotion(b, self.bar)
 
     def tick(self, cursor, disturbed):
         fsm = self.fsm
-        b = fsm.body
-        ob = getattr(fsm.social.crowd(fsm.win).yield_to, "body", None)
-        if ob is not None:
-            self._look = (ob.chunk0.x, ob.chunk0.y)
-        fsm.gfx.look_at = self._look
-        if self._away:
-            b.move_dir = 1 if self._away > 0 else -1
-            tgt = self._away * b.stats.makeway_evade_vx
-            b.chunk0.vx += (tgt - b.chunk0.vx) * 0.3
-            b.chunk1.vx += (tgt - b.chunk1.vx) * 0.3
-        if not self._hop:
-            b.move_dir = 0
-            if self._face:
-                b.facing = self._face
-        # 退出：让开了 / 超时 / 顶人者走了；趴下的至少趴稳再起
-        if (
-            fsm.timer >= tuning.MAKEWAY_TIMEOUT
-            or ob is None
-            or not blocks_path(b.chunk1.x, ob.chunk1.x, ob.walk_target_x, tuning.SHOVE_CONTACT_DIST)
-        ):
-            if fsm.timer < self._lie_min:
-                return
-            fsm._transition("IdleStand")
+        o = fsm.social.order(fsm.win)
+        if o is not None:
+            self.by, self.dir = o.by, o.dir
+        ob = self.by.body
+        fsm.gfx.look_at = (ob.chunk0.x, ob.chunk0.y)
+        if self.kind is None or fsm.timer > TIMEOUT:
+            self._done()
+        elif self.kind == "lie":
+            self._lie(o, ob)
+        elif self.kind == "swap":
+            if self.motion.step() is not False:
+                self._done()
+        else:
+            self._clear(o)
 
-    def _crowded(self):
+    def _lie(self, o, ob):
+        """趴着等对方走过去；对方正从身上跨过时不起来。"""
         b = self.fsm.body
-        n = 0
-        for o in self.fsm.social.others(self.fsm.win):
-            ob = o.body
-            if ob.on_floor() and abs(ob.chunk1.x - b.chunk1.x) <= tuning.MAKEWAY_CROWD_DIST:
-                n += 1
-        return n >= tuning.MAKEWAY_CROWD_N
+        b.move_dir = 0
+        if self.dir:
+            b.facing = self.dir
+        crossing = not ob.on_pole and abs(ob.chunk1.vx) > CROSS_VX
+        over = crossing and abs(ob.chunk1.x - b.chunk1.x) < CONTACT["F"]
+        if o is None and not over and self.fsm.timer >= LIE_MIN:
+            self._done()
 
-    def _near_edge(self):
+    def _clear(self, o):
+        """顺着竖杆往对方去的方向挪：往上到顶杆尖空着就站上去，往下到底就下到地上。"""
         fsm = self.fsm
-        m = tuning.MAKEWAY_EDGE_MARGIN
-        x = fsm.body.chunk1.x
-        return x <= WALL_MARGIN + m or x >= fsm.WL - WALL_MARGIN - m
+        b = fsm.body
+        if b.animation == "GetUpToBeamTip" or (
+            self.dir < 0 and b.chunk0.y <= self.bar.lo + 1.0 and fsm.social.traffic.tip_free(fsm.win)
+        ):
+            if tip_up_tick(b, self.bar) is not False:
+                self._done()
+            return
+        if o is None:
+            climb_tick(b, self.bar, 0)
+            self.calm += 1
+            if self.calm > CALM:
+                self._done()
+            return
+        self.calm = 0
+        if self.dir > 0 and fsm.HL - b.chunk1.y < STEP_OFF_H:
+            release(b)
+            fsm.settle()
+            return
+        climb_tick(b, self.bar, -self.dir)
+
+    def _done(self):
+        self.fsm.settle()
+
+    def brk(self):
+        b = self.fsm.body
+        if b.on_pole:
+            release(b)

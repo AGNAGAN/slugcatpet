@@ -1,4 +1,4 @@
-"""Saint 舌头：弹道舌尖 + 单向弹簧拉上身 chunk。"""
+"""舌头器官：舌尖按弹道飞出，粘住后用单向弹簧拉上半身。"""
 
 from __future__ import annotations
 import math
@@ -11,12 +11,12 @@ SHOOTING = "shooting"
 ATTACHED = "attached"
 RETRACTING = "retracting"
 
-ZEROG_THRESH = 0.5  # 判零重力
+ZEROG_THRESH = 0.5  # 重力低于此值按失重处理
 ZEROG_VEL_CLAMP = 4.0 * K_VEL
 
 
 def _zerog_velo(base_v, inc):
-    """零重力目标速度：朝输入方向加 inc，各轴钳 ±4。"""
+    """失重时叠加一次推进速度，单轴不超过 ZEROG_VEL_CLAMP。"""
     v = base_v + inc
     if base_v < 0.0:
         return v if v > -ZEROG_VEL_CLAMP else -ZEROG_VEL_CLAMP
@@ -24,7 +24,7 @@ def _zerog_velo(base_v, inc):
 
 
 class Tongue:
-    """Saint 舌头：update 须在 body 物理前调用。"""
+    """舌头器官，update 须在身体物理之前调用。"""
 
     def __init__(self, mouth_x: float, mouth_y: float, n: int, widths: list[float]):
         self.n = n
@@ -38,7 +38,7 @@ class Tongue:
         self.requested = 0.0
         self.anchor = None
         self.attached_obj = None
-        self._target_obj = None  # 飞行中待粘目标，命中转 attached_obj
+        self._target_obj = None  # 飞行中要粘的物体，命中后成为 attached_obj
         self.attached_time = 0
         self.room_gravity = 1.0
         self.body = None
@@ -48,7 +48,7 @@ class Tongue:
         self.base_ideal = 150.0
         self.ideal = self.base_ideal
         self.total = 200.0
-        self.reel_rate = 0.0  # 0=纯弹性门控，非0=手动收绳速率
+        self.reel_rate = 0.0  # 收绳速度，0 时只随弹性慢慢收
 
     def reset_config(self) -> None:
         self.shoot_v = 70.0 * K_VEL
@@ -122,7 +122,7 @@ class Tongue:
     def _zerog_propel(self, ux, uy):
         if self.room_gravity >= ZEROG_THRESH or self.body is None:
             return
-        # 连续瞄准分量，非 sign；逐次累积至封顶
+        # 按瞄准方向的连续分量推，多次射舌累积到上限
         for c in (self.body.chunk0, self.body.chunk1):
             c.vx = _zerog_velo(c.vx, ux * K_VEL)
             c.vy = _zerog_velo(c.vy, uy * K_VEL)
@@ -132,7 +132,7 @@ class Tongue:
             self.mode = RETRACTING
 
     def update(self, mouth_x, mouth_y, head) -> None:
-        """在 body 物理之前调；对上身 chunk 施单向弹簧力。"""
+        """推进一 tick，对上半身施单向弹簧力；须在身体物理之前调用。"""
         self.mouth = (mouth_x, mouth_y)
         mx, my = mouth_x, mouth_y
 
@@ -155,7 +155,7 @@ class Tongue:
                         self.anchor = (ax, ay)
                     self.x, self.y = ax, ay
                     self.vx = self.vy = 0.0
-                    # 与 _elasticity 基准保持一致
+                    # 和 _elasticity 一样从头部量起
                     self.requested = math.hypot(self.x - head.x, self.y - head.y)
                     self.elastic = 1.0
                     self.travel = math.hypot(self.x - mx, self.y - my)
@@ -167,7 +167,7 @@ class Tongue:
         elif self.mode == ATTACHED:
             self.attached_time += 1
             if self.room_gravity < ZEROG_THRESH and self.attached_time < 3:
-                self.mode = RETRACTING  # 零重力附着不稳定
+                self.mode = RETRACTING  # 失重时粘不稳，马上收回
                 return
             o = self.attached_obj
             if o is not None and getattr(o, "state", None) not in (ItemState.HANGING, ItemState.FREE):
@@ -178,14 +178,14 @@ class Tongue:
                 self.x, self.y = self.anchor
                 self.travel = math.hypot(self.x - mx, self.y - my)
                 self.elastic = max(0.0, self.elastic - 0.05 * K_VEL)
-                gated = (1.0 - self.elastic) * 2.0 * K_VEL  # 门控速率，命中瞬间≈0
+                gated = (1.0 - self.elastic) * 2.0 * K_VEL  # 随弹性衰减加快，刚粘住时约为 0
                 if self.requested < self.ideal:
                     self.requested = min(self.requested + gated, self.ideal)
                 elif self.requested > self.ideal:
                     reel = max(gated, self.reel_rate * K_VEL)
                     self.requested = max(self.requested - reel, self.ideal)
                 self._elasticity(head)
-                if self.travel > self.total * 2.5:  # 超长保险丝
+                if self.travel > self.total * 2.5:  # 拉得过长就收回
                     self.mode = RETRACTING
 
         elif self.mode == RETRACTING:
@@ -196,7 +196,7 @@ class Tongue:
             self.y = my + uy * self.travel
             if self.travel <= 1.0:
                 self.mode = IDLE
-                self.owner = None  # 释权防死锁
+                self.owner = None  # 收回后释放占用
                 self.anchor = None
                 self.attached_obj = None
                 self._target_obj = None
@@ -232,7 +232,7 @@ class Tongue:
             head.y += uy * pt
             head.vx += ux * vt
             head.vy += uy * vt
-        else:  # Verlet Point：经 ox 注入冲量
+        else:  # Verlet 点：通过 ox 加冲量
             head.x += ux * pt
             head.y += uy * pt
             head.ox += ux * (pt - vt)

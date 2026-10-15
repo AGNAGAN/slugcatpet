@@ -84,7 +84,7 @@ def build_skin_section(settings, v):
 
 
 class AppearanceDialog(CardDialog):
-    """改动即时生效，完成=保留，取消=还原。"""
+    """外观弹窗：改动即时生效，完成保留，取消还原。"""
 
     def __init__(self, pet, parent=None):
         super().__init__(t("look_button"), parent, width=DIALOG_W)
@@ -240,7 +240,7 @@ class AppearanceDialog(CardDialog):
         g.setColumnStretch(1, 1)
 
     def _shown(self, grp):
-        """部位行显示的来源：皮肤没有这个部位就显示原皮，缺帧或被拒的仍显示该皮肤以便提示。"""
+        """部位行显示的来源：皮肤没有这个部位就显示原皮，缺帧或被拒的仍显示该皮肤，好给出提示。"""
         sid = self._look.source(grp)
         p = skins.get(sid)
         if p is not None and grp not in p.groups and grp not in p.missing and grp not in p.rejected:
@@ -709,7 +709,7 @@ class PackPicker(QFrame):
 
 
 class TailPopup(QFrame):
-    """尾巴形状：拖动即改为自定形状。"""
+    """尾巴形状弹窗，一拖滑条就用自定形状。"""
 
     def __init__(self, dlg):
         super().__init__(dlg, Qt.WindowType.Popup)

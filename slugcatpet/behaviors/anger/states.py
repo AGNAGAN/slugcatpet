@@ -1,4 +1,4 @@
-"""内置行为状态：被砸后生气 / 扔武器。"""
+"""生气相关状态：闲逛、盯着光标、扔武器、揣石头。"""
 
 from __future__ import annotations
 
@@ -132,7 +132,7 @@ class ArmStone(State):
 
 
 def _release_thrower(fsm, thrower):
-    """收尾：没扔出去的石头留在手里当武器。"""
+    """收尾：没扔出去的武器留在手里。"""
     if thrower is not None:
         fsm.hands.adopt(thrower.target, WEAPON)
     fsm.body.stop_walk()

@@ -1,4 +1,4 @@
-"""操控输入层：InputPackage（一帧操控输入）+ InputBuffer（10 帧历史环）。"""
+"""操控输入：InputPackage 是一帧输入，InputBuffer 存最近 10 帧。"""
 
 from __future__ import annotations
 from dataclasses import dataclass
@@ -16,14 +16,14 @@ class InputPackage:
     mp: bool = False  # 占位
     spec: bool = False  # 占位
     crouchToggle: bool = False  # 占位
-    downDiagonal: int = 0  # 下斜横向符号，派生自 x,y
+    downDiagonal: int = 0  # 按下时的横向分量，由 x、y 算出
 
     def __post_init__(self):
         self.downDiagonal = self.x if (self.y < 0 and self.x != 0) else 0
 
 
 class InputBuffer:
-    """输入历史环，push 后 [0]=当前。"""
+    """输入历史，[0] 是最新一帧。"""
 
     def __init__(self, length: int = BUFFER_LEN):
         self._len = int(length)
@@ -36,7 +36,7 @@ class InputBuffer:
     def __getitem__(self, i: int) -> InputPackage:
         if 0 <= i < len(self._frames):
             return self._frames[i]
-        return InputPackage()  # 越界返回全零，不抛
+        return InputPackage()  # 越界返回空输入
 
     def __len__(self) -> int:
         return self._len

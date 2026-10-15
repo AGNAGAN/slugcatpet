@@ -1,4 +1,4 @@
-"""光标劫持：落体或被弹开→锁定，可替换系统光标为"忙"样式。"""
+"""光标劫持：让光标下落或被弹开后锁住一段时间，可把系统光标换成「忙」样式。"""
 
 from __future__ import annotations
 import sys
@@ -11,9 +11,9 @@ _IS_WIN = sys.platform == "win32"
 T_FALL_GRAV = 1.6
 T_CURSOR_LOCK = 200
 WATCHDOG_MAX = 400
-K_KNOCK = 0.88  # 被弹开：每 tick 速度衰减
+K_KNOCK = 0.88  # 被弹开时每 tick 的速度衰减
 K_KNOCK_GRAV = 0.5
-K_KNOCK_LAND = 6  # 速度低于此即停下锁定
+K_KNOCK_LAND = 6  # 速度低于此值就停下锁住
 
 _ACTIVE = []
 
@@ -55,7 +55,7 @@ if _IS_WIN:
     _user32.SystemParametersInfoW.argtypes = (wintypes.UINT, wintypes.UINT, ctypes.c_void_p, wintypes.UINT)
 
     def _set_busy_cursor():
-        """替换系统箭头/文本/链接光标为"忙"样式；需 CopyIcon 因 SetSystemCursor 取走所有权。"""
+        """把系统的箭头、文本、链接光标换成「忙」样式；SetSystemCursor 会取走句柄，所以每次先 CopyIcon。"""
         src = _user32.LoadCursorW(None, _IDC_APPSTARTING)
         if not src:
             return False
@@ -94,7 +94,7 @@ def restore_cursors():
 
 
 class CursorHijack:
-    """光标劫持。坐标 = Win32 物理像素（屏幕全局，已由 window 按 dpr 换算）。"""
+    """一次光标劫持；坐标是全屏幕的 Win32 物理像素，由 window 按 dpr 换算好。"""
 
     def __init__(
         self,
@@ -132,7 +132,7 @@ class CursorHijack:
         self.lock_t = 0
         self.watchdog = 0
         self.watchdog_max = int(watchdog_max)
-        self.use_setpos = False  # ClipCursor 失败降级标志
+        self.use_setpos = False  # ClipCursor 失败后改用 SetCursorPos
         self.replace_cursor = bool(replace_cursor)
         self.active = True
         _ACTIVE.append(self)
@@ -156,7 +156,7 @@ class CursorHijack:
             self.vy = self.vy * K_KNOCK + K_KNOCK_GRAV
             self.x += self.vx
             self.y += self.vy
-            self.use_setpos = True  # ClipCursor 看不出位移，主动推光标
+            self.use_setpos = True  # ClipCursor 体现不出位移，直接移光标
             if math.hypot(self.vx, self.vy) < K_KNOCK_LAND:
                 self.phase = "lock"
                 self.lock_t = 0
@@ -185,12 +185,12 @@ class CursorHijack:
         if not self.use_setpos:
             ok = False
             try:
-                ok = _clip(x, y)  # 失败则降级 SetCursorPos
+                ok = _clip(x, y)
             except Exception:
                 ok = False
             if not ok:
                 try:
-                    _unclip()  # 先释放旧 clip
+                    _unclip()
                 except Exception:
                     pass
                 self.use_setpos = True

@@ -1,8 +1,9 @@
-"""内置行为状态：取果 / 顺手捡个果子留着。"""
+"""取果、顺手捡个果子留着的状态。"""
 
 from __future__ import annotations
 
 from ...brain.hands import EAT_LATER
+from ...planning.climbmoves import release
 from ...brain.state import T_ACTIVITY, T_NEED, State, LIGHT
 
 T_FETCH_COOLDOWN = 200  # 取果失败后的冷却（tick）
@@ -42,33 +43,40 @@ class FetchFruit(State):
         self._keep = self.keep or (
             not eat_saved and not fsm.hands.hungry_urgent() and fsm.rng.random() < self.carry_chance
         )
-        self.fetcher = FruitFetcher(fsm.win, fsm.planner, fsm.traits, keep=self._keep, hands=fsm.hands)
+        self.fetcher = FruitFetcher(
+            fsm.win, fsm.planner, fsm.traits, keep=self._keep, hands=fsm.hands, state=self.name
+        )
         if eat_saved:
             self.fetcher.start_with(self.saved_food())
 
     def tick(self, cursor, disturbed):
         fsm = self.fsm
         if self.fetcher is None:
-            fsm._transition("IdleStand")
+            fsm.settle()
             return
         done = self.fetcher.update()
         if self.fetcher.giveup:
             fsm.release_organs()
             self._fetch_release()
             self.cooldown = T_FETCH_COOLDOWN
-            fsm._transition("IdleStand")
+            fsm.settle()
         elif done:
             fsm.release_organs()
             self._fetch_release()
             nxt = None
             if not self._keep and fsm.body.food >= fsm.body.food_max:
                 nxt = fsm.ask("after_meal", None)
-            fsm._transition(nxt or "IdleStand")
+            if nxt is not None:
+                fsm._transition(nxt)
+            else:
+                fsm.settle()
 
     def brk(self):
         fsm = self.fsm
         fsm.release_organs()
         self._fetch_release()
+        if fsm.body.on_pole:
+            release(fsm.body)  # 被打断：接下来的状态不在杆上做
 
     def _fetch_release(self):
         """收尾：已经拿到手的留着待会儿吃；本来就要揣着的，等一阵再吃。"""

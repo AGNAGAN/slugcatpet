@@ -42,8 +42,6 @@
     "belly_no_kick": true,
     "belly_jump_cancel_window": 6,
     "skid_init_thresh": 12,
-    "makeway_hop_hold": 3,
-    "makeway_evade_vx": 1.4,
     "pole_jump_head_vx": 9.0,
     "pole_jump_head_vy": -9.0,
     "pole_jump_feet_vx": 7.0,
@@ -61,7 +59,6 @@
     "sociability": 0.45,
     "swim_zeal": 1.0,
     "toy_pref": {
-      "pole_climb": 1.2,
       "hpole": 1.2,
       "riv_flip": 1.4
     }

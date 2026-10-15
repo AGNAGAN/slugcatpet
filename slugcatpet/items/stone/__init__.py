@@ -1,4 +1,4 @@
-"""石头：猫生气时捡起来扔；被扔中的猫会晕，光标会被弹开。"""
+"""石头：猫生气或打猎时捡起来扔；被扔中的猫会晕，光标会被弹开，扫过的活物由它自己定死还是晕。"""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from PySide6.QtGui import QColor, QPolygonF
 
 from ...core.units import clampf, lerp
 from ...rendering.primitives import draw_stone, draw_stone_trail
-from ..base import CARRYABLE, THROWABLE, ItemKind
+from ..base import CARRYABLE, HIT_STONE, THROWABLE, ItemKind, creatures
 from ..state import ItemState
 from .model import Stone
 
@@ -26,6 +26,9 @@ STONE_TRAIL_ALPHA = 90
 CURSOR_STUN_PAD = 8.0
 CURSOR_STUN_LOCK = 80
 CURSOR_KNOCK_SPEED = 26.0  # 光标被石头砸中后的弹开初速（逻辑 px/tick）
+SMALL_PUSH = 0.5
+BIG_PUSH_MAX = 10.0  # 砸中大活物时被打中那一节最多加这么多速度
+STOP_MASS = 0.6  # 一路穿过的小东西总质量超过此值就停下
 
 _ICON_FACET = QColor(70, 76, 66, 160)
 
@@ -61,6 +64,7 @@ class StoneKind(ItemKind):
     def after_step(self, win):
         _hit_pets(win)
         _hit_cursor(win)
+        _hit_small(win)
 
     def draw(self, win, p):
         self._draw(win, p, False)
@@ -156,7 +160,7 @@ def _hit_cursor(win):
         return
     cx, cy = cur
     for s in win.stones:
-        if not s.thrown_by_cat or s.state != ItemState.FREE:
+        if not s.thrown_by_cat or s.spare_cursor or s.state != ItemState.FREE:
             continue
         # 按本 tick 的位移线段判命中，高速石头不会一帧穿过光标
         ax, ay = s.last_x, s.last_y
@@ -170,6 +174,60 @@ def _hit_cursor(win):
             s.deflect(win._stun_rng)
             s.thrown_by_cat = False
             break
+
+
+def _seg_hit(ax, ay, bx, by, cx, cy, r):
+    dx, dy = bx - ax, by - ay
+    l2 = dx * dx + dy * dy
+    u = clampf(((cx - ax) * dx + (cy - ay) * dy) / l2, 0.0, 1.0) if l2 > 1e-9 else 1.0
+    return math.hypot(cx - (ax + dx * u), cy - (ay + dy * u)) < r
+
+
+def _first_chunk(s, f):
+    """石头这一 tick 的路径最先擦到活物的哪一节；没碰到返回 None。"""
+    best, bd = None, None
+    for c in getattr(f, "chunks", (f,)):
+        if _seg_hit(s.last_x, s.last_y, s.x, s.y, c.x, c.y, s.rad + c.rad):
+            d = math.hypot(c.x - s.last_x, c.y - s.last_y)
+            if bd is None or d < bd:
+                best, bd = c, d
+    return best
+
+
+def _hit_small(win):
+    """猫扔出的石头扫过活物：推一下，由活物自己定死还是晕；路上的总质量够大才停下。"""
+    for s in win.stones:
+        if not s.thrown_by_cat or s.state != ItemState.FREE:
+            continue
+        load = 0.0
+        for f in creatures(win):
+            if f.dead or f.state != ItemState.FREE or f.held_by_hand is not None:
+                continue
+            hit = _first_chunk(s, f)
+            if hit is None:
+                continue
+            if getattr(f, "stops_weapons", False):
+                k = s.mass / hit.mass
+                px, py = s.vx * k, s.vy * k
+                m = math.hypot(px, py)
+                if m > BIG_PUSH_MAX:
+                    px, py = px * BIG_PUSH_MAX / m, py * BIG_PUSH_MAX / m
+                hit.vx += px
+                hit.vy += py
+            else:
+                f.vx += s.vx * SMALL_PUSH
+                f.vy += s.vy * SMALL_PUSH
+            f.struck(HIT_STONE, win._stun_rng)
+            if getattr(f, "stops_weapons", False):
+                s.deflect(win._stun_rng)
+                s.thrown_by_cat = False
+                break
+            load += f.mass
+            if load > STOP_MASS:
+                s.vx *= 0.5
+                s.vy *= 0.5
+                s.thrown_by_cat = False
+                break
 
 
 KIND = StoneKind()

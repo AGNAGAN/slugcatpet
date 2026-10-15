@@ -1,4 +1,4 @@
-"""滑→滚→翻→火箭 动作簇每帧物理 + 共享计数器（控制路径专用，y↓）。perpendicular 返回反号力矩，施力时交换 +=/-=。"""
+"""手动控制的滑铲、翻滚、翻跳、火箭跳：每帧受力和共用计数器（y↓）。perpendicular 返回的方向是反的，施力时 += 和 -= 对调。"""
 
 from __future__ import annotations
 import math
@@ -6,23 +6,23 @@ import math
 from . import vmath
 from ..core.units import lerp
 
-# 共享计数器/标志；控制专属，惰性 init
+# 手动控制用的计数器和标志，首次用到时建
 _SLIDE_DEFAULTS = {
-    "_ctrl_roll_direction": 0,  # Roll/BellySlide 共享横向符号
+    "_ctrl_roll_direction": 0,  # Roll、BellySlide 的横向方向
     "_ctrl_roll_counter": 0,
-    "_ctrl_whiplash": False,  # 滑铲反向，下次跳变 Flip
-    "_ctrl_rocket_from_belly": False,  # RocketJump 源自滑铲，落地转 Roll
-    "_ctrl_exit_belly": 0,  # 滑铲输入不合帧数
-    "_ctrl_stop_rolling": 0,  # Roll 卡地帧数，>6 结束
-    "_ctrl_super_launch": 0,  # 趴蹲蓄力计数，>=20 超级跳
-    "_ctrl_sim_hold": 0,  # 超级跳后自动持跳帧数
-    "_ctrl_slide_direction": 0,  # 站立急刹跑向，非 roll_direction
-    "_ctrl_init_slide_counter": 0,  # 同向跑累积，门控急刹起始
-    "_ctrl_skid_cooldown": 0,  # 急刹冷却，防快速左右连环甩尾
+    "_ctrl_whiplash": False,  # 滑铲中按了反方向，这时起跳变成 Flip
+    "_ctrl_rocket_from_belly": False,  # 这次 RocketJump 由滑铲起跳，落地可接 Roll
+    "_ctrl_exit_belly": 0,  # 滑铲时没按滑铲方向的帧数
+    "_ctrl_stop_rolling": 0,  # Roll 被顶住的帧数，超过 6 结束
+    "_ctrl_super_launch": 0,  # 趴着蓄力的帧数，满 20 超级扑跳
+    "_ctrl_sim_hold": 0,  # 超级扑跳后自动按住跳的帧数
+    "_ctrl_slide_direction": 0,  # 急刹前的跑动方向，和 roll_direction 分开
+    "_ctrl_init_slide_counter": 0,  # 同向跑的帧数，够了反向才会急刹
+    "_ctrl_skid_cooldown": 0,  # 急刹冷却，防止左右连按时连续急刹
     "_ctrl_slide_counter": 0,
-    "_ctrl_allow_roll": 0,  # 翻滚许可窗口
+    "_ctrl_allow_roll": 0,  # 还能落地翻滚的帧数
     "_ctrl_consistent_dd": 0,  # 连续同向 downDiagonal 帧数
-    "_ctrl_fall_speed": 0.0,  # 上一离地帧下坠速度
+    "_ctrl_fall_speed": 0.0,  # 最后一次离地时的下坠速度
     "_ctrl_prev_floor": True,
 }
 
@@ -64,7 +64,7 @@ def super_launch_charge(body, move_x, inp0, inp1) -> None:
                 body._ctrl_super_launch += 1
         if not inp0.jmp and inp1.jmp:
             body._ctrl_want_jump = 1
-    # 衰减推迟到 dispatch 后应用，防扑跳失败
+    # 衰减留到 dispatch 之后，否则扑跳读不到满蓄力
     body._ctrl_sl_decay = decay_flag
 
 
@@ -128,7 +128,7 @@ def try_land_roll(body, inp0) -> None:
     if body._ctrl_consistent_dd <= (1 if speed > 24.0 else 6):
         return
     c0, c1 = body.chunk0, body.chunk1
-    if from_rocket_belly:  # chunk 微调，y 翻
+    if from_rocket_belly:  # 两节身体位置微调（y↓）
         c1.vy -= 3.0
         c1.y -= 3.0
         c0.vy += 3.0
@@ -154,7 +154,7 @@ def anim_forces(body, move_x, inp0, inp1) -> None:
 
 
 def _belly_slide(body, inp0, inp1) -> None:
-    """滑铲每帧力（平地简化：略穿平台下坠/斜面）。"""
+    """滑铲每帧受力；只按平地算，不处理斜面和穿平台下落。"""
     c0, c1 = body.chunk0, body.chunk1
     body.bodyMode = "Default"
     rd = body._ctrl_roll_direction
@@ -197,7 +197,7 @@ def _belly_slide(body, inp0, inp1) -> None:
 
 
 def _roll(body, inp0) -> None:
-    """翻滚每帧力（平地简化）。"""
+    """翻滚每帧受力，只按平地算。"""
     c0, c1 = body.chunk0, body.chunk1
     body.bodyMode = "Default"
     rd = body._ctrl_roll_direction
@@ -263,11 +263,11 @@ def _rocket_jump(body) -> None:
 
 
 def _flip(body) -> None:
-    """翻跳每帧力：力矩键 _ctrl_slide_direction（非 _ctrl_roll_direction），触物退出。"""
+    """翻跳每帧受力：力矩方向取 _ctrl_slide_direction 而不是 _ctrl_roll_direction，碰到东西就结束。"""
     c0, c1 = body.chunk0, body.chunk1
     body.bodyMode = "Default"
-    sd = getattr(body, "_ctrl_slide_direction", 0)  # 滑铲来的 Flip 用残留值
-    mult = 0.38  # 滑翻与普通翻跳同力矩，防转太多圈
+    sd = getattr(body, "_ctrl_slide_direction", 0)  # 从滑铲转来的 Flip 沿用上次的值
+    mult = 0.38  # 急刹翻跳和普通翻跳用同一力矩，免得转太多圈
     torque_x, torque_y = vmath.perpendicular(c1.x, c1.y, c0.x, c0.y)
     k = sd * mult
     torque_x *= k

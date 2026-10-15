@@ -1,4 +1,4 @@
-"""能力三问接口：can_touch / can_stay / make_controller。"""
+"""够取方式接口：can_touch、can_stay、make_controller。"""
 
 from __future__ import annotations
 import math
@@ -10,7 +10,7 @@ from .. import tuning
 RUNNING = "running"
 DONE = "done"
 GIVEUP = "giveup"
-HOLD = "hold"  # 到位持续维持驻留：不重规划/不计超时/不计失败
+HOLD = "hold"  # 到位后待着：不重规划，不计超时和失败
 
 HOLDING = "holding"
 
@@ -20,7 +20,7 @@ MODE_STAY = "stay"
 
 @dataclass(frozen=True)
 class Estimate:
-    """粗线性代价：预估耗时 tick / 预估体力开销。"""
+    """粗略代价：预估耗时（tick）和体力开销。"""
 
     time_est: float
     energy_est: float
@@ -38,9 +38,10 @@ class Candidate:
 
 
 class Reach:
-    """够取方式基类；控制器协议：update() -> running|done|giveup，cancel() 清理。"""
+    """够取方式基类。控制器要有 update() → running / done / giveup 和 cancel()。"""
 
     key = ""
+    from_pole = False  # 人在杆上时能不能用
 
     def __init__(self, pet):
         self.pet = pet
@@ -71,7 +72,7 @@ def walk_band(pet):
 
 
 def reach_assist(pet, goal, gx, gy):
-    """近目标探身：距目标 < arm_full_reach*REACH_GATE_K 才伸臂。"""
+    """离目标不到 arm_full_reach × REACH_GATE_K 时伸手。"""
     body = pet.body
     c0 = body.chunk0
     if math.hypot(gx - c0.x, gy - c0.y) < body.arm_full_reach * tuning.REACH_GATE_K:

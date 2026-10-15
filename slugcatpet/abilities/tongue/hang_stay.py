@@ -1,4 +1,4 @@
-"""舌锚吊挂驻留：四种锚点求最低代价，控制器接近→附着→维持。"""
+"""舌吊驻留：在左墙、右墙、天花板、目标物四种锚点里挑代价最低的，吊在目标旁不动。"""
 
 from __future__ import annotations
 import math
@@ -15,8 +15,8 @@ WALL_ARRIVE = 12.0
 ATTACH_TIMEOUT = 120
 DROP_TIMEOUT = 200
 DROP_ALIGN_EPS = 8.0
-SETTLE_VX_EPS = 0.35  # 松手前横速门，防被摆荡甩离锚点
-SETTLE_DX_EPS = 60.0  # 松手前对准门，防停在摆动端点误判到位
+SETTLE_VX_EPS = 0.35  # 松手前横向速度要低于此值，免得被摆荡甩开
+SETTLE_DX_EPS = 60.0  # 松手前离目标的水平距离要在此以内，免得停在摆动端点时误判到位
 SETTLE_TIMEOUT = 400
 
 _IDEALS = {
@@ -35,7 +35,7 @@ def _anchor_kinds(goal):
 
 
 def _anchor_coord(pet, goal, kind):
-    """锚点世界坐标（逐 tick 从 goal.pos() 重算，跟随活目标）。"""
+    """锚点世界坐标，每 tick 按 goal.pos() 重算，跟着会动的目标走。"""
     gx, gy = goal.pos()
     if kind == "wall_l":
         return (0.0, gy)
@@ -47,7 +47,7 @@ def _anchor_coord(pet, goal, kind):
 
 
 def _side_for(pet, goal, kind):
-    """接近所走的墙侧：墙锚取其墙，天花板/实体锚取近墙。"""
+    """从哪面墙上去：墙锚就是那面墙，天花板和物体锚取近的一面。"""
     if kind == "wall_l":
         return -1
     if kind == "wall_r":
@@ -57,7 +57,7 @@ def _side_for(pet, goal, kind):
 
 
 def _settle_dist(pet, goal, kind):
-    """吊挂稳定后 chunk1 估算落点到 goal 的距离（落点≈锚点正下方 ideal+体节偏移）。"""
+    """吊稳后臀部离目标的估计距离，臀部约在锚点正下方 ideal + DIST_STAND 处。"""
     ax, ay = _anchor_coord(pet, goal, kind)
     sx, sy = ax, ay + _IDEALS[kind] + DIST_STAND
     gx, gy = goal.pos()
@@ -172,7 +172,7 @@ class TongueHangController:
             if self.kind == "ceiling":
                 self.phase = "hold"
             elif self.kind == "entity":
-                self.phase = "settle"  # 先稳住摆荡再松手，否则会被甩离实体锚
+                self.phase = "settle"  # 先等摆荡平息再松手，否则会被甩开
                 self.timer = 0
             else:
                 self.phase = "attach"
@@ -204,7 +204,7 @@ class TongueHangController:
         return RUNNING
 
     def _settle(self):
-        """吊顶悬停等摆荡平息（同时对准+静止）再松手：climber 的 done 只保证锚点对准，不保证猫已稳。"""
+        """吊在天花板上，等对准目标且晃停了再松手；climber 完成只说明锚点对准了。"""
         pet = self.pet
         tg = tongue_of(pet)
         body = pet.body
@@ -243,7 +243,7 @@ class TongueHangController:
                     ideal=consts.PLAN_HANG_BULB_IDEAL,
                     reel_rate=consts.PLAN_HANG_REEL_RATE,
                 )
-                fire_at(pet, gx, gy)  # 定点钉，不走双体弹簧（会反拽锚点）
+                fire_at(pet, gx, gy)  # 钉在定点上不粘物体，免得弹簧把物体拽过来
                 return RUNNING
             if body.on_floor():
                 return self._retry()

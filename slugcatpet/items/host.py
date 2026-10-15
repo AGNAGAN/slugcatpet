@@ -15,6 +15,7 @@ from . import get as _kind, kinds
 from .state import ItemState
 
 PLACE_BANNER_BG = (0, 0, 0, 150)
+CLICK_CATCHER = (0, 0, 0, 1)  # 放置 / 移除模式的近乎透明底，接住点击
 PLACE_BANNER_TEXT = (255, 255, 255, 220)
 REMOVE_MARK = (235, 70, 60)
 REMOVE_PAD = 7.0
@@ -134,6 +135,21 @@ class ItemHost:
         self.update()
         return obj
 
+    def spawn(self, key, lx, ly):
+        """程序生成一件物品（掉落物等），不走放置模式；腾不出位置返回 None。"""
+        k = _kind(key)
+        if not k.make_room(self):
+            return None
+        sk = k.seed_key or k.key
+        seed = self._item_seeds.get(sk, 0)
+        obj = k.make(self, lx, ly, seed)
+        self._item_seeds[sk] = seed + 1
+        if hasattr(obj, "_impact_cb"):
+            obj._impact_cb = self._shake_impact
+        k.add(self, obj)
+        self.world_version += 1
+        return obj
+
     def enter_place_mode(self, key):
         k = _kind(key)
         if not k.can_place(self):
@@ -182,6 +198,16 @@ class ItemHost:
             self._remove_at((lx, ly))
         else:
             self.place(self._place_kind, lx, ly)
+
+    def grow_weapon(self, owner, x, y, style=0):
+        """从 owner 身上长出一件武器（能长的物品类型提供）；长不出返回 None。"""
+        for k in kinds():
+            if getattr(k, "grows", False):
+                obj = k.grow(self, x, y, owner, style)
+                if obj is not None:
+                    self.update()
+                return obj
+        return None
 
     def _forget(self, k, obj):
         k.drop(self, obj)
@@ -346,6 +372,8 @@ class ItemHost:
         p.restore()
 
     def _draw_place_hint(self, p):
+        s = self._scale
+        p.fillRect(QRectF(0.0, 0.0, self.width() / s, self.height() / s), QColor(*CLICK_CATCHER))
         self._draw_place_banner(p)
         if self._place_kind == "remove":
             self._draw_remove_hint(p)

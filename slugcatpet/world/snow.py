@@ -1,4 +1,4 @@
-"""雪花粒子 + 边缘霜冻 vignette，强度随 cycle_prog。"""
+"""雪花粒子和边缘霜冻暗角，强度随 cycle_prog 变化。"""
 
 from __future__ import annotations
 import math
@@ -18,7 +18,7 @@ FLAKE_R_MAX = 1.8
 
 
 def snowfall_intensity(cycle_prog: float) -> float:
-    """降雪强度，随 cycle_prog 升（峰值~1.8）。"""
+    """降雪强度，随 cycle_prog 上升，峰值约 1.8。"""
     a = lerp(0.0, 0.6, cycle_prog * 2.0)
     b = clampf((cycle_prog * 3.0) ** 2.5, 0.0, 3.0) * 0.4
     return a + b
@@ -37,6 +37,7 @@ class Snowfall:
         self.intensity = 0.0
         self._vignette_pm = None  # 满强度预渲染缓存，尺寸变自动重建
         self._vignette_key = None
+        self._frame = None  # 定格的一帧：(强度比, [(x, y, 半径, 不透明度)])
 
     @property
     def active(self) -> bool:
@@ -100,12 +101,24 @@ class Snowfall:
             self._vignette_key = key
         return self._vignette_pm
 
-    def draw(self, p, WL, HL, scale=1.0):
-        if not self.active:
-            return
+    def snapshot(self):
+        """定格当前画面；两次定格之间重画都画同一帧。"""
         norm = min(self.intensity / _INTENSITY_PEAK, 1.0)
-        if norm <= 0.0 and not self._flakes:
+        if not self.active or (norm <= 0.0 and not self._flakes):
+            self._frame = None
             return
+        flakes = []
+        for f in self._flakes:
+            a = int(f.alpha * norm)
+            if a > 0:
+                flakes.append((f.x + math.sin(f.phase) * f.sway, f.y, f.r, min(255, a)))
+        self._frame = (norm, flakes)
+
+    def draw(self, p, WL, HL, scale=1.0):
+        """画定格的那一帧。"""
+        if self._frame is None:
+            return
+        norm, flakes = self._frame
         p.save()
         p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         p.setPen(Qt.PenStyle.NoPen)
@@ -115,11 +128,7 @@ class Snowfall:
             p.drawPixmap(QPointF(0.0, 0.0), self._vignette(WL, HL, scale))
             p.restore()
         cr, cg, cb = FLAKE_COLOR
-        for f in self._flakes:
-            a = int(f.alpha * norm)
-            if a <= 0:
-                continue
-            dx = f.x + math.sin(f.phase) * f.sway
-            p.setBrush(QColor(cr, cg, cb, min(255, a)))
-            p.drawEllipse(QPointF(dx, f.y), f.r, f.r)
+        for x, y, r, a in flakes:
+            p.setBrush(QColor(cr, cg, cb, a))
+            p.drawEllipse(QPointF(x, y), r, r)
         p.restore()

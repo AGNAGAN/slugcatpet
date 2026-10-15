@@ -1,4 +1,4 @@
-"""音乐播放核心：目录扫描 + QMediaPlayer 封装 + 顺序/随机/单曲循环。"""
+"""音乐播放：扫描目录、封装 QMediaPlayer，支持顺序、随机、单曲循环。"""
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ class Track:
 
 
 def _norm(path) -> str:
-    """小写，用于去重与隐藏集合比对。"""
+    """规范化的小写路径，用于去重和比对隐藏曲目。"""
     try:
         return str(Path(path).resolve()).lower()
     except (TypeError, OSError):
@@ -116,9 +116,9 @@ class MusicPlayer(QObject):
         self._theme_dirs = list(theme_dirs)  # 只用来找场景曲的目录，不进列表
         self._on_change = on_change
         self._tracks: list[Track] = []
-        # 被用户移除的曲目归一化键：扫描跳过，不再自动加回
+        # 用户移出列表的曲目，重扫时跳过
         self._hidden: set[str] = {p for p in (self._params.get("music_hidden") or []) if isinstance(p, str)}
-        # 用户显式导入的路径：重扫据此还原
+        # 用户导入的路径，重扫时据此重建列表
         self._sources: list[Path] = [
             Path(p) for p in (self._params.get("music_sources") or []) if isinstance(p, str)
         ]
@@ -130,18 +130,18 @@ class MusicPlayer(QObject):
         self._volume = max(0, min(100, self._volume))
         self._gain = 1.0
         self._mute = bool(self._params.get("mute_all", False))
-        self._order: list[int] = []  # 随机模式下的播放次序（存索引）
+        self._order: list[int] = []  # 随机模式的播放次序（索引）
         self._available = True
         self._stop_after_end = False
         self._loop_current = False
-        self._special_track: Track | None = None  # 当前特供曲（可不在列表中）
+        self._special_track: Track | None = None  # 当前特供曲，可以不在列表里
         self._manual = False  # 当前特供曲是用户在「游戏配乐」里点播的
         self._resume_ms = 0  # 恢复的播放位置，play 时应用一次
-        self._pending_seek = None  # 待应用的目标播放位置（ms）
+        self._pending_seek = None  # 媒体载入后要跳到的位置（ms）
         self._fade = 1.0
         self._fade_target = 1.0
         self._fade_done = None
-        self._switch = None  # 渐弱结束后要切到的曲目（切歌渐变进行中）
+        self._switch = None  # 切歌渐弱结束后执行的切换
         self._fade_timer = QTimer(self)
         self._fade_timer.setInterval(_FADE_TICK_MS)
         self._fade_timer.timeout.connect(self._fade_step)
@@ -198,7 +198,7 @@ class MusicPlayer(QObject):
 
     @property
     def is_special_active(self) -> bool:
-        """当前是否有特供/主题曲处于激活态（含播完即停尚未收尾）。"""
+        """是否在放特供曲，含播完即停但还没收尾的。"""
         return self._special_track is not None or self._loop_current or self._stop_after_end
 
     @property
@@ -207,7 +207,7 @@ class MusicPlayer(QObject):
 
     def current(self) -> Track | None:
         if self._special_track is not None:
-            return self._special_track  # 特供曲优先，独立于列表选中
+            return self._special_track  # 特供曲优先于列表选中
         if 0 <= self._index < len(self._tracks):
             return self._tracks[self._index]
         return None
@@ -288,7 +288,7 @@ class MusicPlayer(QObject):
         self._manual = True
 
     def restore_state(self, path, position_ms: int = 0):
-        """恢复上次的选中曲目与进度（仅选中，不自动播放）。"""
+        """恢复上次选中的曲目和进度，不自动播放。"""
         if not path:
             return
         key = _norm(path)
@@ -308,7 +308,7 @@ class MusicPlayer(QObject):
         return [str(p) for p in self._sources]
 
     def add_paths(self, paths, record: bool = True) -> int:
-        """加入若干文件/目录，返回新增曲目数。record 为真时记录来源以便重扫。"""
+        """加入文件或目录，返回加进来的曲目数；record 为真时记下来源供重扫。"""
         files: list[Path] = []
         dirs: list[Path] = []
         for p in paths:
@@ -360,12 +360,12 @@ class MusicPlayer(QObject):
         return len(self._tracks)
 
     def remove_index(self, i: int):
-        """仅移出列表，文件不动；正播放该曲则停止。"""
+        """移出列表，不删文件；正在放的会停下。"""
         if not (0 <= i < len(self._tracks)):
             return
         cur = self.current()
         removed = self._tracks.pop(i)
-        self._hidden.add(_norm(removed.path))  # 记住移除，重扫不再加回
+        self._hidden.add(_norm(removed.path))
         if removed is cur:
             self.stop()
             self._special_track = None
@@ -420,7 +420,7 @@ class MusicPlayer(QObject):
         return len(kept)
 
     def set_index(self, i: int, autoplay: bool = True):
-        """定位到第 i 首并（可选）播放；视为用户操作，清除特供曲目设置。"""
+        """选中第 i 首，autoplay 时播放；算用户操作，清掉特供曲。"""
         if not (0 <= i < len(self._tracks)):
             return
         self._clear_special()
@@ -513,7 +513,7 @@ class MusicPlayer(QObject):
             self._player.setPosition(max(0, int(ms)))
 
     def relative_seek(self, delta_ms: int):
-        """在当前进度上偏移 delta_ms 毫秒（钳制在 0..总时长之间）。"""
+        """进度偏移 delta_ms 毫秒，限制在 0 到总时长之间。"""
         if self._player is None:
             return
         target = self._player.position() + int(delta_ms)
@@ -547,7 +547,7 @@ class MusicPlayer(QObject):
         self._changed()
 
     def set_gain(self, g: float):
-        """设置当前曲目音量乘数 0..1（不写盘，随曲目切换复原）。"""
+        """设当前曲目的音量乘数 0..1，不存盘，换曲时复原。"""
         g = max(0.0, min(1.0, float(g)))
         if abs(g - self._gain) < 1e-6:
             return
@@ -571,7 +571,7 @@ class MusicPlayer(QObject):
         loop: bool = True,
         stop_after_end: bool = False,
     ):
-        """不改变列表选中索引，用 _special_track 承载当前特供曲。"""
+        """播放特供曲，不改列表选中。"""
         if not isinstance(track, Track):
             track = Track(Path(track))
         self._start_track(track, gain, loop, stop_after_end)
@@ -589,7 +589,7 @@ class MusicPlayer(QObject):
         stop_after_end: bool,
         list_index: int | None = None,
     ):
-        """list_index 非 None=普通列表曲目（更新选中索引）；None=特供曲（写 _special_track）"""
+        """切到 track：list_index 为 None 时作为特供曲，否则作为列表第 list_index 首。"""
         if track is None:
             return
         self._manual = False
@@ -671,7 +671,7 @@ class MusicPlayer(QObject):
             self._apply_output_volume()
 
     def _select(self, i: int):
-        """仅切换音源与当前索引并广播（不改播放态、清除特供态）。"""
+        """切换音源和选中索引并通知，不改播放状态，清掉特供曲。"""
         self._index = i
         self._special_track = None
         track = self.current()
@@ -685,13 +685,13 @@ class MusicPlayer(QObject):
         self._special_track = None
         self._manual = False
         if self._gain != 1.0:
-            # 先换算渐变系数再复原增益，避免爆音
+            # 先换算渐变系数再复原增益，免得音量跳变
             self._rescale_fade(self._gain, 1.0)
             self._gain = 1.0
             self._apply_output_volume()
 
     def _rescale_fade(self, old_gain: float, new_gain: float):
-        """fade' = fade * old_gain / new_gain，使输出连续；fade 已到 0 则无需换算。"""
+        """换增益时按 fade * old_gain / new_gain 调整渐变系数，保持输出音量连续。"""
         if self._fade > 1e-3 and old_gain > 0 and new_gain > 0:
             self._fade = min(1.0, self._fade * old_gain / new_gain)
 
@@ -784,7 +784,7 @@ class MusicPlayer(QObject):
             QMediaPlayer.MediaStatus.BufferedMedia,
         ):
             if self._pending_seek is not None:
-                # 媒体就绪后再定位，否则会被忽略；延后一拍确保生效
+                # 媒体就绪前定位会被忽略，就绪后再延后一拍
                 pos = self._pending_seek
                 self._pending_seek = None
                 QTimer.singleShot(60, lambda p=pos: self._apply_seek(p))

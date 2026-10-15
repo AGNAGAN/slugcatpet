@@ -1,4 +1,4 @@
-"""舔光标交互：三阶段状态机。"""
+"""舔光标控制器：走到光标下、吐舌粘住、吊着，三个阶段。"""
 
 from __future__ import annotations
 import math

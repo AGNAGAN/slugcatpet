@@ -10,7 +10,7 @@ class ObjectLooker:
     def __init__(self, rng, look_fac=1.0):
         self.rng = rng
         self.look_fac = look_fac
-        self.mode = "nothing"  # "cursor"/对象引用/"nothing"
+        self.mode = "nothing"  # "cursor"、物体或 "nothing"
         self.time_looking = 0
 
     def _how_interesting(self, head, pt, base, vel):

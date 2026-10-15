@@ -1,4 +1,4 @@
-"""爬墙辅助舌取能力：走到近墙→TongueClimber 拉升缩距→入射程转舌取。"""
+"""舌爬够取：走到近处墙边，用 TongueClimber 舌爬往上，进了射程再舌取。"""
 
 from __future__ import annotations
 import math

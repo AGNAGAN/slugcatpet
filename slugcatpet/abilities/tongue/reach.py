@@ -1,4 +1,4 @@
-"""舌取能力：走进射程→射舌粘住→收绳/荡摆/flyby 拉近。"""
+"""舌取够取：走进射程，射舌粘住，收绳拉近，荡过目标时松舌借势。"""
 
 from __future__ import annotations
 import math
@@ -11,7 +11,7 @@ from ...planning.reach import Reach, Estimate, RUNNING, GIVEUP, reach_assist, wa
 
 FETCH_IDEAL = 10.0
 FETCH_REEL = 3.0
-FLYBY_TRIGGER = 1.4  # 荡摆掠过阈值，触发断舌借势
+FLYBY_TRIGGER = 1.4  # 荡到目标上方、水平距离在 GRAB_REACH 的这么多倍以内时松舌借势
 APPROACH_TIMEOUT = 240
 TONGUE_UNDER_TOL = 40.0
 
@@ -25,7 +25,7 @@ def mouth_pos(pet):
 
 
 def reset_tongue(pet, owner=None):
-    """收舌 + 恢复默认参数 + 解除悬挂；舌头被他人持有时拒绝（不清舌、不解悬）。"""
+    """收舌、恢复默认参数、解除吊挂；舌头被别人占着时什么都不做。"""
     tg = tongue_of(pet)
     if tg is not None:
         if tg.owned_by_other(owner):
@@ -74,7 +74,7 @@ class TongueApproachController:
         self.pet = pet
         self.goal = goal
         self.timer = 0
-        self._fired = False  # 本控制器是否已射过一发（单发，不原地狂射）
+        self._fired = False  # 只射一发，收回后就放弃
 
     def update(self):
         pet = self.pet

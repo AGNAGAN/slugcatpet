@@ -1,5 +1,5 @@
-"""手动键盘操控子包。"""
+"""手动键盘操控。"""
 
-from . import moves, keymap, session  # 顶层 import：PyInstaller 静态收集需要
+from . import moves, keymap, session  # PyInstaller 靠静态 import 收集
 
 __all__ = ["moves", "keymap", "session"]

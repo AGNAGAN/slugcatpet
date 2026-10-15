@@ -1,4 +1,4 @@
-"""欲望加权选择：freshness 滞回控冷却，合格候选中加权随机抽取。"""
+"""心情抽签：freshness 带滞回地控制冷却，在合格的候选里按权重随机抽。"""
 
 from __future__ import annotations
 
@@ -67,7 +67,7 @@ class Candidate:
         self.energy_factor = energy_factor
         self.temper_factor = temper_factor
         self.cold_factor = cold_factor if cold_factor is not None else _one
-        self.one_shot = one_shot  # True=自身结束，False=freshness 降至 quit 退出
+        self.one_shot = one_shot  # True 由状态自己结束，False 在 freshness 降到 quit 时退出
         self.freshness = init
 
     def weight(self, ctx, noise):
@@ -89,12 +89,12 @@ class MoodArbiter:
         self.order = []
 
     def add(self, cand, before=None):
-        """加入候选；before=插到该名候选之前（影响抽签结果）。"""
+        """加入候选，插到 before 之前，没有就排最后。"""
         self.candidates[cand.name] = cand
-        if before is None:
+        i = next((i for i, c in enumerate(self.order) if c.name == before), None)
+        if i is None:
             self.order.append(cand)
         else:
-            i = next(i for i, c in enumerate(self.order) if c.name == before)
             self.order.insert(i, cand)
 
     def tick_freshness(self, active_name):

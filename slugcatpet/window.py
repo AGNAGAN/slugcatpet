@@ -6,7 +6,7 @@ import os
 import random
 from PySide6.QtWidgets import QWidget
 from PySide6.QtCore import Qt, QTimer, QElapsedTimer, QCoreApplication, QEvent, QRect, QPoint, QPointF
-from PySide6.QtGui import QPainter, QColor, QGuiApplication, QCursor
+from PySide6.QtGui import QPainter, QColor, QGuiApplication, QCursor, QTransform
 
 from . import tuning
 from .appearance import Look
@@ -23,6 +23,8 @@ from .core import chunkphys
 from .core.units import clampf, lerp
 from .core.water import WaterSurface
 from .world.effects import EffectsMixin
+from .world.rain import Rain, I_MAX as RAIN_I_MAX, push_force
+from .items.base import alive_creature
 from .items.host import ItemHost
 
 MAX_PETS = 20
@@ -112,6 +114,11 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self.resize(geom["win_w"], geom["win_h"])
         self.move(area.x(), area.y())
 
+        self.world_tick = 0  # 物理 tick 计数
+        self._static_last = (None, QRect())  # 上一帧静态内容的 (签名, 范围)
+        from .planning.budget import PlanBudget
+
+        self._plan_budget = PlanBudget()  # 杆网的后台预计算
         self.sparks = []  # [x,y,vx,vy,life,maxlife,white]
         self.shockwaves = []  # [x,y,r,maxr,life,maxlife,flash]
         self.fx = []
@@ -124,9 +131,11 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self._refresh_top_cb = None
         self._set_lang_cb = None
         self._open_music_cb = None
-        self.env_listeners = []  # fn(kind, on)：kind 为 "blizzard" / "zerog" / "water"
+        self.env_listeners = []  # fn(kind, on)：kind 为 "blizzard" / "zerog" / "water" / "rain"
         self._hotkey_filter = None
         self._control_hud = None  # 非 None 即受控中
+        self._freeze = set()  # 冻结原因："env" 全屏收起、"user" 定格
+        self._freeze_cb = None  # fn(on)：定格开关后由 main 处理热键、托盘、界面
 
         self.world_version = 0  # 放/清道具、环境变化时 +1
         self.geometry_version = 0  # 路径前提变更（杆/灯/工作区）时 +1
@@ -150,10 +159,21 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self.water_target = None
         self.water_surface = None
 
+        self.rain_on = False
+        self.cfg_rain_amount = clampf(float(self._params.get("rain_amount", tuning.RAIN_AMOUNT)), 0.05, 1.0)
+        self.rain = Rain(seed=self._seed)
+        self._shelter_timer = QTimer(self)
+        self._shelter_timer.setInterval(tuning.RAIN_SHELTER_POLL_MS)
+        self._shelter_timer.timeout.connect(self._poll_shelters)
+        self._ambient_shown = QRect()  # 屏上现有雪、雨的范围
+        self._ambient_ns = 0
+        self._ambient_tick = -1
+
         self._shake = [0.0, 0.0]
 
         self._shutting_down = False
         self._painted = None  # 最近一次记录的帧范围（逻辑坐标）
+        self._scene_painted = None  # 其中雪、雨以外的部分
         self._shown = None  # 屏上现有内容的范围；None=未知，整窗刷
         self._ops = []
         self._ops_split = 0
@@ -163,6 +183,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self.follow_cursor = True
         self.cfg_cursor_hijack = bool(self._params.get("cursor_hijack", True))
         self.cfg_cursor_shape = bool(self._params.get("cursor_shape", True))
+        self.cfg_freeze_hide_ui = bool(self._params.get("freeze_hide_ui", True))
         self.cfg_friendly_fire = bool(self._params.get("friendly_fire", False))
         self.cfg_fps = self._params.get("fps", "auto")  # "auto"=跟显示器刷新率
         self.cfg_power_save = bool(self._params.get("power_save", True))
@@ -222,6 +243,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
                 "food_q": state.get("food_q", 0),
                 "karma": state.get("karma", tuning.KARMA_INIT),
                 "cold": state.get("cold", 0.0),
+                "sleepiness": state.get("sleepiness", tuning.SLEEPY_INIT),
             }
             pet_id = state.get("id") or f"pet-{i}"
             variant = state.get("variant", "saint")
@@ -278,13 +300,16 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         from .control.mouse import is_over
 
         cur = self.cursor_logical()
-        active = any(pet.behavior is not None and pet.behavior.grab.active for pet in self.pets)
         over_body = any(
             ((pet.behavior is None) or not pet.behavior.blocks_interaction())
             and is_over(pet.body, pet.gfx, cur, pad=6.0)
             for pet in self.pets
         )
-        want = not (active or over_body or self._drag is not None or self._grab_target(cur) is not None)
+        if self._freeze:
+            want = not over_body  # 定格时只留右键菜单
+        else:
+            active = any(pet.behavior is not None and pet.behavior.grab.active for pet in self.pets)
+            want = not (active or over_body or self._drag is not None or self._grab_target(cur) is not None)
         if want != self._passthrough:
             self._passthrough = want
             if not self._hwnd:
@@ -341,6 +366,9 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             return
         if not self.isVisible():
             return
+        if self._freeze:
+            self._update_passthrough()
+            return
         t0 = self._clock.nsecsElapsed()
         self._update_passthrough()
         self._advance(min(dt, self._MAX_DT))
@@ -354,18 +382,30 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             self._active_until = now_ms + self._ACTIVE_HOLD_MS
         elif now_ms < self._active_until:
             active = True
-        self._set_mode(active or not self.cfg_power_save)
+        self._set_mode(active or not self.cfg_power_save, self._ambient_kind())
         if region is None:
             self.update()
         else:
             self.update(region)
 
-    def _set_mode(self, fast):
-        """快档优先跟 vblank，不可用时用精确定时器；慢档用粗定时器。"""
-        if fast and self._ensure_vsync():
+    def _set_mode(self, fast, ambient=None):
+        """快档优先跟 vblank，不可用时用精确定时器；慢档用粗定时器，只有雪或雨在动时按它的帧率。
+
+        全屏收起时停帧；定格时只留粗定时器更新点击穿透。"""
+        if "env" in self._freeze:
+            self.anim.stop()
+            if self._vsync is not None:
+                self._vsync.pause()
+            self._mode = None
+            return
+        if self._freeze:
+            mode = "frozen"
+        elif fast and self._ensure_vsync():
             mode = "vsync"
+        elif fast:
+            mode = "fast"
         else:
-            mode = "fast" if fast else "slow"
+            mode = ambient or "slow"
         if mode == self._mode:
             return
         self._mode = mode
@@ -377,6 +417,9 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             "vsync": (self._INT_WATCHDOG, Qt.TimerType.CoarseTimer),
             "fast": (self._iv_fast, Qt.TimerType.PreciseTimer),  # Precise 保平滑
             "slow": (self._iv_slow, Qt.TimerType.CoarseTimer),  # Coarse 省功耗
+            "frozen": (self._INT_SLOW, Qt.TimerType.CoarseTimer),
+            "snow": (max(self._iv_fast, round(1000 * self._PHYS_DT)), Qt.TimerType.PreciseTimer),
+            "rain": (max(self._iv_fast, round(1000 / tuning.RAIN_FPS)), Qt.TimerType.PreciseTimer),
         }[mode]
         self.anim.stop()
         self.anim.setTimerType(kind)
@@ -441,7 +484,6 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             or self.cursor_hijack is not None
             or self._place_mode
             or self._any_kill_dialog()
-            or (self.snow_on and self._snow.active)
             or self._shake[0] != 0.0
             or self._shake[1] != 0.0
         )
@@ -455,18 +497,56 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             self._do_tick()
         self._ts = min(self._phys_acc / phys_dt, 1.0)
 
-    def freeze_tick(self):
-        self.anim.stop()
-        if self._vsync is not None:
-            self._vsync.pause()
-        self._mode = None
+    def freeze(self, reason):
+        self._freeze.add(reason)
+        self._set_mode(False)
 
-    def resume_tick(self):
+    def unfreeze(self, reason):
+        self._freeze.discard(reason)
         if self._shutting_down:
             return
         self._last_ns = self._clock.nsecsElapsed()
         self._last_vsync = False
+        self._mode = None
         self._set_mode(True)
+
+    @property
+    def frozen(self):
+        """用户定格中。"""
+        return "user" in self._freeze
+
+    def set_frozen(self, on):
+        """定格：世界停在这一帧；进入前解除光标劫持、退出放置模式，免得光标被锁住或点击被拦。"""
+        on = bool(on)
+        if on == self.frozen:
+            return
+        if on:
+            self._exit_place_mode()
+            self.stop_cursor_hijack()
+            from .platform import cursorfx
+
+            cursorfx.abort_all()
+            self.freeze("user")
+        else:
+            self.unfreeze("user")
+        if self._freeze_cb is not None:
+            self._freeze_cb(on)
+
+    def step_frozen(self, n):
+        """定格时前进 n 个物理 tick，画出这一 tick 的位置。"""
+        if self._freeze != {"user"}:
+            return
+        for _ in range(n):
+            self._do_tick()
+        self._phys_acc = 0.0
+        self._ts = 1.0
+        self._ambient_ns = 0  # 雨也跟着换一帧
+        self._update_region()
+        self._update_passthrough()
+        self.update()
+
+    def set_freeze_hide_ui(self, on):
+        self.cfg_freeze_hide_ui = self._params["freeze_hide_ui"] = bool(on)
 
     def shutdown(self):
         """退出前停帧并丢弃排队重绘，免得句柄销毁后还刷新。"""
@@ -513,9 +593,9 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
     def _restart_timer(self):
         self._calc_intervals()
         if self._mode is not None:
-            fast = self._mode != "slow"
+            fast = self._mode in ("vsync", "fast")
             self._mode = None
-            self._set_mode(fast)
+            self._set_mode(fast, self._ambient_kind())
 
     def _watch_screen(self, *_):
         """主屏或其刷新率变了就重算帧间隔、换 vblank 来源。"""
@@ -639,6 +719,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             _clamp_to_bounds(obj, WL, HL)
 
     def _do_tick(self):
+        self.world_tick += 1
         self._frame_no += 1
         # 抖动衰减，须在 impact 前
         self._shake[0] *= SHAKE_DECAY
@@ -658,9 +739,12 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         cycle_prog = self._cold_update_world()
         self._water_update()  # 须在 pet.step 前
 
+        for pet in self.pets:
+            pet.check_grip()
         self.social.tick()
         for pet in self.pets:
             pet.step(cur, cycle_prog)
+        self._plan_budget.run(self.pets)
 
         self._tick_items()
         self._water_splash_detect()  # 须在物体积分后
@@ -671,6 +755,8 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
 
         if self.snow_on:
             self._snow.step(self.cold_cycle_prog, self._WL, self._HL)
+
+        self._rain_update()
 
         self._update_fx()
 
@@ -709,6 +795,63 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         if on and self.water_surface is None:
             self.water_y = self._HL
             self.water_surface = WaterSurface(self._WL, self._HL, tuning.WATER_SPACING, seed=self._seed)
+
+    def set_rain(self, on):
+        if bool(on) != self.rain_on:
+            self._env_changed("rain", bool(on))
+        self.rain_on = bool(on)
+        self.rain.set_target(self.cfg_rain_amount * RAIN_I_MAX if on else 0.0)
+        if on and not self._shelter_timer.isActive():
+            self._poll_shelters()
+            self._shelter_timer.start()
+
+    def set_rain_amount(self, amount):
+        """设雨量（0~1）。"""
+        self.cfg_rain_amount = self._params["rain_amount"] = clampf(float(amount), 0.05, 1.0)
+        if self.rain_on:
+            self.rain.set_target(self.cfg_rain_amount * RAIN_I_MAX)
+
+    def _poll_shelters(self):
+        """取挡雨窗口的矩形，换算到逻辑坐标。"""
+        from .platform import shelters
+
+        dpr = self.devicePixelRatioF() or 1.0
+        ox, oy, s = self.x(), self.y(), self._scale or 1
+        hwnds = [self._hwnd] if self._hwnd else []
+        self.rain.set_shelters(
+            [
+                ((x0 / dpr - ox) / s, (y0 / dpr - oy) / s, (x1 / dpr - ox) / s, (y1 / dpr - oy) / s)
+                for x0, y0, x1, y1 in shelters.window_rects(hwnds)
+            ]
+        )
+
+    def _rain_update(self):
+        rain = self.rain
+        if not self.rain_on and not rain.active:
+            if self._shelter_timer.isActive():
+                self._shelter_timer.stop()
+            return
+        rain.resize(self._WL, self._HL)
+        rain.step()
+        force = push_force(rain.intensity)
+        if force > 0.0:
+            self._rain_push_items(force)
+
+    def _rain_push_items(self, force):
+        """露天散落的物品被雨推；活的小生物会被砸晕。"""
+        rain = self.rain
+        floor = self._HL - 1.0
+        for o in self._items():
+            if (
+                o.state != "free"
+                or getattr(o, "held_by_hand", None) is not None
+                or not getattr(o, "mass", 0.0)
+            ):
+                continue
+            alive = alive_creature(o)
+            n = rain.kick(o, force, o.y + o.rad >= floor, 1 if alive else 0, tuning.RAIN_ITEM_KICK_MAX)
+            if n:
+                o.stun = max(o.stun, n)
 
     def spawn_bubble(self, x, y, vx, vy):
         if self.water_surface is None or len(self.bubbles) >= tuning.BUBBLE_MAX:
@@ -789,8 +932,6 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             self.blizzard_timer += 1
             if self.blizzard_timer >= tuning.COLD_BLIZZARD_TOTAL:
                 self.set_blizzard(False)
-                if self.env_target == "blizzard":  # 自停后目标回落，防被重新点燃
-                    self.env_target = "none"
                 sp = getattr(self, "_settings_panel", None)
                 if sp is not None and hasattr(sp, "refresh_env"):
                     sp.refresh_env()
@@ -928,6 +1069,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             return False
         self._take_off_stage(pet)
         self.pets.remove(pet)
+        pet.set_held(False)
         pet.hidden = True
         self._hidden_pets.append(pet)
         self._shown = None
@@ -1014,6 +1156,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         if beh is None or beh.is_truly_dead() or beh.is_reincarnating() or beh.blocks_interaction():
             return
         self.stop_control()
+        pet.set_held(False)
         from .control.session import enter_control
         from .ui.panels.controlhud import ControlHud
 
@@ -1021,6 +1164,20 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         enter_control(pet, hud.current_input)
         self._control_hud = hud
         hud.show()  # 须同步执行，勿 QTimer 推迟
+
+    def hold_controlled(self):
+        """退出手动控制，让这只猫按当前姿势定身。"""
+        pet = self.controlled_pet()
+        self.stop_control()
+        if pet is not None:
+            pet.set_held(True)
+
+    def held_pets(self):
+        return [p for p in self.pets if p.held is not None]
+
+    def release_all_held(self):
+        for p in self.pets:
+            p.set_held(False)
 
     def stop_control(self):
         hud = self._control_hud
@@ -1081,7 +1238,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         p.restore()
 
     def _draw_scene(self, p):
-        # 图层序：物品 under（果柄）/ 烟 / 身后的手持物 → 猫身 → 物品 mid（杆）/ 手 → 物品 front → 水 → 物品 top（灯）→ 特效 → 雪
+        # 图层序：物品 under（果柄）/ 烟 / 身后的手持物 → 猫身 → 物品 mid（杆）/ 手 → 物品 front → 水 → 物品 top（灯）→ 特效 → 雪 / 雨
         p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
         p.scale(self._scale, self._scale)
         if self._shake[0] or self._shake[1]:
@@ -1091,6 +1248,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self._draw_fx_under(p)
         self._draw_items_behind(p)
 
+        self._draw_click_pads(p)
         for pet in self.pets:
             fx = pet.behavior.exclusive_fx() if pet.behavior is not None else None
             if fx is not None:
@@ -1110,6 +1268,25 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
 
         self._draw_fx(p)
 
+    def _static_sig(self):
+        from .items import kinds
+
+        return tuple(k.static_sig(self) for k in kinds())
+
+    def _draw_click_pads(self, p):
+        """猫的抓点下铺一层近乎透明的底，接住点击。"""
+        from .control.mouse import grab_circles
+
+        p.save()
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(0, 0, 0, 1))
+        for pet in self.pets:
+            if pet.behavior is not None and pet.behavior.blocks_interaction():
+                continue
+            for _, _, x, y, r in grab_circles(pet.body, pet.gfx):
+                p.drawEllipse(QPointF(x, y), r, r)
+        p.restore()
+
     def _draw_overlay(self, p):
         if self._place_mode:
             self._draw_place_hint(p)
@@ -1117,8 +1294,36 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
     def _snow_visible(self):
         return self.snow_on and self._snow.active
 
+    def _ambient_kind(self):
+        if self._snow_visible():
+            return "snow"
+        return "rain" if self.rain.shows else None
+
+    def _ambient_frame(self):
+        """雪按物理 tick、雨按 RAIN_FPS 定格，返回要刷新的范围（含旧范围）；不到时刻返回空。"""
+        kind = self._ambient_kind()
+        if kind is None and self._ambient_shown.isEmpty():
+            return QRect()
+        now = self._clock.nsecsElapsed()
+        if kind == "snow" and self.world_tick == self._ambient_tick:
+            return QRect()
+        if kind == "rain" and now - self._ambient_ns < 0.9e9 / tuning.RAIN_FPS:
+            return QRect()
+        self._ambient_ns, self._ambient_tick = now, self.world_tick
+        self._snow.snapshot()
+        self.rain.snapshot(self._ts)
+        if kind == "snow":
+            rect = self.rect()
+        elif kind == "rain":
+            rect = self.rain.paint_rect(self._scale)
+        else:
+            rect = QRect()
+        out = rect.united(self._ambient_shown)
+        self._ambient_shown = rect
+        return out
+
     def _record(self):
-        """记下调用列表与精确范围（逻辑坐标），不光栅化；雪不入列表。"""
+        """记下调用列表与精确范围（逻辑坐标），不光栅化；雪、雨不入列表。"""
         r = FrameRecorder(self.font())
         try:
             self._draw_scene(r)
@@ -1127,7 +1332,13 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         finally:
             r.end()
         self._ops = r.ops
-        self._painted = self.rect() if self._snow_visible() else r.device_rect()
+        scene = r.device_rect()
+        static, sig = r.static_rect(), self._static_sig()
+        if sig != self._static_last[0]:
+            scene = scene.united(static).united(self._static_last[1])  # 静态内容变了，新旧位置都刷
+        self._static_last = (sig, static)
+        self._scene_painted = scene
+        self._painted = scene.united(self._ambient_frame())
         self._ops_key = (self._frame_no, self._ts)
 
     def paintEvent(self, _):
@@ -1140,12 +1351,15 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         try:
             ops, k = self._ops, self._ops_split
             replay(p, ops[:k])
-            if self._snow_visible():
-                self._snow.draw(p, self._WL, self._HL, self._scale)
+            self._snow.draw(p, self._WL, self._HL, self._scale)
+            p.save()
+            p.setTransform(QTransform.fromScale(self._scale, self._scale))  # 雨定格不动，不跟着震
+            self.rain.draw(p, self._scale)
+            p.restore()
             replay(p, ops[k:])
         finally:
             p.end()
-        self._shown = self._painted
+        self._shown = self._scene_painted  # 雪、雨的旧范围由 _ambient_frame 管
         self._paint_ns += self._clock.nsecsElapsed() - t0
 
     def mousePressEvent(self, e):
@@ -1156,6 +1370,8 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
                 self._exit_place_mode()
             return
         if not self.pets:
+            return
+        if self._freeze and e.button() != Qt.MouseButton.RightButton:
             return
         if e.button() == Qt.MouseButton.RightButton:
             pos = self.to_logical(e.position().x(), e.position().y())

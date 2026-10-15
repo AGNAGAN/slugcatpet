@@ -1,4 +1,4 @@
-"""内置行为状态：趴下 / 睡眠 / 起身。"""
+"""趴下、睡觉、起身的状态。"""
 
 from __future__ import annotations
 
@@ -14,30 +14,57 @@ def too_cold_to_sleep(fsm):
 T_POINT_WAKE = 160  # 起身后指光标最长时长（tick）
 WAKE_STABILIZE_TICKS = 30  # 落地稳定多久才算醒透
 
+# 趴下的原因
+EXHAUST, REST_A_BIT, NAP, HIBERNATE = "exhaust", "rest", "nap", "hibernate"
+SLEEPS = (NAP, HIBERNATE)
+
+
+def lie_down(fsm, why):
+    """趴下；已经趴着就只换原因。"""
+    st = fsm._states["LieDown"]
+    if fsm.state == "LieDown":
+        st.why = why
+    else:
+        st.next_why = why
+        fsm._transition("LieDown")
+    return True
+
+
+def lying_for(fsm):
+    """趴着或睡着的原因；没趴着 None。"""
+    if fsm.state in ("LieDown", "Sleep"):
+        return fsm._states[fsm.state].why
+    return None
+
 
 class LieDown(State):
     name = "LieDown"
     tier = T_REST
     energy = REST
+    why = EXHAUST
+    next_why = None
 
     def enter(self):
         fsm = self.fsm
         b = fsm.body
+        self.why, self.next_why = self.next_why or EXHAUST, None
         b.set_posture(False)
         b.stop_walk()
 
     def tick(self, cursor, disturbed):
         fsm = self.fsm
-        if fsm._hibernating:
+        if self.why in SLEEPS:
             if too_cold_to_sleep(fsm):
-                fsm._hibernating = False
                 fsm._transition("WakeSequence")
-                return
-            if fsm.timer >= tuning.LIE_SETTLE_TICKS:
+            elif fsm.timer >= tuning.LIE_SETTLE_TICKS:
+                fsm._states["Sleep"].why = self.why
                 fsm._transition("Sleep")
             return
-        if fsm.body.energy >= tuning.EXHAUST_EXIT_ENERGY:
-            fsm._exhausted = False
+        if self.why == REST_A_BIT:
+            done = fsm.timer >= tuning.REST_TICKS or fsm.body.energy >= tuning.REST_DONE_ENERGY
+        else:
+            done = fsm.body.energy >= tuning.EXHAUST_EXIT_ENERGY
+        if done:
             fsm._transition("WakeSequence")
 
 
@@ -45,26 +72,33 @@ class Sleep(State):
     name = "Sleep"
     tier = T_REST
     energy = REST
+    why = NAP
 
     def enter(self):
         fsm = self.fsm
         b = fsm.body
+        self.nap_until = max(tuning.NAP_FLOOR, b.sleepiness - tuning.NAP_DROP)
         b.set_posture(False)
         b.stop_walk()
 
     def tick(self, cursor, disturbed):
         fsm = self.fsm
+        b = fsm.body
         fsm.gfx.sleeping = True
-        fsm.body.sleeping = True
+        b.sleeping = True
         if too_cold_to_sleep(fsm):
-            fsm._hibernating = False
             fsm._transition("WakeSequence")
             return
+        b.sleepiness = max(0.0, b.sleepiness - tuning.SLEEP_RELIEF_RATE)
+        if self.why == NAP:
+            if b.sleepiness <= self.nap_until:
+                fsm._transition("WakeSequence")
+            return
         if fsm.timer >= tuning.HIBERNATE_TICKS:
-            fsm.body.karma_gain()
-            fsm.body.food_eat(-fsm.body.food_hibernate)
-            fsm.body.energy = 1.0
-            fsm._hibernating = False
+            b.karma_gain()
+            b.food_eat(-b.food_hibernate)
+            b.energy = 1.0
+            b.sleepiness = 0.0
             fsm._transition("WakeSequence")
 
 

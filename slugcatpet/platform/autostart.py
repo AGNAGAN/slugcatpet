@@ -32,6 +32,24 @@ def is_enabled() -> bool:
         return False
 
 
+def sync_path() -> None:
+    """已开启自启时把登记的启动命令指向当前程序。"""
+    if sys.platform != "win32":
+        return
+    try:
+        import winreg
+
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER, _RUN_KEY, 0, winreg.KEY_READ | winreg.KEY_SET_VALUE
+        ) as k:
+            cur, _ = winreg.QueryValueEx(k, _VALUE)
+            cmd = _launch_command()
+            if cur != cmd:
+                winreg.SetValueEx(k, _VALUE, 0, winreg.REG_SZ, cmd)
+    except OSError:
+        pass
+
+
 def set_enabled(on: bool) -> bool:
     if sys.platform != "win32":
         return False

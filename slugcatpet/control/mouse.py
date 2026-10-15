@@ -1,4 +1,4 @@
-"""输入层：命中测试 + 抓取-拖拽-甩出 + 动态穿透。"""
+"""鼠标交互：命中测试、抓起拖拽甩出、切换鼠标穿透。"""
 
 from __future__ import annotations
 import sys
@@ -6,29 +6,32 @@ import math
 
 _IS_WIN = sys.platform == "win32"
 
-# 命中半径（逻辑 px）：三抓点圆
+# 三个抓点的命中半径（逻辑 px）
 GRAB_RAD_HEAD = 9.0
 GRAB_RAD_BODY = 9.0
 GRAB_RAD_HIP = 8.0
 HOVER_PAD = 4.0
 GRAB_PAD = 5.0
-TETHER_VEL_CAP = 14.0  # 桌宠护栏
+TETHER_VEL_CAP = 14.0  # 拖拽、甩出的速度上限
 
 
-def hit_test(body, gfx, cursor, pad=GRAB_PAD):
-    """命中三抓点之一 → 返回 ('head'/'body'/'hip', 对应 chunk)；否则 (None,None)。"""
-    if cursor is None:
-        return None, None
-    cx, cy = cursor
-    hx, hy = gfx.head.x, gfx.head.y
+def grab_circles(body, gfx, pad=GRAB_PAD):
+    """三个抓点的圆：[(名字, chunk, x, y, 半径)]。"""
     c0, c1 = body.chunk0, body.chunk1
-    cands = [
-        ("head", c0, hx, hy, GRAB_RAD_HEAD + pad),
+    return [
+        ("head", c0, gfx.head.x, gfx.head.y, GRAB_RAD_HEAD + pad),
         ("body", c0, c0.x, c0.y, GRAB_RAD_BODY + pad),
         ("hip", c1, c1.x, c1.y, GRAB_RAD_HIP + pad),
     ]
+
+
+def hit_test(body, gfx, cursor, pad=GRAB_PAD):
+    """光标落在哪个抓点上：返回 ('head'/'body'/'hip', chunk)，都不在时返回 (None, None)。"""
+    if cursor is None:
+        return None, None
+    cx, cy = cursor
     best, bestd, bestc = None, 1e9, None
-    for name, chunk, px, py, r in cands:
+    for name, chunk, px, py, r in grab_circles(body, gfx, pad):
         d = math.hypot(cx - px, cy - py)
         if d <= r and d < bestd:
             best, bestd, bestc = name, d, chunk
@@ -36,7 +39,7 @@ def hit_test(body, gfx, cursor, pad=GRAB_PAD):
 
 
 def is_over(body, gfx, cursor, pad=HOVER_PAD):
-    """拂过检测：光标在三抓点圆 ∪ 部件 bbox（外扩 pad）内。"""
+    """光标是否在猫身上：抓点圆内或部件包围盒（外扩 pad）内。"""
     if cursor is None:
         return False
     name, _ = hit_test(body, gfx, cursor, pad=pad)
@@ -51,7 +54,7 @@ def is_over(body, gfx, cursor, pad=HOVER_PAD):
 
 
 class GrabController:
-    """抓取-拖拽-甩出。钉对应 chunk 的 pos+vel；松手保留隐式速度。"""
+    """抓起、拖拽、甩出：拖动时钉住对应 chunk 的位置和速度，松手后保留速度。"""
 
     def __init__(self, body, gfx):
         self.body = body
@@ -85,7 +88,7 @@ class GrabController:
             vx = cx - self._last[0]
             vy = cy - self._last[1]
             sp = math.hypot(vx, vy)
-            self.body.drag_speed = sp  # 撞击伤害按真实速度算
+            self.body.drag_speed = sp  # 撞击伤害按限速前的速度算
             if sp > TETHER_VEL_CAP:
                 k = TETHER_VEL_CAP / sp
                 vx *= k
@@ -100,7 +103,7 @@ class GrabController:
             self.frames += 1
 
     def end(self):
-        """松手：解钉 + 限速保留速度（甩出）。返回是否曾在抓取。"""
+        """松手甩出：解钉，速度限幅后保留。返回之前是否抓着。"""
         if self.chunk is None:
             return False
         c = self.chunk
@@ -117,7 +120,7 @@ class GrabController:
         return True
 
     def force_release(self):
-        """强制脱手（飞升触发）：解钉但不保留速度。"""
+        """强制脱手（如飞升时），不保留速度。"""
         if self.chunk is not None:
             self.chunk.pinned = False
             self.chunk.vx = self.chunk.vy = 0.0
@@ -144,13 +147,13 @@ if _IS_WIN:
         _GetWindowLongPtr.argtypes = [wintypes.HWND, ctypes.c_int]
         _SetWindowLongPtr.restype = ctypes.c_void_p
         _SetWindowLongPtr.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_void_p]
-    except AttributeError:  # 32-bit Python：无 Ptr 变体
+    except AttributeError:  # 32 位 Python 没有 Ptr 版本
         _GetWindowLongPtr = _user32.GetWindowLongW
         _SetWindowLongPtr = _user32.SetWindowLongW
 
 
 def set_passthrough(hwnd: int, passthrough: bool) -> None:
-    """动态切换鼠标穿透；True 穿透、False 接收。"""
+    """切换窗口的鼠标穿透，passthrough 为 True 时点击穿过窗口。"""
     if not _IS_WIN or not hwnd:
         return
     ex = _GetWindowLongPtr(hwnd, _GWL_EXSTYLE)

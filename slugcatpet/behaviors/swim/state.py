@@ -1,4 +1,4 @@
-"""内置行为状态：游泳。"""
+"""游泳状态。"""
 
 from __future__ import annotations
 
@@ -7,6 +7,8 @@ import math
 from ... import tuning
 from ...brain.state import EN_REC_IDLE, T_BODY, VIGOROUS, State
 from ...brain.skills.motor import WALL_MARGIN
+
+KEEP_GOAL = 40  # 离水不超过这么久，回来接着游向原目标
 
 
 class Swimming(State):
@@ -27,13 +29,15 @@ class Swimming(State):
         super().__init__(fsm)
         self._swim_goal = None
         self._swim_hold = 0
+        self._seen = None  # 上次在游的世界 tick
 
     def enter(self):
         fsm = self.fsm
         b = fsm.body
         b.set_posture(False)
         b.stop_walk()
-        self._swim_goal = None
+        if self._seen is None or fsm.social.now - self._seen > KEEP_GOAL:
+            self._swim_goal = None
         self._swim_hold = 0
 
     def tick(self, cursor, disturbed):
@@ -44,6 +48,7 @@ class Swimming(State):
             b.swim_resting = False
             fsm.settle()
             return
+        self._seen = fsm.social.now
         fsm.gfx.look_at = fsm._ambient_look(cursor)
         ws = getattr(b, "water_surface", None)
         self._update_rest(ws)

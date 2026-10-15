@@ -1,4 +1,4 @@
-"""石头物理内核：单点质点，重力积分+碰撞+自旋。"""
+"""石头的物理：单个质点，带碰撞和自旋。"""
 
 from __future__ import annotations
 import math
@@ -19,11 +19,11 @@ WATER_FRICTION = 0.98
 PEBBLE_FRAMES = 14
 
 REST_VEL_EPS = 0.6
-EXIT_FLING_SPEED = 8.0  # 脱离投掷阈，同砸晕阈
+EXIT_FLING_SPEED = 8.0  # 低于此速度退出投掷态，和砸晕速度相同
 
 
 class Stone:
-    collision_layer = 2  # 与 Saint(层1) 不同层
+    collision_layer = 2  # 与 Saint（层 1）不同层
     edible = False
     throwable = True
 
@@ -51,6 +51,7 @@ class Stone:
         "vibrate",
         "fling",
         "thrown_by_cat",
+        "spare_cursor",
         "frame",
         "collide_with_objects",
         "_id",
@@ -77,7 +78,7 @@ class Stone:
         self.surface_friction = SURFACE_FRICTION
         self.buoyancy = BUOYANCY
         self.water_friction = WATER_FRICTION
-        self.water_y = None  # 外部每 tick 注入水面高；None=无水
+        self.water_y = None  # 水面高度，由外部每 tick 写入；None 为无水
         self.room_gravity = 1.0
         self.state = ItemState.FREE
         self.rotation_deg = 0.0
@@ -86,13 +87,14 @@ class Stone:
         self.vibrate = 0
         self.fling = False
         self.thrown_by_cat = False
+        self.spare_cursor = False  # 这次扔出不打光标（打猎）
         self.collide_with_objects = True
         self._id = int(seed)
         self.frame = "Pebble" + str(1 + (int(seed) % PEBBLE_FRAMES))
         self._contact_floor = False
         self._contact_ceil = False
-        self._contact_x = 0  # batfly 用，本体不读
-        self._impact_cb = None  # 窗口抖动回调；None=不触发
+        self._contact_x = 0  # 蝙蝠用，这里不读
+        self._impact_cb = None  # 撞击时的窗口抖动回调；None 不抖
         self.unfetchable = False
         self.fetch_fails = 0
         self.held_by_hand = None
@@ -121,6 +123,7 @@ class Stone:
         self.spin = throw.dir_x * 8.0
         self.fling = False
         self.thrown_by_cat = True
+        self.spare_cursor = getattr(throw, "spare_cursor", False)
 
     def in_flight(self) -> bool:
         """被扔或甩出、还在飞：能被招架、能和别的飞行武器相撞。"""

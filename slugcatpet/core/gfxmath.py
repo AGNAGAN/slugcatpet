@@ -7,7 +7,7 @@ SHOULDER_OFF_Y = 3.5  # y↓
 ARM_DIV = 2.0
 ARM_MAX = 12
 TAIL_RAD = (6.0, 4.0, 2.5, 1.0)
-TONGUE_WIDTH_SCALE = 0.4  # 调校值，勿改回
+TONGUE_WIDTH_SCALE = 0.4  # 手调值
 
 
 def _hsl2rgb(h, sl, lum):

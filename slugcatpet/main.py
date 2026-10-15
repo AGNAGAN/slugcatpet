@@ -17,29 +17,43 @@ from .window import PetWindow
 from .ui.panels.tabbar import TabBar
 from .ui.panels.hud import HudPanel
 from .ui.panels.settings import SettingsWindow
-from .control.hotkey import HotkeyFilter, MOD_CONTROL, MOD_ALT, HK_PLACE_ESC
+from .control.hotkey import (
+    FROZEN_KEYS,
+    GLOBAL_KEYS,
+    HK_FREEZE,
+    HK_HUD,
+    HK_PLACE_ESC,
+    HK_QUIT,
+    HK_STEP,
+    HK_STEP10,
+    HotkeyFilter,
+)
 from .platform import cursorfx
 from ._paths import user_dir
 from .i18n import t
 
-VK_Q = 0x51
-VK_X = 0x58
-VK_H = 0x48
-HK_ABORT = 1
-HK_QUIT = 2
-HK_HUD = 3
 _APP_PARAMS = user_dir() / "app.json"
 SCHEMA_VERSION = 2  # pets[] 分猫存档
 AUTOSAVE_MS = 60_000
 
 
-def _tray_icon() -> QIcon:
+def _tray_icon(frozen=False) -> QIcon:
+    """托盘图标；定格时右下角加暂停角标。"""
     pm = QPixmap(32, 32)
     pm.fill(QColor(0, 0, 0, 0))
     p = QPainter(pm)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
     p.setBrush(QColor(*default_def().body_color))
     p.setPen(QColor(40, 80, 20))
     p.drawEllipse(4, 4, 24, 24)
+    if frozen:
+        p.setPen(QColor(255, 255, 255))
+        p.setBrush(QColor(60, 110, 200))
+        p.drawEllipse(15, 15, 16, 16)
+        p.setPen(QColor(0, 0, 0, 0))
+        p.setBrush(QColor(255, 255, 255))
+        p.drawRect(19, 19, 3, 8)
+        p.drawRect(24, 19, 3, 8)
     p.end()
     return QIcon(pm)
 
@@ -73,7 +87,7 @@ _DROPPED_KEYS = (
     "music_theme_loop",
     "music_hud_ambient_ms",
     "music_hud_ambient_ts",
-)  # 不再读取的设置键，载入时丢弃
+)  # 已弃用的设置键，载入时丢弃
 
 
 def _load_params(path: Path | None = None) -> dict:
@@ -113,7 +127,7 @@ def setup_signal_handling(app):
     signal.signal(signal.SIGINT, _h)
     t = QTimer()
     t.timeout.connect(lambda: None)
-    t.start(500)  # 唤醒让 CPython 跑 SIGINT handler
+    t.start(500)  # 定时唤醒解释器，Ctrl+C 才能及时处理
     return t
 
 
@@ -149,6 +163,45 @@ def _extract_scene_music_later(names):
     threading.Thread(target=run, name="scene-music", daemon=True).start()
 
 
+def _extract_rain_later():
+    """缺雨的素材且找得到游戏时在后台补提取。"""
+    from .gameassets import (
+        detect_install,
+        extract_rain_atlas,
+        extract_rain_sounds,
+        rain_atlas_missing,
+        rain_sounds_missing,
+    )
+
+    atlas, sounds = rain_atlas_missing(), bool(rain_sounds_missing())
+    if not (atlas or sounds):
+        return
+
+    def run():
+        try:
+            install = detect_install()
+            if install is None:
+                return
+            if atlas:
+                extract_rain_atlas(install)
+            if sounds:
+                extract_rain_sounds(install)
+        except Exception:
+            pass
+
+    import threading
+
+    threading.Thread(target=run, name="rain-assets", daemon=True).start()
+
+
+def _freeze_heap():
+    """把启动时建好的对象移出分代回收。"""
+    import gc
+
+    gc.collect()
+    gc.freeze()
+
+
 def main():
     from .platform.appid import set_app_id
 
@@ -163,6 +216,10 @@ def main():
         si.notify_primary()
         return
     app._singleton = si  # 保持引用
+
+    from .platform import autostart
+
+    autostart.sync_path()
 
     _sig = setup_signal_handling(app)  # 保持引用
 
@@ -211,6 +268,7 @@ def main():
                 "food_q": p.body.food_q,
                 "karma": p.body.karma,
                 "cold": p.body.cold,
+                "sleepiness": p.body.sleepiness,
                 "dead": p.behavior is not None and p.behavior.is_truly_dead(),
             }
             for p in pet.all_pets()
@@ -261,6 +319,7 @@ def main():
 
     player = MusicPlayer(params, on_change=_save_music_state, theme_dirs=music_asset_dirs())
     _extract_scene_music_later(GAME_TRACKS)
+    _extract_rain_later()
     saved_tracks = params.get("music_tracks")
     if isinstance(saved_tracks, list):
         player.add_paths([p for p in saved_tracks if Path(p).is_file()], record=False)
@@ -273,19 +332,28 @@ def main():
     pet._open_music_cb = music.open
     pet._music_player = player
     pet._music_director = director
+    from .audio.ambience import RainAmbience
+
+    pet._rain_ambience = RainAmbience(pet, player, params)
     app._music = (player, director, music)
 
     def _start_scene_music():
-        env = next((k for k in ("blizzard", "zerog", "water") if getattr(pet, f"{k}_on", False)), "none")
+        env = next(
+            (k for k in ("blizzard", "zerog", "water", "rain") if getattr(pet, f"{k}_on", False)), "none"
+        )
         director.start(env)
 
     QTimer.singleShot(300, _start_scene_music)
 
     def _build_tray_menu():
-        tray.setToolTip(t("app_title"))
+        tray.setToolTip(t("tray_frozen_tip") if pet.frozen else t("app_title"))
         menu.clear()
         menu.addAction(t("tray_settings"), settings.open)
         menu.addAction(t("tray_music"), music.open)
+        freeze_act = menu.addAction(t("tray_freeze"))
+        freeze_act.setCheckable(True)
+        freeze_act.setChecked(pet.frozen)
+        freeze_act.triggered.connect(lambda on: pet.set_frozen(on))
         menu.addAction(t("tray_hud"), hud.toggle_visible)
         menu.addAction(t("refresh_top"), pet.refresh_top)
         menu.addAction(t("tray_abort"), cursorfx.abort_all)
@@ -322,10 +390,9 @@ def main():
     )
 
     hotkey = HotkeyFilter()
-    app.installNativeEventFilter(hotkey)
-    hotkey.register(HK_ABORT, MOD_CONTROL | MOD_ALT, VK_Q)
-    hotkey.register(HK_QUIT, MOD_CONTROL | MOD_ALT, VK_X)
-    hotkey.register(HK_HUD, MOD_CONTROL | MOD_ALT, VK_H)
+    hotkey.install(app)
+    for hk_id, (mods, vk, _) in GLOBAL_KEYS.items():
+        hotkey.register(hk_id, mods, vk)
     pet._hotkey_filter = hotkey  # 放置模式临时挂/摘 Esc
 
     def _on_hotkey(hk_id):
@@ -335,6 +402,12 @@ def main():
             hud.toggle_visible()
         elif hk_id == HK_PLACE_ESC:
             pet._exit_place_mode()
+        elif hk_id == HK_FREEZE:
+            pet.set_frozen(not pet.frozen)
+        elif hk_id == HK_STEP:
+            pet.step_frozen(1)
+        elif hk_id == HK_STEP10:
+            pet.step_frozen(10)
         else:
             cursorfx.abort_all()
 
@@ -353,9 +426,36 @@ def main():
     pet._refresh_top_cb = envwatch.force_top
     app._envwatch = envwatch
 
+    hidden_ui = []  # 定格时收起的界面窗口
+
+    def _on_freeze(on):
+        """定格开关：挂摘单步热键、换托盘图标、收起或放回界面。"""
+        if on:
+            for hk_id, (mods, vk, _) in FROZEN_KEYS.items():
+                hotkey.register(hk_id, mods, vk)
+            if pet.cfg_freeze_hide_ui:
+                hidden_ui[:] = [w for w in (tab, hud, pet._control_hud) if w is not None and w.isVisible()]
+                for w in hidden_ui:
+                    w.hide()
+            if not params.get("freeze_tip_shown"):
+                params["freeze_tip_shown"] = True
+                tray.showMessage(
+                    t("app_title"), t("freeze_tip"), QSystemTrayIcon.MessageIcon.Information, 4000
+                )
+        else:
+            for hk_id in FROZEN_KEYS:
+                hotkey.unregister(hk_id)
+            back = [w for w in hidden_ui if w in (tab, hud) or w is pet._control_hud]  # 控制可能已结束
+            hidden_ui.clear()
+            envwatch.reveal(back)
+        tray.setIcon(_tray_icon(on))
+        _build_tray_menu()
+
+    pet._freeze_cb = _on_freeze
+
     def _cleanup():
         pet.shutdown()
-        app.removeNativeEventFilter(hotkey)  # 关停期需先摘 filter，防虚方法 dispatch 崩溃
+        hotkey.uninstall(app)  # 先摘掉原生事件过滤器，免得关停时回调进来崩溃
         cursorfx.abort_all()
         try:
             from .control.mouse import set_passthrough
@@ -371,6 +471,7 @@ def main():
 
     app.aboutToQuit.connect(_cleanup)
 
+    _freeze_heap()
     sys.exit(app.exec())
 
 

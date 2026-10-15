@@ -16,7 +16,6 @@ class Dragged(State):
     def enter(self):
         fsm = self.fsm
         b = fsm.body
-        fsm._hibernating = False
         b.set_posture(True)
         b.stop_walk()
 
@@ -38,6 +37,7 @@ class Airborne(State):
     def __init__(self, fsm):
         super().__init__(fsm)
         self._settle = 0
+        self.land_then = None  # 落定后做的事 fn()；None 就站着
 
     def enter(self):
         fsm = self.fsm
@@ -45,6 +45,7 @@ class Airborne(State):
         b.set_posture(True)
         b.stop_walk()
         self._settle = 0
+        self.land_then = None
 
     def tick(self, cursor, disturbed):
         fsm = self.fsm
@@ -55,7 +56,11 @@ class Airborne(State):
         else:
             self._settle = 0
         if self._settle >= 4:
-            fsm._transition("LieDown" if fsm._exhausted else "IdleStand")
+            then, self.land_then = self.land_then, None
+            if then is None:
+                fsm._transition("IdleStand")
+            else:
+                then()
 
 
 class Stunned(State):
@@ -75,6 +80,9 @@ class Stunned(State):
         if fsm.body.stun <= 0:
             fsm.gfx.stunned = False
             fsm.body.set_posture(True)
+            if fsm.grab.active:
+                fsm._transition("Dragged")
+                return
             if not fsm.stun_blame:
                 fsm.settle()
                 return

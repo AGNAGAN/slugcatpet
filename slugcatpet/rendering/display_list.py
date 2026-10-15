@@ -112,7 +112,16 @@ class FrameRecorder(QPainter):
             QPainter.setFont(self, font)  # 与窗口 painter 初始字体一致，不入列表
         self.ops = []
         self._b = None  # 已映射到设备坐标的范围（未含 AA 外扩）
+        self._sb = None  # 静态内容的范围，不算进每帧的刷新范围
+        self._static = 0
         self._everything = False
+
+    def static_begin(self):
+        """之后画的是静态内容。"""
+        self._static += 1
+
+    def static_end(self):
+        self._static -= 1
 
     def _add(self, r, stroke=True):
         if r is None:
@@ -124,7 +133,15 @@ class FrameRecorder(QPainter):
             if pen.style() != _NOPEN:
                 pad = max(pen.widthF(), 1.0) * 0.5 * max(1.0, self.transform().m11())
                 d = d.adjusted(-pad, -pad, pad, pad)
-        self._b = d if self._b is None else self._b.united(d)
+        if self._static:
+            self._sb = d if self._sb is None else self._sb.united(d)
+        else:
+            self._b = d if self._b is None else self._b.united(d)
+
+    def static_rect(self) -> QRect:
+        if self._sb is None:
+            return QRect()
+        return self._sb.adjusted(-_AA, -_AA, _AA, _AA).toAlignedRect()
 
     def device_rect(self) -> QRect:
         if self._everything:
@@ -154,7 +171,10 @@ class FrameRecorder(QPainter):
         t.scale(sx, sy)
         dpr = pm.devicePixelRatio()
         d = t.mapRect(QRectF(pt.x(), pt.y(), pm.width() / dpr, pm.height() / dpr))
-        self._b = d if self._b is None else self._b.united(d)
+        if self._static:
+            self._sb = d if self._sb is None else self._sb.united(d)
+        else:
+            self._b = d if self._b is None else self._b.united(d)
         self.ops.append((_sprite, (t, pt, pm)))
 
 

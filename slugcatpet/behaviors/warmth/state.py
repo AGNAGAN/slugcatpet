@@ -1,9 +1,10 @@
-"""内置行为状态：趋暖。"""
+"""取暖状态：走到暖源旁待着。"""
 
 from __future__ import annotations
 
 from ... import tuning
 from ...planning import GIVEUP, HOLDING, MODE_STAY, PlanExecutor
+from ...planning.climbmoves import release
 from ...brain.state import T_WARM, State, LIGHT
 from .goal import warm_source
 
@@ -41,7 +42,7 @@ class SeekWarmth(State):
         src = warm_source(fsm)
         if src is None or self._warm_exec is None:
             self._seekwarmth_break()
-            fsm._transition("IdleStand")
+            fsm.settle()
             return
         fsm.gfx.look_at = src.look_point
         status = self._warm_exec.update()
@@ -57,9 +58,17 @@ class SeekWarmth(State):
 
     def brk(self):
         self._seekwarmth_break()
+        self._let_go()
 
     def kill_break(self):
         self._seekwarmth_break()
+        self._let_go()
+
+    def _let_go(self):
+        """被打断：接下来的状态不在杆上做，还抓着杆就松手。"""
+        b = self.fsm.body
+        if b.on_pole:
+            release(b)
 
     def _seekwarmth_break(self):
         fsm = self.fsm

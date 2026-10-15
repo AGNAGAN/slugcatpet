@@ -1,4 +1,4 @@
-"""吊顶落体够取：吊顶横移到目标上方→松舌落体；代价最贵，作兜底。"""
+"""吊顶落下够取：吊在天花板上横移到目标上方再松舌落下，代价最高，作兜底。"""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ CEIL_WALL_ARRIVE = 12.0
 
 
 def _drop_ticks(arc, dy):
-    """落体弧下落到相对深度 dy 所需 tick（首个 py≥dy），无则采样长度。"""
+    """沿落体弧下落 dy 所需的 tick 数，弧线不够深时取弧线长度。"""
     for i, (px, py) in enumerate(arc.points):
         if py >= dy:
             return i + 1
@@ -86,7 +86,7 @@ class CeilingDropController:
 
                 self.climber = TongueClimber(pet, self._side, target=(gx, 0.0))
             self.climber.target = (gx, 0.0)
-            if self.climber.update():  # True=已吊顶且锚点对准
+            if self.climber.update():  # 已吊在天花板上且对准目标
                 from .reach import reset_tongue
 
                 reset_tongue(pet)

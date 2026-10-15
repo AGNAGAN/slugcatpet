@@ -1,4 +1,4 @@
-"""Resolve asset and writable data paths across dev and frozen (PyInstaller) contexts."""
+"""资源路径和可写数据路径，兼容开发环境与 PyInstaller 打包。"""
 
 from __future__ import annotations
 import os

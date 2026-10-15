@@ -1,4 +1,4 @@
-"""机会主义舌头补救层：空中掠果时抢射舌粘住收绳，消费方每 tick 驱动。"""
+"""取果的空中补救（技能槽 fetch_assist）：离果子越来越远时抢射舌粘住收绳，由取果每 tick 调用。"""
 
 from __future__ import annotations
 import math
@@ -44,7 +44,7 @@ class TongueSnatch:
         self._rescues += 1
 
     def holding(self):
-        """是否正持有补救舌头，需实查 owner 非仅看布尔。"""
+        """是否正占着舌头补救，以舌头的 owner 为准。"""
         tg = tongue_of(self.pet)
         return self._active and tg is not None and tg.owner is self
 

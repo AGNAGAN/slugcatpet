@@ -1,4 +1,4 @@
-"""全局共用常量（物理 / 环境 / 核心行为 / 规划），tick=1/40s。"""
+"""物理、环境、核心行为、规划共用的常量，tick=1/40s。"""
 
 from __future__ import annotations
 
@@ -9,35 +9,17 @@ MOOD_NOISE_AMP = 0.20
 EXHAUST_ENTER_ENERGY = 0.1
 EXHAUST_EXIT_ENERGY = 0.50
 LIE_SETTLE_TICKS = 40
-SLEEP_ANCHOR_EASE = 0.45  # 睡着被推开后贴回原位的速度
+SLEEP_ANCHOR_EASE = 0.45  # 睡着时身体贴向睡姿锚点的速度
 
-# 耗能玩法体力门
+# 玩耗体力的游戏所需的最低体力
 PLAY_ENERGY_GATE = 0.40
 
-# 性格接线全局旋钮
+# 性格换算的全局系数
 PERS_ACT_SPREAD = 1.0
 PERS_GATE_SPREAD = 0.20
 PERS_GATE_FLOOR = 0.20
 
-# 爬竖杆权重与新鲜度
-POLE_BASE = 1.00
-POLE_START = 0.70
-POLE_QUIT = 0.30
-POLE_INIT = 0.30
-POLE_DECAY = 0.0040
-POLE_RECOVER = 0.00058
-POLE_SF_FRESH = 1.50
-POLE_SF_TIRED = 0.10
-POLE_SHARE_PATIENCE = 600  # 别的猫占竖杆这么久后才能去爬
-
-# 发呆兜底候选权重与驻留
-IDLE_BASE = 1.00
-IDLE_SF_KNEE = 0.9
-IDLE_SF_FRESH = 0.30
-IDLE_SF_TIRED = 24.0
-IDLE_HOLD_MIN = 120
-IDLE_HOLD_MAX = 520
-IDLE_HOLD_TIRED_MULT = 1.8
+# 做完一件事后先站一会再挑下一件
 IDLE_BREATHER = 50
 
 # 饱食度
@@ -48,10 +30,47 @@ EN_EAT_RESTORE = 0.10
 # 业力与冬眠
 KARMA_INIT = 8
 KARMA_MAX = 9
-HIBERNATE_TICKS = 3600
+HIBERNATE_TICKS = 6000  # 冬眠睡这么久（150 s）
 REVIVE_TICKS = 400
 
-# 撞击伤害：晕 / 死的速度阈值按种族见 SlugStats.fall_*_speed
+# 困意：醒着慢慢涨，睡着慢慢降；冬眠睡满清零，打盹只降一截
+SLEEPY_INIT = 0.3
+SLEEPY_RATE = 1.0 / 60000.0  # 醒着每 tick 涨这么多
+SLEEPY_VIG_MULT = 1.5  # 剧烈活动时涨得快
+SLEEP_RELIEF_RATE = 1.0 / 8000.0  # 睡着每 tick 降这么多
+SLEEP_WANT_LO = 0.55  # 困意从这里开始想睡
+SLEEP_WANT_HI = 0.95  # 到这里很想睡；到 1 撑不住，就地睡
+NAP_DROP = 0.45  # 食物不够冬眠时只打盹，困意降这么多就醒（不扣食物、不加业力）
+NAP_FLOOR = 0.25
+
+# 意图
+INTENT_TEMP = 0.10
+HANG_UTIL = 0.35  # 接着闲待
+HANG_HOLD_MIN = 800  # 选了闲待后待这么久再重选（tick）
+HANG_HOLD_MAX = 2400
+PLAY_UTIL = 0.40  # 玩：× 好动程度，体力低、困了都降
+HUNGRY_PLAY_DAMP = 0.25  # 饿着又没吃的时玩的意愿最多降这么多
+REST_WANT_HI = 0.45  # 体力低于这里开始想歇
+REST_WANT_LO = 0.15  # 到这里很想歇
+REST_TICKS = 600  # 歇一会趴这么久
+REST_DONE_ENERGY = 0.6
+EAT_OPP_UTIL = 0.30  # 顺手吃
+EAT_BED_UTIL = 1.1  # 睡前要吃够
+EAT_BED_LO = 0.5
+EAT_BED_HI = 0.85
+EAT_URGENT = 0.6  # 睡前要吃够到这里就打断手头的事
+WARM_UTIL = 1.2  # 冷：× 冷的程度
+
+# 爬架
+PERCH_UTIL = 0.3  # 去爬架
+PERCH_COST_LIMIT = 1200  # 只考虑这么多 tick 内走得到的位置
+PERCH_CROWD_R = 30.0  # 离别的猫或它预约的位置这么近的不去
+PERCH_NEARBY = 0.5  # 换地方时留在同一根杆上的概率
+PERCH_DWELL_MIN = 600  # 到点后待这么久，吊着、爬着的减半
+PERCH_DWELL_MAX = 2000
+PERCH_BORED = 0.8  # 这一趟每多待一处，换地方的意愿乘这么多
+
+# 撞击伤害；晕、死的速度阈值按猫种，见 SlugStats.fall_*_speed
 FALL_STUN_MIN = 40  # 晕 tick，按速度在两档之间插值
 FALL_STUN_MAX = 140
 DRAG_IMPACT_MAX_SCALE = 6.0  # 拖拽时补回被限速的部分，最多放大这么多
@@ -101,13 +120,19 @@ REINCARNATE_TICKS = 600
 COLD_SEEK_ENTER = 0.30
 COLD_SEEK_EXIT = 0.10
 COLD_NOSLEEP = 0.20
-COLD_SEEK_BASE = 3.0
 COLD_ARRIVE_FRAC = 0.8
 
 # 雪与霜冻氛围
 SNOW_ENABLED = True
 SNOW_MAX_FLAKES = 50
 SNOW_VIGNETTE_MAX = 15
+
+# 雨（默认关）
+RAIN_AMOUNT = 0.4  # 默认雨量，0.5 以上露天会被推、砸晕
+RAIN_SHELTER_POLL_MS = 250  # 下雨时取挡雨窗口的间隔
+RAIN_FPS = 30  # 雨层的出帧率
+RAIN_VOLUME = 0.6  # 默认雨声音量
+RAIN_ITEM_KICK_MAX = 3.0  # 物品单次被雨推的速度上限
 
 # 水环境（默认关）
 WATER_FULL_DEPTH = 0.55
@@ -121,7 +146,7 @@ WATER_THREAT_SAFE_DEPTH = 60.0
 
 # 游泳/憋气/淹死（y↓）
 SWIM_ENTER = 0.22
-SWIM_EXIT = 0.10  # 出水位，与入水位滞回防抖
+SWIM_EXIT = 0.10  # 出水阈值，低于入水阈值形成滞回
 SWIM_SUB_FILTER = 0.35  # 游泳时浸没度低通系数
 SWIM_DEEP_DEPTH = 30.0
 SWIM_DEEP_DIVE_DEPTH = 10.0
@@ -136,7 +161,7 @@ SWIM_DROWN_STEP = 1.0 / 120.0
 SWIM_LUNG_RECOVER = 60.0
 SWIM_LUNG_RECOVER_EXH = 240.0
 SWIM_ARRIVE_R = 34.0
-SWIM_ARRIVE_X = 6.0  # 防在目标正下方来回抖
+SWIM_ARRIVE_X = 6.0  # 横向死区，免得在目标正下方来回抖
 SWIM_FETCH_SEEK_R = 220.0
 SWIM_FETCH_REACH = 22.0
 SWIM_VEL_MAX = 45.0
@@ -149,14 +174,9 @@ SWIM_REST_ENERGY_OUT = 0.45
 SWIM_REST_ABOVE = 15.0  # 歇着时头露出水面的高度
 SWIM_REST_ENERGY_REC_FAC = 3.0  # 歇着时体力恢复倍率（× EN_REC_IDLE）
 SWIM_REST_RECOVER_MULT = 0.4
-# 水里错开：两只猫迎面或贴身时一只小跳、一只下潜
-SWIM_AVOID_TRIGGER_DIST = 30.0
-SWIM_INTENT_DOT = 0.5  # 想游方向与对方方位夹角余弦超过此值才算朝它去
-SWIM_SHOVE_CONTACT_PAD = 6.0
+# 水里错开：下潜从下面过，或从水面小跳过去
 SWIM_PASS_TICKS = 28
 SWIM_PASS_COOLDOWN = 26
-SWIM_DETOUR_DELAY = 30  # 被夹住且气一直在掉这么久才潜下去绕
-SWIM_DETOUR_TICKS = 44
 SWIM_PASS_DIVE_MIN = 48.0  # 下潜深度（水面以下）
 SWIM_PASS_DIVE_MAX = 92.0
 SWIM_PASS_SINK_GAIN = 0.10
@@ -178,7 +198,7 @@ SWIM_DRIFT_DEPTH_MAX = 70.0
 SWIM_DRIFT_DEEP_MAX = 260.0
 SWIM_BOOST_DIST_ZEAL = 25.0
 
-# AI 爆跳：起跳后第几 tick 点火（弧线模拟与爆破行为共用）
+# 自动爆跳：起跳后第几 tick 点火，弧线模拟和爆破行为共用
 PYRO_BOOST_AIR_TICKS = 6
 
 # 溺水吐泡
@@ -189,7 +209,7 @@ BUBBLE_OPACITY = 0.25
 BUBBLE_INHERIT_VEL = 0.025
 BUBBLE_SPAWN_KICK = 0.5
 
-# idle 兜底层：东张西望
+# 待机兜底：东张西望
 LOOK_UPDATE_PROB = 0.1
 LOOK_NOTHING_PROB = 0.0025
 LOOK_INTEREST_DECAY_UPDATES = 8  # 评估这么多次后开始看腻
@@ -197,9 +217,9 @@ LOOK_MIN_INTEREST = 0.20
 LOOK_DIST_NEAR = 400.0
 LOOK_CURSOR_BASE = 1.00
 LOOK_ITEM_BASE = 0.80
-# idle 兜底层：踱步
+# 待机兜底：踱步
 PACE_PROB = 0.0016
-# idle 社交走位：按 sociability 决定趋近/远离/随机
+# 待机走位：按 sociability 决定靠近、远离或随机
 SOCIAL_WANDER_LO = 0.4
 SOCIAL_WANDER_HI = 0.6
 SOCIAL_WANDER_SAMPLES = 11
@@ -208,7 +228,7 @@ SOCIAL_WANDER_MOVE_W = 0.6
 SOCIAL_WANDER_CROSS_W = 0.8
 SOCIAL_WANDER_STAY_GAIN = 0.05
 SOCIAL_WANDER_STAY_SPAN_FRAC = 0.06
-# idle 互相看：两只发呆的猫靠近时偶尔对视
+# 待机对视：两只发呆的猫靠近时偶尔对视
 STARE_DIST_MAX = 220.0
 STARE_DIST_NEAR = 70.0
 STARE_DECAY_MULT = 0.62  # 邻近度指数，压低中距离的对视
@@ -221,37 +241,17 @@ STARE_COOLDOWN_MAX = 850
 STARE_ENGAGE_DIST = 22.0
 STARE_ENGAGE_MULT = 0.3
 
-# 站杆顶/横杆面平衡
-BAL_FLAIL_PROB = 0.15
-BAL_FLAIL_TIP = 6.0
-BAL_RECOVER = 0.83
+# 站杆顶 / 横杆上的平衡
 BAL_MAX = 120.0
 BAL_COUNTER_WRAP = 300.0
 BAL_SWAY_X = 0.08
 BAL_SWAY_Y = 0.02
 
-# 站杆顶退出：摔落与主动下杆
-TIP_FALL_DISBALANCE = 95.0
-TIP_FALL_PROB = 0.04
-TIP_TIRED_ENERGY = 0.15
-TIP_DISMOUNT_CLIMB_PROB = 0.5
-TIP_MIN_TICKS = 40
-
-# 横杆站面拓展：停顿、吊荡、晃动
-HP_PAUSE_PROB = 0.02
-HP_PAUSE_MIN = 20
-HP_PAUSE_MAX = 80
-HP_HANG_PROB = 0.0015
-HP_HANG_TICKS = 70
-HP_WOBBLE_MIN = 30.0
-HP_WOBBLE_MAX = 60.0
-HP_RETARGET_TICKS = 40
-
-# 取物机制常量
+# 取物
 GRAB_REACH = 18.0
 REACH_GATE_K = 2.0
 
-# 运动规划层：覆盖几何、粗线性代价、执行器失败语义
+# 运动规划：几何覆盖、粗略线性代价、执行器失败与重规划
 PLAN_WALK_SPEED = 4.2
 PLAN_CLIMB_SPEED = 1.6
 PLAN_STARTUP_TICKS = 20.0
@@ -272,24 +272,7 @@ PLAN_ARRIVE_HOLD = 30
 PLAN_JUMP_HOLD_GEARS = (0, 3, 6)
 PLAN_JUMP_TAKEOFF_EPS = 6.0
 
-# 挡路让位：被顶约 1s 跳起让开或趴下
-SHOVE_CONTACT_DIST = 24.0
-SHOVE_YIELD_TICKS = 40
-MAKEWAY_TIMEOUT = 200
-MAKEWAY_COOLDOWN = 60  # 让路后多久才能再让
-MAKEWAY_CROWD_DIST = 90.0  # 横向这么近的猫算挤在身边
-MAKEWAY_CROWD_N = 2  # 身边挤了这么多只就只跳不趴
-MAKEWAY_CROWD_LIE_N = 4  # 场上超过这么多只时多半趴下让
-MAKEWAY_CROWD_HOP_PROB = 0.2
-MAKEWAY_EDGE_MARGIN = 48.0  # 贴屏幕边时只跳不趴
-MAKEWAY_LIE_MIN_TICKS = 36  # 趴下至少趴这么久（含约 17 tick 的趴下过程）
-
-# 顶人方兜底跳越
-BLOCKED_JUMP_TICKS = 100
-JUMP_OVER_HOLD = 6
-JUMP_OVER_COOLDOWN = 80
-
-# 光标驻留：在屏幕高度带内且几乎不动即累计驻留 tick（舔光标 / 光标劫持共用）
+# 光标驻留：在高度带内几乎不动时累计 tick，舔光标和光标劫持共用
 CURSOR_DWELL_BAND_LO = 0.50  # 高度带上沿（占工作区高比例）
 CURSOR_DWELL_BAND_HI = 0.75  # 高度带下沿
 CURSOR_DWELL_TOL = 6.0  # 每 tick 位移小于此（px）算没动

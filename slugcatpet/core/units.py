@@ -28,3 +28,11 @@ def inv_lerp(a: float, b: float, v: float) -> float:
         return 0.0
     t = (v - a) / (b - a)
     return 0.0 if t < 0.0 else (1.0 if t > 1.0 else t)
+
+
+def lerp_tick(a: float, b: float, k: float, step: float) -> float:
+    """先按比例 k 靠近 b，再走一个定步长。"""
+    a = a + (b - a) * k
+    if a < b:
+        return min(a + step, b)
+    return max(a - step, b)

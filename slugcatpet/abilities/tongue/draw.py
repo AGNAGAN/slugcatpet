@@ -1,4 +1,4 @@
-"""舌头渲染：渲染链每 tick 推进（Verlet），绘制时只画不推。"""
+"""舌头绘制：显示用的绳链每 tick 按 Verlet 推进，绘制时不推进。"""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ class TongueRope:
 
         rope = self.pts
         rope_v = self.vel
-        # 无链/长度变/跳变>80px 时重建
+        # 没有链、点数不对或嘴跳开超过 80px 时重建
         if (
             rope is None
             or len(rope) != N
@@ -71,7 +71,7 @@ class TongueRope:
             pts[i] = (x, y)
             vel[i] = (vx, vy)
 
-        # 约束求解，rest=总长/N*0.1
+        # 距离约束，静止长度为总长 / N * 0.1
         rope_total_len = getattr(t, "total", 200.0)
         rest = (rope_total_len / N) * 0.1
         for i in range(1, N):
@@ -99,7 +99,7 @@ class TongueRope:
         self.vel = vel
 
 
-def draw_tongue(t, rope, p):
+def draw_tongue(t, rope, p, gfx=None):
     if t is None or not t.visible:
         return
 
@@ -108,6 +108,13 @@ def draw_tongue(t, rope, p):
         return
 
     mx, my = t.mouth
+    if gfx is not None and gfx.face_pose[0]:
+        # 舌根对齐这一帧画出的脸，链按离嘴远近跟着平移
+        _, fx, fy, _ = gfx.face_pose
+        ox, oy = fx - mx, fy - my
+        n = len(pts) - 1
+        pts = [(x + ox * i / n, y + oy * i / n) for i, (x, y) in enumerate(pts)]
+        mx, my = fx, fy
 
     travel = math.hypot(t.x - mx, t.y - my)
     tot = getattr(t, "total", 200.0)

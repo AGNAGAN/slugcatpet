@@ -1,4 +1,4 @@
-"""Drawing methods mixed into :class:`slugcatpet.graphics.SlugcatGraphics`."""
+"""SlugcatGraphics 的绘制方法（混入类）。"""
 
 from __future__ import annotations
 
@@ -187,6 +187,10 @@ class GraphicsDrawMixin:
                 continue
 
             sh_spread = 4.5 / (hand.retract_counter + 1.0)
+            if anim in ("StandOnBeam", "BeamTip") and self.disbalance <= 40.0:
+                sh_spread *= self.disbalance / 40.0
+            elif anim == "HangFromBeam":
+                sh_spread *= 0.5
             sh_spread *= cos_axis * self.body.stats.shoulder_width
 
             lx = (-1.0 + 2.0 * j) * sh_spread
@@ -351,7 +355,7 @@ class GraphicsDrawMixin:
             elif anim == "StandOnBeam":
                 element = "LegsAOnPole" + str(af if af < 7 else 0)
                 self._legs_scale_x = facing_sx
-            elif anim in ("HangFromBeam", "GetUpOnBeam"):
+            elif anim in ("HangFromBeam", "GetUpOnBeam", "GetUpToBeamTip"):
                 element = self._leg_air_frame
             else:
                 element = "LegsAVerticalPole"

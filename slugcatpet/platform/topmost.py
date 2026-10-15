@@ -1,4 +1,4 @@
-"""置顶保持：保住各窗 WS_EX_TOPMOST，前台变更事件即时重申 + 轮询兜底，只补丢失不越置顶同侪。"""
+"""置顶保持：前台切换时和定时轮询时检查各窗口的 WS_EX_TOPMOST，丢了就补上，不去压别的置顶窗口。"""
 
 from __future__ import annotations
 import sys
@@ -36,7 +36,7 @@ if _IS_WIN:
         _GetWindowLongPtr = _user32.GetWindowLongPtrW
         _GetWindowLongPtr.restype = ctypes.c_void_p
         _GetWindowLongPtr.argtypes = [wintypes.HWND, ctypes.c_int]
-    except AttributeError:  # 32位无 Ptr 变体
+    except AttributeError:  # 32 位系统没有 Ptr 版本
         _GetWindowLongPtr = _user32.GetWindowLongW
 
     _user32.SetWindowPos.restype = wintypes.BOOL
@@ -67,7 +67,7 @@ if _IS_WIN:
         return int(v) if v is not None else 0
 
     def _win_set_topmost(hwnd: int) -> None:
-        # NOACTIVATE：置顶但不抢前台
+        # 置顶但不抢前台
         _user32.SetWindowPos(
             wintypes.HWND(hwnd),
             wintypes.HWND(HWND_TOPMOST),
@@ -79,7 +79,7 @@ if _IS_WIN:
         )
 
     def _win_install_hook(callback):
-        # 保活 proc 防 GC；SKIPOWNPROCESS 屏蔽自家窗
+        # 返回 proc 供调用方持有，防止被回收
         proc = WINEVENTPROC(callback)
         hook = _user32.SetWinEventHook(
             EVENT_SYSTEM_FOREGROUND,
@@ -113,7 +113,7 @@ class TopmostKeeper:
             if _IS_WIN:
                 get_exstyle = get_exstyle or _win_get_exstyle
                 set_topmost = set_topmost or _win_set_topmost
-            else:  # 非 Windows：恒真，reassert 空转
+            else:  # 非 Windows 时 reassert 什么都不做
                 get_exstyle = get_exstyle or (lambda h: WS_EX_TOPMOST)
                 set_topmost = set_topmost or (lambda h: None)
         self._get_exstyle = get_exstyle
@@ -139,7 +139,7 @@ class TopmostKeeper:
                 pass
 
     def force_top(self):
-        """不管标志位，把所有可见窗重新提到置顶组最上面。"""
+        """不看标志位，把所有可见窗口提到置顶组最上面。"""
         if self._is_suspended():
             return
         for w in reversed(self._windows):
@@ -171,7 +171,7 @@ class TopmostKeeper:
         self._hook = None
 
     def _on_foreground(self, *args):
-        # ctypes 回调需吞异常
+        # ctypes 回调里不能抛异常
         try:
             self.reassert()
         except Exception:

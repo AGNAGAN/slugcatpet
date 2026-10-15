@@ -1,4 +1,4 @@
-"""舌头爬墙 + 吊顶：TongueClimber 攀墙到顶，CeilingHanger 吊顶摆晃，均基于舌头弹簧锚点。"""
+"""舌头爬墙和吊顶：TongueClimber 沿墙爬到天花板，CeilingHanger 吊在天花板上晃荡。"""
 
 from __future__ import annotations
 import math
@@ -7,7 +7,7 @@ from ...core.units import clampf
 from . import consts
 from .aim import fire, tongue_of
 
-# 爬墙/吊顶常量（px/tick）
+# 爬墙、吊顶（速度 px/tick，长度 px）
 CLIMB_SHOOT_V = 46.7
 CLIMB_IDEAL = 50.0
 CLIMB_IDEAL_MIN = 25.0
@@ -19,14 +19,14 @@ HANG_CLEAR_MARGIN = 6.0  # 吊顶时臀底离水面至少留这么多
 
 
 def hang_water_level(pet):
-    """吊顶要避开的水位 y（按正在涨到的那一档）；无水为 None。"""
+    """吊顶要避开的水位 y，水在涨时取目标水位；没水为 None。"""
     if not getattr(pet, "water_on", False) or pet.water_y is None:
         return None
     return pet.water_y if pet.water_target is None else min(pet.water_y, pet.water_target)
 
 
 def hang_ideal_max(pet):
-    """不碰水的最长吊绳；无水为 None。"""
+    """不碰水的最长吊绳，没水为 None。"""
     level = hang_water_level(pet)
     return None if level is None else level - HANG_BODY_BELOW - HANG_CLEAR_MARGIN
 
@@ -85,7 +85,7 @@ class TongueClimber:
             if math.hypot(c0.x - self.target[0], c0.y - self.target[1]) <= self.stop_dist:
                 return True
 
-        # 触发吊顶阈值取 _HL*0.5 与射程 85% 的较小值
+        # 高过半屏、天花板进了射程的 85% 就转去吊顶
         ceil_trigger = min(self.win._HL * 0.5, self.tongue.total * 0.85)
         if (
             self.phase not in ("ceiling", "ceil_wait", "tv_settle", "tv_drop", "tv_shoot")
@@ -185,7 +185,7 @@ class TongueClimber:
         return False
 
     def _anchor_centered(self):
-        """舌头锚点是否到位：趋暖→近灯泡 x；有随机落点→近落点；否则屏幕中间 50% 区间。"""
+        """锚点是否到位：有目标（如暖灯）就要靠近目标 x，有随机落点就要靠近落点，否则在屏幕中间一半。"""
         a = self.tongue.anchor
         if a is None:
             return False
@@ -233,7 +233,7 @@ class CeilingHanger:
     def update(self):
         self.timer += 1
         tg = self.tongue
-        # 掉落交回行为层，bigmove 期除外
+        # 舌头松了就交还给行为，换位（bigmove）期间除外
         if not tg.attached and self.sub != "bigmove":
             return True
         if self.sub is None and self.timer >= self.next:

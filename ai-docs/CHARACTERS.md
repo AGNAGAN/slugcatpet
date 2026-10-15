@@ -28,7 +28,7 @@
   "abilities": {"pyro": {}},
   "behaviors": {},
   "stats": {"runspeed_fac": 1.2, "max_food": 9, "drown_threshold": 0.5, "karma_cap": 0},
-  "personality": {"activity": 0.75, "sociability": 0.2, "diet": "carnivore",
+  "personality": {"activity": 0.75, "sociability": 0.2, "diet": "carnivore", "meat": 4,
                   "toy_pref": {"pyro_romp": 1.4}}
 }
 ```
@@ -48,7 +48,7 @@
 | `frames` | ✓ | 语义帧名 → `"图集/帧名前缀"`，见下表 |
 | `tail_rad` | | 原皮尾巴每段半径（从根到尖，2–15 段），不写就是游戏默认 `[6, 4, 2.5, 1]`。皮肤设了尾巴参数时以皮肤为准 |
 | `abilities` | | 能力 → 参数覆盖（`{}` = 默认）。可用能力和参数见 [PARAMS.md](PARAMS.md) |
-| `behaviors` | | 行为例外：`false` 关掉，对象 = 覆盖参数。原生行为每只猫都有，其余行为在所需身体标签齐全时自动挂上（能力会增删标签，如骨针去掉 `mouth`，用嘴吃的行为就不挂），通常不用写。发呆、休息、游泳关不掉 |
+| `behaviors` | | 行为例外：`false` 关掉，对象 = 覆盖参数。原生行为每只猫都有，其余行为按身体标签自动挂上（如骨针去掉 `mouth`，用嘴吃的行为就不挂），通常不用写。发呆、休息、游泳关不掉 |
 | `stats` | | 数值，只写和默认不同的。字段和默认值见 `characters/stats.py` |
 | `personality` | | 性格，只写和默认不同的。见下面「性格」 |
 | `wip` | | `true` 表示还没做完，选猫列表里会标出来 |
@@ -75,12 +75,13 @@
 | `cold_gain_fac` | 1.0 | 变冷的速度 |
 | `sociability` | 0.5 | 发呆时往别的猫身边走（高）还是走开（低） |
 | `swim_zeal` | 0.5 | 喜不喜欢水，0.5 及以下视为中性 |
-| `diet` | `omnivore` | `omnivore` 杂食 / `carnivore` 肉食（偏好肉，吃一样只得 1/4 格）/ `vegetarian` 素食（不吃肉）/ `special` 同素食 |
+| `diet` | `omnivore` | `omnivore` 杂食 / `carnivore` 肉食（偏好肉，吃一样只得 1/4 格，蛋虫蛋除外）/ `vegetarian` 素食（不吃肉）/ `special` 同素食 |
+| `meat` | 0 | 啃尸体每口得几个 1/4 格，0 为不啃（猎手、工匠 4，大胃王 2） |
 | `toy_pref` | `{}` | 心情名 → 权重乘子 |
 
 每个字段具体作用在哪，见 [PARAMS.md](PARAMS.md) 的「性格」一节。
 
-猫无聊时会按权重随机挑一件事做，`toy_pref[心情名]` 会乘到对应的权重上。心情名见 [PARAMS.md](PARAMS.md)，爬竖杆是 `pole_climb`。
+猫闲下来挑到「玩」时，会在玩的心情里按权重抽一个，`toy_pref[心情名]` 会乘到对应的权重上。心情名见 [PARAMS.md](PARAMS.md)。去爬架待着不是心情。
 
 ### 外观
 

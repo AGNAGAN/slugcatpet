@@ -25,11 +25,11 @@ DRAG_SHAKE_SPEED = 2.2 * tuning.TEMPER_SWING_SPEED  # 被甩到这么快就脱�
 SNATCH_TUG = 12  # 被抢时手追着光标拽的帧数
 
 
-def can_wield(body, obj, hyst=0.0) -> bool:
-    """这只猫眼下肯不肯把 obj 当武器：扎得进的只在好感很低时用，只能抛矛的猫不用。"""
+def can_wield(body, obj, hyst=0.0, hunting=False) -> bool:
+    """这只猫眼下肯不肯把 obj 当武器：扎得进的对光标只在好感很低时用、打猎随时用，只能抛矛的猫不用。"""
     if not getattr(obj, "pierces", False):
         return True
-    return not body.stats.spear_toss and body.temper < tuning.SPEAR_TEMPER + hyst
+    return not body.stats.spear_toss and (hunting or body.temper < tuning.SPEAR_TEMPER + hyst)
 
 
 class HandKeeper:

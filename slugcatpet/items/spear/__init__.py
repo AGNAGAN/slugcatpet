@@ -1,4 +1,4 @@
-"""矛：能扔、能扎进墙当短杆；猫扔出的矛扎中光标会带着它飞到墙上钉住，开了友伤会扎伤别的猫。"""
+"""矛：能扔、能扎进墙当短杆、能把光标钉到墙上；从身上长出的骨针也是矛。"""
 
 from __future__ import annotations
 
@@ -10,9 +10,9 @@ from PySide6.QtGui import QColor, QPainterPath, QPainterPathStroker
 from ...core.units import clampf, lerp
 from ...core.vecmath import _ang_from_up, _seg_dist
 from ...rendering.primitives import blit
-from ..base import CARRYABLE, CLIMBABLE, THROWABLE, ItemKind
+from ..base import CARRYABLE, CLIMBABLE, HIT_SPEAR, THROWABLE, ItemKind, creatures
 from ..state import ItemState
-from .model import BODY, HALF_LEN, SURE_STICK, STICK_CHANCE, STICK_MIN_SPEED, STICK_RANGE, THROW_SPEED
+from .model import BODY, FREE, HALF_LEN, SURE_STICK, STICK_CHANCE, STICK_MIN_SPEED, STICK_RANGE, THROW_SPEED
 from .model import TIP_PIVOT, WALL, Spear
 
 SPEAR_COLOR = (40, 42, 47)
@@ -36,6 +36,15 @@ FIRST_TRACE_DOT = 0.3  # 出手首帧只打投掷方向前方的东西
 WALL_SPARKS = 7
 CLASH_SPARKS = 3
 
+NEEDLE_SPRITE = "BioSpear"  # + 花纹 1..3
+NEEDLE_COLOR = (255, 255, 255)
+NEEDLE_FADE = 400  # 断开连接后褪成暗色的帧数
+NEEDLE_FADE_STEPS = 24  # 褪色分档，免得每帧换一种着色
+NEEDLE_CAP = 6  # 场上骨针上限（不占矛的放置上限）
+NEEDLE_FLOOR_TICKS = 2400  # 断开后在地上躺这么久就碎掉
+DISSOLVE_TICKS = 30
+DISSOLVE_SPECKS = 6
+
 
 class SpearKind(ItemKind):
     key = "spear"
@@ -48,8 +57,11 @@ class SpearKind(ItemKind):
     grab_rank = 2
     grab_states = (ItemState.FREE, ItemState.STUCK)
     dead_state = ItemState.GONE
+    grows = True  # 能从身上长出来（见 grow）
 
     def affords_now(self, s, use):
+        if s.dissolve >= 0:
+            return False
         if use == CLIMBABLE:
             return s.mode == WALL
         if use == THROWABLE:
@@ -58,6 +70,34 @@ class SpearKind(ItemKind):
 
     def make(self, win, lx, ly, seed):
         return Spear(lx, ly, seed=seed)
+
+    def can_place(self, win):
+        return sum(1 for s in win.spears if s.needle < 0) < self.cap
+
+    def grow(self, win, x, y, owner, style):
+        """从 owner 身上长出一根连着它的骨针；满了先碎掉最老的一根闲置骨针，碎不了返回 None。"""
+        needles = [s for s in win.spears if s.needle >= 0 and s.dissolve < 0]
+        if len(needles) >= NEEDLE_CAP:
+            old = next(
+                (s for mode in (FREE, WALL, BODY) for s in needles if s.mode == mode and _idle(s)), None
+            )
+            if old is None:
+                return None
+            _start_dissolve(win, old)
+        sk = self.seed_key or self.key
+        seed = win._item_seeds.get(sk, 0)
+        win._item_seeds[sk] = seed + 1
+        s = Spear(x, y, seed=seed)
+        s.needle = int(style) % 3
+        s.feeds = owner
+        s.fade = NEEDLE_FADE
+        s._impact_cb = win._shake_impact
+        self.add(win, s)
+        win.world_version += 1
+        return s
+
+    def grabbable(self, s):
+        return s.dissolve < 0 and super().grabbable(s)
 
     def drop(self, win, s):
         for pet in win.pets:
@@ -75,7 +115,7 @@ class SpearKind(ItemKind):
         return _seg_dist(cx, cy, ax, ay, bx, by)
 
     def hit(self, s, cx, cy):
-        if s.state not in self.grab_states:
+        if s.state not in self.grab_states or s.dissolve >= 0:
             return None
         return self.grab_dist(s, cx, cy) - s.rad
 
@@ -127,6 +167,7 @@ class SpearKind(ItemKind):
         _clash(win)
         _carry_impaled(win)
         _ride_tick(win)
+        _needles(win)
         if any(s.geom_dirty for s in spears):
             for s in spears:
                 s.geom_dirty = False
@@ -136,7 +177,20 @@ class SpearKind(ItemKind):
     def draw_under(self, win, p):
         for s in win.spears:
             if s.state == ItemState.STUCK:
-                _draw(win, p, s)
+                still = _still(s)
+                if still and hasattr(p, "static_begin"):
+                    p.static_begin()
+                    _draw(win, p, s)
+                    p.static_end()
+                else:
+                    _draw(win, p, s)
+
+    def static_sig(self, win):
+        return tuple(
+            (id(s), s.x, s.y, s.rot, s.needle, _needle_color(s) if s.needle >= 0 else None)
+            for s in win.spears
+            if s.state == ItemState.STUCK and _still(s)
+        )
 
     def draw(self, win, p):
         for s in win.spears:
@@ -181,7 +235,31 @@ def _shaft(s):
     return s.x - rx * L * k, s.y - ry * L * k, s.x + rx * L * (1.0 - k), s.y + ry * L * (1.0 - k)
 
 
+def _still(s):
+    """扎住不动的矛可以当静态内容。"""
+    return s.vibrate <= 0 and s.dissolve < 0 and (s.needle < 0 or (s.feeds is None and s.fade <= 0))
+
+
 def _draw(win, p, s):
+    if s.dissolve >= 0:
+        p.save()
+        p.setOpacity(p.opacity() * (1.0 - s.dissolve / DISSOLVE_TICKS))
+        _draw_one(win, p, s)
+        p.restore()
+        return
+    _draw_one(win, p, s)
+
+
+def _needle_color(s):
+    """连着身体时白，断开后按剩余帧褪向矛的暗色（分档）。"""
+    if s.feeds is not None:
+        return NEEDLE_COLOR
+    k = max(0.01, s.fade / NEEDLE_FADE)
+    k = math.ceil(k * NEEDLE_FADE_STEPS) / NEEDLE_FADE_STEPS
+    return tuple(int(round(d + (w - d) * k)) for w, d in zip(NEEDLE_COLOR, SPEAR_COLOR))
+
+
+def _draw_one(win, p, s):
     ts = win._ts
     x = s.last_x + (s.x - s.last_x) * ts
     y = s.last_y + (s.y - s.last_y) * ts
@@ -192,6 +270,21 @@ def _draw(win, p, s):
         x += (s.vibrate % 3) - 1.0
         y += ((s.vibrate // 2) % 3) - 1.0
     ay = 1.0 - TIP_PIVOT if s.pivot_at_tip() else 0.5
+    if s.needle >= 0:
+        blit(
+            p,
+            win.atlas,
+            f"{NEEDLE_SPRITE}{s.needle + 1}",
+            x,
+            y,
+            ang,
+            1.0,
+            1.0,
+            _needle_color(s),
+            ax=0.5,
+            ay=ay,
+        )
+        return
     blit(p, win.atlas, SPRITE, x, y, ang, 1.0, 1.0, SPEAR_COLOR, ax=0.5, ay=ay)
 
 
@@ -300,7 +393,7 @@ def _strike(win, s):
             _hit_fruit(s, best[1])
         _end_ride_of(win, s)
         return
-    if s.thrown_by is not None:
+    if s.thrown_by is not None and not s.spare_cursor:
         _catch_cursor(win, s, ax, ay, bx, by)
     _pierce_small(win, s, ax, ay, bx, by, pad)
 
@@ -332,6 +425,7 @@ def _stab(win, s, pet, chunk, damage, blame=False):
     chunk.vx += px
     chunk.vy += py
     beh = pet.behavior
+    _pierced(s, b, not b.dead)
     if not b.dead and beh is not None:
         b.wounds += damage
         if damage >= LETHAL or b.wounds >= 1.0:
@@ -378,23 +472,39 @@ def _hit_fruit(s, f):
 
 
 def _pierce_small(win, s, ax, ay, bx, by, pad):
-    """穿过小飞虫：杀死并串在矛上（最多五只），路上的总质量够大才停下。"""
+    """穿过活物：由活物自己定伤势，串在矛上（最多五只），路上的总质量够大才停下。"""
     load = 0.0
     taken = {id(o) for o, _ in s.impaled}
-    for f in win.batflies:
+    for f in creatures(win):
         if f.state in (ItemState.EATEN, ItemState.GONE, ItemState.MOUSE) or id(f) in taken:
             continue
         if _held_by(s.thrown_by, f):
             continue
-        if _seg_circle_t(ax, ay, bx, by, f.x, f.y, s.rad + pad + f.rad) is None:
+        hit = _creature_hit(ax, ay, bx, by, f, s.rad + pad)
+        if hit is None:
             continue
         for pet in win.pets:
             pet.body.release(f, to_free=True)
         f.held_by_hand = None
         f.state = ItemState.FREE
-        f.vx += s.vx
-        f.vy += s.vy
-        f.die()
+        stops = getattr(f, "stops_weapons", False)
+        if stops:
+            k = s.mass * 2.0 / hit.mass
+            px, py = s.vx * k, s.vy * k
+            m = math.hypot(px, py)
+            if m > STAB_PUSH_MAX:
+                px, py = px * STAB_PUSH_MAX / m, py * STAB_PUSH_MAX / m
+            hit.vx += px
+            hit.vy += py
+        else:
+            f.vx += s.vx
+            f.vy += s.vy
+        _pierced(s, f, not f.dead)
+        f.struck(HIT_SPEAR, s._rng)
+        if stops:
+            s.lodge(hit, _chunks_ang(f.chunks), None)
+            _end_ride_of(win, s)
+            return
         used = {slot for _, slot in s.impaled}
         slot = next((i for i in range(FLY_SLOTS) if i not in used), None)
         if slot is not None and len(s.impaled) <= FLY_SLOTS:
@@ -407,6 +517,30 @@ def _pierce_small(win, s, ax, ay, bx, by, pad):
             s.vy *= 0.5
             _end_ride_of(win, s)
             return
+
+
+def _creature_hit(ax, ay, bx, by, f, pad):
+    """线段最先碰到活物的哪一节；没碰到返回 None。"""
+    best, best_t = None, None
+    for c in getattr(f, "chunks", (f,)):
+        t = _seg_circle_t(ax, ay, bx, by, c.x, c.y, pad + c.rad)
+        if t is not None and (best_t is None or t < best_t):
+            best, best_t = c, t
+    return best
+
+
+def _chunks_ang(chunks):
+    a, b = chunks
+    return _ang_from_up(a.x - b.x, a.y - b.y)
+
+
+def _pierced(s, target, alive):
+    """扎中 / 穿过一个东西：交给扔它的身体登记的 pierce_hooks。"""
+    by = s.thrown_by
+    if by is None:
+        return
+    for fn in by.pierce_hooks:
+        fn(by, s, target, alive)
 
 
 def _carry_impaled(win):
@@ -463,17 +597,23 @@ def _clash(win):
 
 
 def _follow_body(win, s):
-    """扎在猫身上：跟着那一节走；猫醒过来（不晕也不死）时掉下来。"""
+    """扎在猫或活物身上：跟着那一节走；猫醒过来（不晕也不死）、活物被拿走或消解时掉下来。"""
     owner = next((pet for pet in win.pets if s.stuck_in in (pet.body.chunk0, pet.body.chunk1)), None)
-    if owner is None or (not owner.body.dead and owner.body.stun <= 0):
-        c = s.stuck_in
-        s.pull_out()
-        s.state = ItemState.FREE
-        s.to_free()
-        if c is not None:
-            s.vx, s.vy = c.vx, c.vy
-        return
-    s.follow_body(_body_ang(owner.body))
+    if owner is not None:
+        if owner.body.dead or owner.body.stun > 0:
+            s.follow_body(_body_ang(owner.body))
+            return
+    else:
+        host = next((o for o in creatures(win) if s.stuck_in in getattr(o, "chunks", ())), None)
+        if host is not None and host.state == ItemState.FREE and getattr(host, "dissolve", -1) < 0:
+            s.follow_body(_chunks_ang(host.chunks))
+            return
+    c = s.stuck_in
+    s.pull_out()
+    s.state = ItemState.FREE
+    s.to_free()
+    if c is not None:
+        s.vx, s.vy = c.vx, c.vy
 
 
 # 光标
@@ -531,6 +671,62 @@ def _ride_tick(win):
         _end_ride(win)
         return
     win.move_cursor_hold(*s.tip())
+
+
+# 骨针
+
+
+def _idle(s):
+    """没人拿着、没在飞、没连着身体、没在碎：可以碎掉腾位置。"""
+    return (
+        s.dissolve < 0
+        and s.feeds is None
+        and s.state not in (ItemState.CARRIED, ItemState.MOUSE)
+        and not s.in_flight()
+    )
+
+
+def _start_dissolve(win, s):
+    """开始碎掉：不再能拿、能爬、能扔；扎在墙上的立刻不算杆。"""
+    s.dissolve = 0
+    for pet in win.pets:
+        pet.body.release(s)
+    _end_ride_of(win, s)
+    if s.mode == WALL:
+        s.geom_dirty = True
+    for _ in range(DISSOLVE_SPECKS):
+        a = s._rng.uniform(0.0, math.tau)
+        k = s._rng.uniform(-HALF_LEN, HALF_LEN)
+        v = lerp(0.5, 2.0, s._rng.random())
+        win.add_spark(s.x + s.rot[0] * k, s.y + s.rot[1] * k, math.cos(a) * v, math.sin(a) * v - 1.0, life=20)
+
+
+def _needles(win):
+    """骨针每 tick：查连接（只在长出它的身体手里或被它扔出飞着时连着）、褪色、地上躺久了碎、碎完消失。"""
+    for s in win.spears:
+        if s.needle < 0:
+            continue
+        if s.dissolve >= 0:
+            s.dissolve += 1
+            if s.dissolve >= DISSOLVE_TICKS:
+                s.impaled = []
+                s.state = ItemState.GONE
+            continue
+        o = s.feeds
+        if o is not None:
+            held = s.state == ItemState.CARRIED and o.hand_of(s) is not None
+            if not (held or (s.flying() and s.thrown_by is o)):
+                s.feeds = None
+        if s.feeds is not None:
+            continue
+        if s.fade > 0:
+            s.fade -= 1
+        if s.state == ItemState.FREE and s.at_rest_on_ground(win._HL):
+            s.idle += 1
+            if s.idle >= NEEDLE_FLOOR_TICKS:
+                _start_dissolve(win, s)
+        else:
+            s.idle = 0
 
 
 KIND = SpearKind()

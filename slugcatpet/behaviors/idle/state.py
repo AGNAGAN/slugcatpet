@@ -1,4 +1,4 @@
-"""内置行为状态：站立待机（含无重力漂浮）。"""
+"""站着待机的状态，失重时漂浮。"""
 
 from __future__ import annotations
 
@@ -6,25 +6,25 @@ import math
 
 from ... import tuning
 from ...core.creature import ZEROG_GRAB_DIST, _closest_on_segment
-from ...brain.desire import MoodContext
 from ...brain.state import State, IDLE
-from ...brain.fsm import _lerpmap
 from ...brain.skills import motor
 from ...brain.skills.motor import WALL_MARGIN
 from ...items.base import CLIMBABLE
 
-# 零重力漂浮 idle
+# 失重漂浮
 ZEROG_ARRIVE_R = 30.0
 ZEROG_KICK_FAR = 60.0
 ZEROG_TWITCH_PROB = 0.02
 ZEROG_CURSOR_FRAC = 0.6
-# 抓杆：赖杆来回滑一会再松
+# 失重抓杆：沿杆来回滑一会再松手
 ZEROG_GRAB_ALIGN = 12.0
 ZEROG_POLE_COOLDOWN = 40
 ZEROG_POLE_SEEK_R = 220.0
 ZEROG_POLE_SEEK_PROB = 0.5
 ZEROG_POLE_PLAY_TICKS = 120
 ZEROG_SLIDE_PERIOD = 30
+ZEROG_BACK_KICK = 0.5  # 被挡住蹬开时往回的分量
+ZEROG_DODGE_KICK = 0.4  # 被挡住蹬开的力度
 
 
 def _stare_nearness(d):
@@ -63,9 +63,6 @@ class IdleStand(State):
         if fsm._zerog():
             self._zerog_idle(cursor)
             return
-        if fsm._exhausted:
-            fsm._transition("LieDown")
-            return
         self._update_stare()
         if self._stare > 0:
             self._stare -= 1
@@ -80,12 +77,7 @@ class IdleStand(State):
             self._idle_hold -= 1
             self._idle_pace()
             return
-        entry = fsm._mood_entries.get(self._mood_select())
-        if entry is not None:
-            state, before = entry
-            if before is not None:
-                before()
-            fsm._transition(state)
+        if fsm.intents.pick():
             return
         self._idle_hold = self._roll_idle_hold()
         self._idle_pace()
@@ -138,19 +130,13 @@ class IdleStand(State):
 
     def _idle_pace(self):
         fsm = self.fsm
-        if not fsm.body.is_moving() and fsm.rng.random() < tuning.PACE_PROB * fsm.traits.activity:
+        p = tuning.PACE_PROB * fsm.traits.activity * fsm.ask("listless", 1.0)
+        if not fsm.body.is_moving() and fsm.rng.random() < p:
             motor.wander(fsm)
 
-    def _mood_select(self):
-        fsm = self.fsm
-        ctx = MoodContext(fsm.body.energy, fsm.body.temper, cold=fsm.body.cold, submerged=fsm.body.swimming)
-        return fsm.mood.select(ctx)
-
     def _roll_idle_hold(self):
-        fsm = self.fsm
-        base = fsm.rng.uniform(tuning.IDLE_HOLD_MIN, tuning.IDLE_HOLD_MAX)
-        mult = _lerpmap(fsm.body.energy, 0.0, 1.0, tuning.IDLE_HOLD_TIRED_MULT, 1.0)
-        return int(base * mult)
+        """接着闲待一阵再重选。"""
+        return self.fsm.rng.randint(tuning.HANG_HOLD_MIN, tuning.HANG_HOLD_MAX)
 
     def _zerog_idle(self, cursor):
         fsm = self.fsm
@@ -196,7 +182,7 @@ class IdleStand(State):
         fsm.run_tasks("zerog_aim", tx, ty)
 
     def _zerog_nearest_pole(self, x, y):
-        """chunk0 点-段距离 < GRAB_DIST 的最近杆；无则 None。"""
+        """离 (x, y) 不到 ZEROG_GRAB_DIST 的最近一根杆，没有返回 None。"""
         fsm = self.fsm
         best = None
         best_d = ZEROG_GRAB_DIST
@@ -223,13 +209,23 @@ class IdleStand(State):
         if abs(along) > ZEROG_GRAB_ALIGN and abs(perp) <= ZEROG_GRAB_DIST:
             self._zerog_pole_play = 0
             s = 1.0 if along > 0.0 else -1.0
-            b.zerog_pole_intent = (axis_x * s, axis_y * s)
-            return
-        self._zerog_pole_play += 1
-        if self._zerog_pole_play % ZEROG_SLIDE_PERIOD == 0:
-            self._zerog_slide_sign = -self._zerog_slide_sign
-        b.zerog_pole_intent = (axis_x * self._zerog_slide_sign, axis_y * self._zerog_slide_sign)
-        if self._zerog_pole_play >= ZEROG_POLE_PLAY_TICKS:
+        else:
+            self._zerog_pole_play += 1
+            if self._zerog_pole_play % ZEROG_SLIDE_PERIOD == 0:
+                self._zerog_slide_sign = -self._zerog_slide_sign
+            s = self._zerog_slide_sign
+        b.zerog_pole_intent = (axis_x * s, axis_y * s)
+        blocked = s == b.lane_hold
+        if blocked or self._zerog_pole_play >= ZEROG_POLE_PLAY_TICKS:
+            if blocked:  # 被同一根杆上的猫挡住：往侧后方蹬开
+                side = self.fsm.rng.choice((-1.0, 1.0))
+                kx, ky = (
+                    perp_x * side - axis_x * s * ZEROG_BACK_KICK,
+                    perp_y * side - axis_y * s * ZEROG_BACK_KICK,
+                )
+                k = math.hypot(kx, ky)
+                b.zerog_pole_kick(kx / k * ZEROG_DODGE_KICK, ky / k * ZEROG_DODGE_KICK)
+                self._zerog_target = None
             b.zerog_pole = None
             self._zerog_pole_play = 0
             self._zerog_pole_cd = ZEROG_POLE_COOLDOWN
@@ -257,7 +253,7 @@ class IdleStand(State):
         return t
 
     def _zerog_seek_pole(self, x, y):
-        """chunk0 点-段距离 < SEEK_R 的最近杆（主动寻杆半径）；无则 None。"""
+        """主动找杆：离 (x, y) 不到 ZEROG_POLE_SEEK_R 的最近一根杆，没有返回 None。"""
         fsm = self.fsm
         best = None
         best_d = ZEROG_POLE_SEEK_R

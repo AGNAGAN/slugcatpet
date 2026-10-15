@@ -1,4 +1,4 @@
-"""挂黏菌本体物理：单点质点 + 粘边弹簧 + 触须丛；y↓ 坐标。"""
+"""黏菌的物理：一个质点、粘住屏幕边的弹簧和一丛触须；y↓。"""
 
 from __future__ import annotations
 import math
@@ -28,10 +28,10 @@ TENDRIL_REST_MIN = 3.0
 TENDRIL_REST_MAX = 8.0
 TENDRIL_DAMP = 0.98
 TENDRIL_GRAVITY = 0.9  # y↓
-ROOT_SPRING = 0.9  # 断口挂本体
+ROOT_SPRING = 0.9  # 直连本体的触须
 LINK_SPRING = 0.5
 TENDRIL_RAD = 3.0
-TENDRIL_NEAR = 100.0  # 距本体<此才与墙碰
+TENDRIL_NEAR = 100.0  # 离本体这么近以内才和墙碰
 TENDRIL_JAG_K = 20  # 锯齿顶点数
 
 
@@ -40,7 +40,7 @@ def _lerp_map(v, in_a, in_b, out_a, out_b):
 
 
 class SlimeMold:
-    collision_layer = 1  # 与 Saint/果同层互推
+    collision_layer = 1  # 与 Saint、果子同层互推
     edible = True
     throwable = False
 
@@ -93,21 +93,21 @@ class SlimeMold:
         self.surface_friction = SURFACE_FRICTION
         self.buoyancy = BUOYANCY
         self.water_friction = WATER_FRICTION
-        self.water_y = None  # 外部每 tick 注入水面高；None=无水
+        self.water_y = None  # 水面高度，由外部每 tick 写入；None 为无水
         self.room_gravity = 1.0
         self.bites = BITES
         self.state = ItemState.FREE
         self.rotation = (0.0, 1.0)
         self.last_rotation = self.rotation
-        self.stalk = None  # 接口占位，fetcher/carry 读，恒 None
+        self.stalk = None  # 恒为 None，只为和果子接口一致
         self.held_by_hand: "str | None" = None
         self.stuck_pos: "tuple[float, float] | None" = None
         self.collide_with_objects = True
         self._id = int(seed)
         self._contact_floor = False
-        self._contact_x = 0  # batfly 用，本体不读
-        self._impact_cb = None  # 窗口抖动回调；None=不触发
-        # 触须格式：[px,py,lpx,lpy,vx,vy,link,rest,perturb_x,perturb_y,alpha]；link<0 挂本体
+        self._contact_x = 0  # 蝙蝠用，这里不读
+        self._impact_cb = None  # 撞击时的窗口抖动回调；None 不抖
+        # 每根触须：[px,py,lpx,lpy,vx,vy,link,rest,perturb_x,perturb_y,alpha]；link<0 直连本体
         rng = _random.Random(seed)
         count = rng.randint(TENDRIL_MIN, TENDRIL_MAX)
         self.stuck_pos_slime = rng.randrange(0, count)
@@ -126,7 +126,7 @@ class SlimeMold:
         for t in self.tendrils:
             jr = _random.Random((int(t[10] * 1_000_003) ^ 0x5A5A5A) & 0xFFFFFFFF)
             self.tendril_jag.append(tuple(0.7 + 0.3 * jr.random() for _ in range(TENDRIL_JAG_K)))
-        self._tendril_polys = None  # 渲染层懒建缓存，形状不变
+        self._tendril_polys = None  # 绘制时才建的形状缓存
 
     @property
     def pos(self):
@@ -140,10 +140,10 @@ class SlimeMold:
         return (self,)
 
     def set_rotation_to_grabber(self, gx: float, gy: float) -> None:
-        """被抓朝向；顺带补 last_rotation 供渲染 slerp。"""
+        """被抓时转向抓它的一方，同时记下 last_rotation 供绘制插值。"""
         self.last_rotation = self.rotation
         dx, dy = _dirvec(self.x, self.y, gx, gy)
-        # y↓ 镜像：perp(dx,dy)=(dy,-dx)，尖朝上取 y=-abs
+        # 取垂直向量 (dy, -dx)，y 取负绝对值使尖朝上
         self.rotation = (dy, -abs(dx))
 
     def stick_to(self, sx: float, sy: float) -> None:
@@ -186,7 +186,7 @@ class SlimeMold:
 
         if self._contact_floor:
             rx, ry = self.rotation
-            px, py = ry, -rx  # y↓ 垂向量（perp 镜像）
+            px, py = ry, -rx  # y↓ 下的垂直向量
             k = 0.1 * self.vx
             nx, ny = rx - px * k, ry - py * k
             d = math.hypot(nx, ny)
@@ -224,7 +224,7 @@ class SlimeMold:
         rest_k = _lerp_map(self.bites, 3.0, 1.0, 1.0, 0.1)
         rx, ry = self.rotation
         rot = math.radians(_ang_from_up(rx, ry))
-        rc, rs = math.cos(rot), math.sin(rot)  # 扰动力偶旋转，循环外算一次
+        rc, rs = math.cos(rot), math.sin(rot)  # 扰动力随本体朝向旋转
         free = self.stuck_pos is None
         near2 = TENDRIL_NEAR * TENDRIL_NEAR
         r = TENDRIL_RAD

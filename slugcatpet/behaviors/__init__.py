@@ -11,9 +11,13 @@ from .catch_breath import CatchBreathBehavior
 from .cursor_lick import CursorLick
 from .dodge_kill import DodgeKill
 from .fetch import Fetch, ForageBehavior
+from .hold import HoldBehavior
+from .hunt import HuntBehavior
+from .perch import PerchBehavior
 from .idle import Idle
 from .makeway import MakeWayBehavior
 from .poles import Poles
+from .rain import RainBehavior
 from .pyro_maul import PyroMaul
 from .pyro_romp import PyroRomp
 from .rest import Rest
@@ -48,6 +52,10 @@ BUILTIN = (
     ArmStoneBehavior,
     CatchBreathBehavior,
     ZeroGLick,
+    HuntBehavior,
+    PerchBehavior,
+    RainBehavior,
+    HoldBehavior,
 )
 
 REGISTRY: dict[str, type[Behavior]] = {cls.key: cls for cls in BUILTIN}

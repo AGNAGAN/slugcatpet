@@ -7,7 +7,8 @@ from PySide6.QtGui import QGuiApplication
 
 from ...i18n import t
 from ...control.input import InputPackage
-from ...control.keymap import load_keymap, key_display_name
+from ...control.keymap import load_key_names, load_keymap, normalize_key
+from .keybinds import key_label
 from .catmenu import pet_label
 from ..theme import qss
 from ..widgets.screens import clamp_rect
@@ -28,7 +29,7 @@ class ControlHud(QWidget):
         self._held = set()
         self._paused = False
         self._drag = None
-        self._keymap = load_keymap()
+        self._keymap = {}
 
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool
@@ -58,23 +59,30 @@ class ControlHud(QWidget):
         title.setObjectName("ctrlTitle")
         box.addWidget(title)
 
-        k = {a: key_display_name(a).upper() for a in ("left", "right", "up", "down", "jump", "grab", "throw")}
-        self._keys_text = t(
-            "ctrlhud_keys",
-            move=k["up"] + k["left"] + k["down"] + k["right"],
-            jump=k["jump"],
-            grab=k["grab"],
-            throw=k["throw"],
-        )
-        self._keys = QLabel(self._keys_text)
+        self._keys = QLabel()
         self._keys.setObjectName("ctrlKeys")
         box.addWidget(self._keys)
+        self.reload_keys()
 
         btn = QPushButton(t("ctrlhud_exit"))
         btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # 防空格触发按钮
         btn.clicked.connect(lambda: self._window.stop_control())
         box.addWidget(btn)
         outer.addWidget(panel)
+
+    def reload_keys(self):
+        """重读键位表，刷新映射和提示文字。"""
+        names = load_key_names()
+        self._keymap = load_keymap()
+        self._held.clear()
+        k = {a: key_label(n) for a, n in names.items()}
+        arrows = [k[a] for a in ("up", "left", "down", "right")]
+        move = "".join(arrows) if all(len(x) == 1 for x in arrows) else "/".join(arrows)
+        self._keys_text = t(
+            "ctrlhud_keys", move=move, jump=k["jump"], grab=k["grab"], throw=k["throw"], hold=k["hold"]
+        )
+        if not self._paused:
+            self._keys.setText(self._keys_text)
 
     def _place(self):
         self.layout().activate()
@@ -84,7 +92,7 @@ class ControlHud(QWidget):
         y = screen.y() + screen.height() - size.height() - BOTTOM_MARGIN
         self.move(x, y)
 
-    # 输入 provider（暂停返零包防冻结）
+    # 输入来源，暂停时返回空包防冻结
     def current_input(self) -> InputPackage:
         if self._paused:
             return InputPackage()
@@ -131,18 +139,24 @@ class ControlHud(QWidget):
         super().focusOutEvent(e)
         self._set_paused(True)
 
+    def focusNextPrevChild(self, _next):
+        return False  # Tab 留给键位
+
     def keyPressEvent(self, e):
         if e.isAutoRepeat():
             return
         if e.key() == Qt.Key.Key_Escape:
             self._window.stop_control()
             return
-        self._held.add(int(e.key()))
+        if normalize_key(e.key()) == self._keymap.get("hold"):
+            self._window.hold_controlled()
+            return
+        self._held.add(normalize_key(e.key()))
 
     def keyReleaseEvent(self, e):
         if e.isAutoRepeat():
             return
-        self._held.discard(int(e.key()))
+        self._held.discard(normalize_key(e.key()))
 
     def mousePressEvent(self, ev):
         if ev.button() == Qt.MouseButton.LeftButton:

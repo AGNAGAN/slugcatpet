@@ -1,4 +1,4 @@
-"""环境守望：别的程序全屏时收起或沉底 + 工作区/任务栏适应 + 置顶保持，单定时器 ≤2s 轮询。"""
+"""环境监视：别的程序全屏时收起或沉底，跟随工作区和任务栏变化，保持置顶；一个定时器轮询，间隔不超过 2s。"""
 
 from __future__ import annotations
 import ctypes
@@ -9,7 +9,7 @@ from PySide6.QtGui import QGuiApplication
 
 from .topmost import TopmostKeeper
 
-_TRUSTED_FULLSCREEN_STATES = {3, 4}  # D3D独占/演示态（SHQueryUserNotificationState）
+_TRUSTED_FULLSCREEN_STATES = {3, 4}  # SHQueryUserNotificationState 的 D3D 独占全屏、演示模式
 _DESKTOP_CLASSES = {"Progman", "WorkerW"}
 # 任务栏、开始菜单、搜索、多任务视图等浮层：拿到前台时保持原状态
 _HOLD_CLASSES = {
@@ -24,12 +24,12 @@ _HOLD_CLASSES = {
     "TopLevelWindowForOverflowXamlIsland",
 }
 POLL_MS = 1000
-_RECT_TOL = 2  # 矩形匹配容差(物理 px)
+_RECT_TOL = 2  # 矩形匹配容差（物理 px）
 DEBOUNCE_POLLS = 2  # 连续这么多次判断一致才切换
 
 
 def _default_state_provider() -> int:
-    """返回用户通知态；失败退化为 5（ACCEPTS_NOTIFICATIONS）。"""
+    """用户通知状态；取不到时返回 5（ACCEPTS_NOTIFICATIONS）。"""
     try:
         state = ctypes.c_int(0)
         hr = ctypes.windll.shell32.SHQueryUserNotificationState(ctypes.byref(state))
@@ -41,7 +41,7 @@ def _default_state_provider() -> int:
 
 
 def _default_foreground_provider():
-    """返回前台窗 (hwnd, rect, 类名)；失败 None。"""
+    """前台窗口的 (hwnd, rect, 类名)，取不到时返回 None。"""
     try:
         user32 = ctypes.windll.user32
         hwnd = user32.GetForegroundWindow()
@@ -165,9 +165,9 @@ class EnvironmentWatcher(QObject):
             self._set_mode(want)
 
     def _foreground_fullscreen(self):
-        """前台窗盖满桌宠所在的显示器 → True；桌面 → False；自己的窗口或系统浮层 → None（保持）。
+        """前台窗口盖满桌宠所在显示器时为 True，桌面为 False，自己的窗口或系统浮层为 None（保持原状）。
 
-        两边都用物理像素比，缩放不是 100% 时也对得上。"""
+        两边都按物理像素比较，缩放不是 100% 时也对得上。"""
         fg = self._foreground_provider()
         if fg is None:
             return None
@@ -218,14 +218,14 @@ class EnvironmentWatcher(QObject):
             except Exception:
                 pass
         try:
-            self._pet.freeze_tick()
+            self._pet.freeze("env")
         except Exception:
             pass
 
     def _exit_fullscreen(self):
         self._fullscreen = False
         try:
-            self._pet.resume_tick()
+            self._pet.unfreeze("env")
         except Exception:
             pass
         snap = self._vis_snapshot if self._vis_snapshot is not None else [True] * len(self._windows)
@@ -237,6 +237,18 @@ class EnvironmentWatcher(QObject):
             except Exception:
                 pass
         self._vis_snapshot = None
+
+    def reveal(self, windows):
+        """重新显示这些窗口；全屏收起中由它管的窗口记到快照里，等退出全屏时再显示。"""
+        later = self._fullscreen and self._vis_snapshot is not None
+        for w in windows:
+            if later and w in self._windows:
+                self._vis_snapshot[self._windows.index(w)] = True
+                continue
+            try:
+                w.show()
+            except Exception:
+                pass
 
     @staticmethod
     def _is_visible(w) -> bool:

@@ -1,8 +1,10 @@
-"""重压撞击：落地震动、从高处砸下 / 翻滚 / 滑铲撞到猫和蝙蝠（y↓）。"""
+"""重压撞击：落地震动、从高处砸下 / 翻滚 / 滑铲撞到猫和活物（y↓）。"""
 
 from __future__ import annotations
 
 import math
+
+from ...items.base import HIT_SLAM, creatures
 
 COOLDOWN = 20
 CONTACT_PAD = 2.0
@@ -89,7 +91,7 @@ class HeavyImpact:
     def _hit(self, pet, stun, force, roll=False, slide=False):
         b = pet.body
         cats = [o for o in pet.window.pets if o is not pet and _touching(b, o.body)] if self.p.slam else []
-        flies = [f for f in getattr(pet.window, "batflies", ()) if _fly_touching(b, f)]
+        flies = [f for f in creatures(pet.window) if _fly_touching(b, f)]
         if not cats and not flies:
             return
         c0, c1 = b.chunk0, b.chunk1
@@ -100,7 +102,7 @@ class HeavyImpact:
                 o.behavior.apply_stun(stun, blame=False)
             _push(o.body, push_x, vy)
         for f in flies:
-            f.die()
+            f.struck(HIT_SLAM)
             f.vx += vx * HIT_PUSH
             f.vy += vy * HIT_PUSH
         scale = 5.0 if roll else force

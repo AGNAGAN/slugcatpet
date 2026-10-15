@@ -3,44 +3,42 @@
 from __future__ import annotations
 
 from ... import tuning
-from ...brain.hands import WEAPON, can_wield
+from ...brain.hands import WEAPON
+from ...brain.skills.throw import wieldable
 from ...items.base import THROWABLE
 from ..base import Behavior, mood_candidate, mood_params
 from .states import AngryStone, ArmStone, PostThrowStand, PostThrowWander
+from .thrower import can_grow_weapon
 
 ANGRY_STATES = ("PostThrowWander", "PostThrowStand", "AngryStone")
 
 
 def grounded_weapon_available(fsm) -> bool:
-    return any(
-        s.state == "free"
-        and not s.unfetchable
-        and s.at_rest_on_ground(fsm.HL)
-        and fsm.social.free_for(fsm.win, s)
-        and not fsm.hands.forbidden(s)
-        and can_wield(fsm.body, s)
-        and fsm.body.can_hold(s)
-        for s in fsm.items(THROWABLE)
-    )
+    return any(wieldable(fsm, s) for s in fsm.items(THROWABLE))
 
 
 class Anger(Behavior):
     key = "anger"
     title = {"zh": "生气扔石头", "en": "Angry throwing"}
-    doc = "被砸晕或惹急后生气：捡起能扔的东西瞄准光标扔，消气前一直盯着。好感很低时偏向拿矛。"
+    doc = "被砸晕或惹急后生气：捡起能扔的东西瞄准光标扔，消气前一直盯着。好感很低时偏向拿矛；骨针猫地上没武器时从尾巴拔骨针。"
     requires = (THROWABLE,)
 
     def mount(self, fsm):
         for cls in (PostThrowWander, PostThrowStand):
             fsm.add_state(cls)
         throw = fsm.add_state(AngryStone)
+        grow = fsm.win.skill("grow_weapon")
 
         def pick_up(cursor):
             if (
                 fsm.state in ANGRY_STATES[:2]
                 and fsm.anger > 0
                 and not fsm.grab.active
-                and (fsm.hands.held(WEAPON) is not None or grounded_weapon_available(fsm))
+                and (
+                    fsm.hands.held(WEAPON) is not None
+                    or grounded_weapon_available(fsm)
+                    or can_grow_weapon(fsm, grow)
+                )
             ):
                 fsm._transition("AngryStone")
 

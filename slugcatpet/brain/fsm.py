@@ -6,12 +6,26 @@ import os
 import random
 
 from .. import tuning
-from ..items.base import CLIMBABLE, EDIBLE, THROWABLE
+from ..items.base import CLIMBABLE, EDIBLE, THROWABLE, creatures
 from ..planning import Planner
 from .desire import build_arbiter
+from .intent import IntentPicker
 from .hands import HandKeeper
 from .objectlooker import ObjectLooker
-from .state import DRAG, RULE_TIER, STUN, SWIM, T_IDLE, THREAT, ZEROG, FuncState, State
+from .state import (
+    DRAG,
+    REST,
+    RULE_TIER,
+    STUN,
+    SWIM,
+    T_BODY,
+    T_IDLE,
+    THREAT,
+    VIGOROUS,
+    ZEROG,
+    FuncState,
+    State,
+)
 from ..control.mouse import GrabController
 
 # 被惹生气后的持续时间（tick）
@@ -19,7 +33,7 @@ T_POSTTHROW_WANDER = 200
 T_POSTTHROW_STAND = 400
 ANGER_TOTAL = T_POSTTHROW_WANDER + T_POSTTHROW_STAND
 
-_NO_STATE = State(None)  # 未注册状态名的空声明（见 BehaviorFSM._cur）
+_NO_STATE = State(None)  # 未注册的状态名用这个空声明，见 BehaviorFSM._cur
 
 
 def _lerpmap(x, lo, hi, flo, fhi):
@@ -41,6 +55,7 @@ class BehaviorFSM:
         self.grab = GrabController(self.body, self.gfx)
         self.hands = HandKeeper(self)
         self.mood = build_arbiter(self.rng)
+        self.intents = IntentPicker(self.rng)  # 待机到点时挑下一件事
         self.looker = ObjectLooker(self.rng, self.traits.activity)
 
         self.state = "IdleStand"
@@ -52,8 +67,6 @@ class BehaviorFSM:
         self._prev_zerog = False
         self._zerog_entered = False
         self._wake_then = None
-        self._hibernating = False
-        self._exhausted = False
         self._revive_timer = 0
         self._reincarnate = False
 
@@ -215,8 +228,6 @@ class BehaviorFSM:
         """砸晕；blame=False 时不算到人头上（别的猫撞的）。"""
         if self.blocked(STUN):
             return False
-        if self.grab.active:
-            self.grab.force_release()
         self.release_organs()
         self.climb = None
         for fn in self._stun_hooks:
@@ -241,7 +252,6 @@ class BehaviorFSM:
         st = self._states.get(self.state)
         if st is not None:
             st.kill_break()
-        self._hibernating = False
         self.body.food_eat(-tuning.FOOD_KILL_PENALTY)
         if self.body.karma > 0 or self.body.karma_bottomed():
             self.body.karma_drop()  # 业力锁底也照常空转复活
@@ -281,8 +291,6 @@ class BehaviorFSM:
             self.body.swim_target = None
         if defuse:
             self.body.drown_burst = False
-        self._hibernating = False
-        self._exhausted = False
         self.body.die()
         self.gfx.dead = True
         self._transition("Dead")
@@ -290,7 +298,7 @@ class BehaviorFSM:
         self._revive_timer = tuning.REINCARNATE_TICKS
 
     def kill_threat_canceled(self, by_self: bool):
-        """杀死弹窗被取消：by_self=猫自己（舌头躲杀）取消，否则是用户点的。"""
+        """杀死弹窗被取消：by_self 为猫自己取消（舌头躲杀），否则是用户点的。"""
         self.body.temper_shift(self.kill_cancel_temper if by_self else tuning.TEMPER_KILL_CANCEL_HUMAN)
 
     def is_truly_dead(self) -> bool:
@@ -300,10 +308,9 @@ class BehaviorFSM:
         return self.state == "Dead" and self._reincarnate and self._revive_timer > 0
 
     def enter_dead(self):
-        """直接置真死态（持久化恢复用）。"""
+        """直接进入真死，读存档时用。"""
         self._break_active_controllers()
         self.grab.force_release()
-        self._hibernating = False
         self.body.die()
         self.gfx.dead = True
         self._transition("Dead")
@@ -327,6 +334,8 @@ class BehaviorFSM:
         z = self._zerog()
         if z and not self._prev_zerog:
             self._zerog_entered = True
+        elif self._prev_zerog and not z and self.body.zerog_pole is not None:
+            self._regrab_after_zerog()
         self._prev_zerog = z
 
         if (
@@ -342,7 +351,8 @@ class BehaviorFSM:
 
         self.grab.tick()
         if self.grab.active:
-            self.interrupt(DRAG, "Dragged")
+            if not (self.state == "Stunned" and self.body.stun > 0):  # 晕着被拎照样晕
+                self.interrupt(DRAG, "Dragged")
             self.grab.drag(cursor) if cursor is not None else None
 
         if self.body.drown_burst and self.state != "Dead":
@@ -371,7 +381,11 @@ class BehaviorFSM:
         if st is not None:
             st.tick(cursor, disturbed)
         self.hands.tick(cursor)
-        self.body.energy_change(self._cur().energy_delta(self.traits.drain))
+        cur = self._cur()
+        self.body.energy_change(cur.energy_delta(self.traits.drain))
+        if cur.needs and cur.energy != REST and self.state != "Dead":
+            k = tuning.SLEEPY_VIG_MULT if cur.energy == VIGOROUS else 1.0
+            self.body.sleepiness = min(1.0, self.body.sleepiness + tuning.SLEEPY_RATE * k)
         if self._force_energy is not None:
             self.body.energy = self._force_energy
         if self._force_temper is not None:
@@ -389,13 +403,24 @@ class BehaviorFSM:
         self.phase = 0
         self._enter(new)
 
+    def pole_lost(self):
+        """抓着的杆没了：当前状态收尾，回到待机。"""
+        if self._cur().tier < T_BODY:
+            self._break_active_controllers()
+            self.settle()
+
     def settle(self):
-        self._transition("IdleStand" if self.body.on_floor() else "Airborne")
+        """回到待机：在杆上交给爬架，否则站着或在空中。"""
+        b = self.body
+        if b.on_pole and "Perch" in self._states:
+            self._transition("Perch")
+        else:
+            self._transition("IdleStand" if b.on_floor() else "Airborne")
 
     def _act_or_wake(self, target):
-        """趴/睡态先起身并稳定一会再行动；已站立则直接进入目标态。"""
+        """趴着或睡着时先起身、站稳再进入 target，否则直接进入。"""
         if self.state in ("LieDown", "Sleep"):
-            self._transition("WakeSequence")  # 顺序：_enter 会清 _wake_then
+            self._transition("WakeSequence")  # 须先切状态再设：_enter 会清 _wake_then
             self._wake_then = target
         else:
             self._transition(target)
@@ -426,7 +451,7 @@ class BehaviorFSM:
         return True
 
     def _look_candidates(self, cursor):
-        # 键用对象本身，避免 id() 字符串撞码
+        # 键用对象本身，不用 id()，免得撞号
         c = []
         if cursor is not None:
             c.append(("cursor", cursor, tuning.LOOK_CURSOR_BASE, self._cursor_speed))
@@ -436,11 +461,27 @@ class BehaviorFSM:
             c.append((p, (p.bx, p.by), tuning.LOOK_ITEM_BASE, 0.0))
         for s in self.items(THROWABLE):
             c.append((s, (s.x, s.y), tuning.LOOK_ITEM_BASE, 0.0))
+        for o in creatures(self.win.window):
+            if not o.dead and not o.edible:
+                c.append((o, (o.x, o.y), tuning.LOOK_ITEM_BASE, math.hypot(o.vx, o.vy)))
         return c
 
     def _ambient_look(self, cursor):
         head = (self.gfx.head.x, self.gfx.head.y)
         return self.looker.update(head, self._look_candidates(cursor))
+
+    def _regrab_after_zerog(self):
+        """重力恢复时还抓着杆：接着抓住，交给爬架。"""
+        from ..planning.climbmap import map_for
+        from ..planning.climbmoves import grab_from_zerog
+
+        pole = self.body.zerog_pole
+        bar = next((b for b in map_for(self.win).bars if b.obj is pole), None)
+        if bar is None or "Perch" not in self._states:
+            self.body.zerog_pole = None
+            return
+        grab_from_zerog(self.body, bar)
+        self._transition("Perch")
 
     def _zerog(self) -> bool:
         return getattr(self.body, "zerog", False)

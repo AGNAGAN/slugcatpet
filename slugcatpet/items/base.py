@@ -13,15 +13,30 @@ WARM = "warm"
 CARRYABLE = "carryable"
 USES = frozenset((EDIBLE, THROWABLE, CLIMBABLE, WARM, CARRYABLE))
 
+# 活物被什么打中，传给模型的 struck()
+HIT_STONE = "stone"
+HIT_SPEAR = "spear"
+HIT_SLAM = "slam"
+
+
+def creatures(win):
+    """场上的活物（不论死活），按物品注册表和放置顺序。"""
+    return [o for o in win._items() if getattr(o, "creature", False)]
+
+
+def alive_creature(o) -> bool:
+    return getattr(o, "creature", False) and not o.dead
+
 
 class ItemKind:
     key = ""
     store = ""
     single = False
+    placeable = True  # 侧边栏有放置按钮
     cap = 12  # 上限；None 不限
     affords = frozenset()
     seed_key = None
-    layer = "front"  # 绘制层：mid（猫身后、手前）/ front / top（水之上）
+    layer = "front"  # 绘制层：mid（盖住猫身，抓杆的手在它上面）/ front / top（水之上）
     mobile = True  # 会动：运动检测、出界夹回、重力、水位
     collides = False
     late_tick = False
@@ -33,6 +48,7 @@ class ItemKind:
     splash_states = (ItemState.FREE,)
     dead_state = ItemState.EATEN
     varies = False  # 每件物体提供的用法随状态变（见 affords_now）
+    dissolve_ticks = 40  # 消解（淡出）用的帧数
 
     def affords_now(self, obj, use) -> bool:
         """varies 时：这件物体眼下提不提供 use。"""
@@ -59,6 +75,28 @@ class ItemKind:
     def can_place(self, win) -> bool:
         return self.cap is None or len(self.objects(win)) < self.cap
 
+    def make_room(self, win) -> bool:
+        """程序生成前腾位置：默认只看上限。"""
+        return self.can_place(win)
+
+    def dissolve(self, win, obj):
+        """开始消解：松手，之后不能拿、不提供用法，淡出完就移除。物体要有 dissolve 字段（-1 为没在消解）。"""
+        if obj.dissolve >= 0:
+            return
+        obj.dissolve = 0
+        for pet in win.pets:
+            pet.body.release(obj)
+        if getattr(obj, "held_by_hand", None) is not None:
+            obj.held_by_hand = None
+        if obj.state in (ItemState.CARRIED, ItemState.MOUSE):
+            obj.state = ItemState.FREE
+
+    def dissolve_alpha(self, obj, ts=1.0) -> float:
+        d = getattr(obj, "dissolve", -1)
+        if d < 0:
+            return 1.0
+        return max(0.0, 1.0 - (d + ts) / self.dissolve_ticks)
+
     def make(self, win, lx, ly, seed):
         raise NotImplementedError
 
@@ -84,7 +122,9 @@ class ItemKind:
         p.drawEllipse(_pt(obj.x, obj.y), rad, rad)
 
     def grabbable(self, obj) -> bool:
-        """能被光标拖：在 grab_states 里，或是猫手里拿着的可拿物（抢过来）。"""
+        """能被光标拖：在 grab_states 里，或是猫手里拿着的可拿物（抢过来）；消解中的不行。"""
+        if getattr(obj, "dissolve", -1) >= 0:
+            return False
         return obj.state in self.grab_states or (obj.state == ItemState.CARRIED and CARRYABLE in self.affords)
 
     def grab_dist(self, obj, cx, cy) -> float:
@@ -104,6 +144,11 @@ class ItemKind:
             return
         for o in objs:
             o.step(win._WL, win._HL)
+            d = getattr(o, "dissolve", -1)
+            if d >= 0:
+                o.dissolve = d + 1
+                if o.dissolve >= self.dissolve_ticks:
+                    o.state = self.dead_state
         self.after_step(win)
         setattr(win, self.store, [o for o in objs if o.state != self.dead_state])
 
@@ -121,6 +166,10 @@ class ItemKind:
 
     def draw(self, win, p):
         raise NotImplementedError
+
+    def static_sig(self, win):
+        """静态内容的签名，变了才重画；没有返回 ()。"""
+        return ()
 
     def draw_behind(self, win, p):
         """画在猫身后的部分（如走路时远侧手里的武器）。"""

@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 
 from ... import tuning
+from ...world.rain import SHELTER_MARGIN
 
 WALL_MARGIN = 40.0
 ARM_REACH_NEAR = 24.0
@@ -36,29 +37,28 @@ def pick_social_wander_x(
     stay_gain,
     stay_span,
 ):
-    if not others_x or lo_thresh <= sociability <= hi_thresh:
+    if not others_x:
         return rng.uniform(lo, hi)
     span = max(1.0, hi - lo)
     inv = -1.0 / (2.0 * sigma * sigma)
-    avoid = sociability < lo_thresh
-    sign = 1.0 if avoid else -1.0
+    sign = 1.0 if sociability < lo_thresh else (-1.0 if sociability > hi_thresh else 0.0)
 
     def density(x):
         return sum(math.exp(inv * (x - ox) ** 2) for ox in others_x)
 
-    def crosses(x):
+    def crossed(x):
         a, b = (self_x, x) if self_x <= x else (x, self_x)
-        return any(a < ox < b for ox in others_x)
+        return sum(1 for ox in others_x if a < ox < b)
 
     def cost(x):
-        c = sign * density(x) + move_w * abs(x - self_x) / span
-        if avoid and crosses(x):
-            c += cross_w
-        return c
+        return sign * density(x) + move_w * abs(x - self_x) / span + cross_w * crossed(x)
 
     n = max(1, samples)
     step = span / n
-    best = min((lo + step * (i + rng.random()) for i in range(n)), key=cost)
+    xs = [lo + step * (i + rng.random()) for i in range(n)]
+    if sign == 0.0:
+        return min(xs, key=lambda x: cross_w * crossed(x) + rng.random())
+    best = min(xs, key=cost)
     if cost(best) >= sign * density(self_x) - stay_gain:
         return min(max(self_x + rng.uniform(-stay_span, stay_span), lo), hi)
     return best
@@ -70,6 +70,9 @@ def wander(fsm):
     hi = min(b.walk_max, fsm.WL - WALL_MARGIN)
     if hi <= lo:
         lo, hi = WALL_MARGIN, fsm.WL - WALL_MARGIN
+    if fsm.win.rain.dangerous():
+        b.walk_to(_dry_x(fsm, lo, hi))
+        return
     others_x = fsm.social.others_x(fsm.win)
     x = pick_social_wander_x(
         lo,
@@ -88,6 +91,18 @@ def wander(fsm):
         fsm.WL * tuning.SOCIAL_WANDER_STAY_SPAN_FRAC,
     )
     b.walk_to(x)
+
+
+def _dry_x(fsm, lo, hi):
+    """大雨时的闲逛目标：只在有遮挡的地面上，没有遮挡就原地不动。"""
+    rain = fsm.win.rain
+    x = fsm.body.chunk1.x
+    spans = rain.floor_spans(lo, hi, SHELTER_MARGIN)
+    for a, b in spans:
+        if a <= x <= b:
+            return fsm.rng.uniform(a, b)
+    near = rain.nearest_shelter_x(x, lo, hi, SHELTER_MARGIN)
+    return x if near is None else near
 
 
 def point_at_cursor(fsm, cursor, enforce_side=False, cover=False):

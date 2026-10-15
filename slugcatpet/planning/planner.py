@@ -1,36 +1,42 @@
-"""重力域规划内核：枚举够取方式，按体力过滤、耗时排序。"""
+"""规划器：列出能用的够取方式，去掉体力不够的，按耗时排序。"""
 
 from __future__ import annotations
 import time
 
+from .climb_reach import ClimbPathReach
 from .reach import Candidate
 from .cooldown import CooldownRegistry
 from .jump_reach import JumpReach
-from .pole_reach import PoleDropReach, PoleJumpReach
 from .walk_reach import WalkReach
 
 
 class Planner:
-    """pet 为 PetUnit 鸭子类型：.body/.cat 本猫；_WL/_HL/world_version/poles 世界。"""
+    """pet 只要像 PetUnit：有 body、cat，以及世界的 _WL、_HL、world_version、poles。"""
 
     def __init__(self, pet, clock=time.monotonic):
         self.pet = pet
         self._cooldown = CooldownRegistry(clock)
-        self._ability_cache = None  # 能力实例无状态，懒建后复用
+        self._ability_cache = None  # 够取方式没有状态，建一次后复用
 
     def _abilities(self):
         if self._ability_cache is not None:
             return self._ability_cache
-        out = [WalkReach(self.pet), JumpReach(self.pet), PoleJumpReach(self.pet), PoleDropReach(self.pet)]
+        out = [WalkReach(self.pet), JumpReach(self.pet)]
         for ab in getattr(self.pet, "abilities", {}).values():
             out += ab.reaches(self.pet)
+        out.append(ClimbPathReach(self.pet))
         self._ability_cache = out
         return out
+
+    def _usable(self):
+        """眼下用得上的够取方式：人在杆上时只有能从杆上出发的。"""
+        on_pole = self.pet.body.on_pole
+        return [ab for ab in self._abilities() if ab.from_pole or not on_pole]
 
     def _candidates(self, goal, question):
         energy = self.pet.body.energy
         out = []
-        for ab in self._abilities():
+        for ab in self._usable():
             est = getattr(ab, question)(goal)
             if est is None or est.energy_est > energy:
                 continue
@@ -48,7 +54,7 @@ class Planner:
 
     def any_touch(self, goal):
         energy = self.pet.body.energy
-        for ab in self._abilities():
+        for ab in self._usable():
             est = ab.can_touch(goal)
             if est is None or est.energy_est > energy:
                 continue

@@ -10,6 +10,7 @@ from .i18n import t
 
 # 图集名：base + MSC 各含贴图与 UI
 ATLASES = ("rainWorld", "rainworldmsc", "uiSprites", "uispritesmsc")
+RAIN_ATLAS = "waterSprites"  # 雨的水花，可缺
 _ATLAS_REL = Path("RainWorld_Data") / "resources.assets"
 
 
@@ -122,26 +123,7 @@ def extract_atlases(install: Path, dest: Path | None = None) -> Path:
         raise SetupError(t("err_no_unitypy")) from e
 
     dest = Path(dest or assets_dir())
-    dest.mkdir(parents=True, exist_ok=True)
-    want = set(ATLASES)
-    got: dict[str, set[str]] = {}
-    env = UnityPy.load(str(res))
-    for obj in env.objects:
-        if obj.type.name not in ("Texture2D", "TextAsset"):
-            continue
-        d = obj.read()
-        name = getattr(d, "m_Name", None) or getattr(d, "name", None)
-        if name not in want:
-            continue
-        if obj.type.name == "Texture2D":
-            d.image.save(str(dest / f"{name}.png"))
-            got.setdefault(name, set()).add("png")
-        else:
-            raw = d.m_Script if hasattr(d, "m_Script") else d.script
-            if isinstance(raw, str):
-                raw = raw.encode("utf-8", "surrogateescape")
-            (dest / name).write_bytes(raw)
-            got.setdefault(name, set()).add("map")
+    got = _extract_named(UnityPy, res, (*ATLASES, RAIN_ATLAS), dest)
 
     if got.get("rainWorld") != {"png", "map"}:
         raise SetupError(t("err_base_fail"))
@@ -158,17 +140,92 @@ def extract_atlases(install: Path, dest: Path | None = None) -> Path:
     return dest
 
 
+def _extract_named(UnityPy, res: Path, names, dest: Path) -> dict[str, set[str]]:
+    """从资源文件取出这些图集的贴图与帧表，返回 {名: {"png", "map"}}。"""
+    dest.mkdir(parents=True, exist_ok=True)
+    want = set(names)
+    got: dict[str, set[str]] = {}
+    for obj in UnityPy.load(str(res)).objects:
+        if obj.type.name not in ("Texture2D", "TextAsset"):
+            continue
+        d = obj.read()
+        name = getattr(d, "m_Name", None) or getattr(d, "name", None)
+        if name not in want:
+            continue
+        if obj.type.name == "Texture2D":
+            d.image.save(str(dest / f"{name}.png"))
+            got.setdefault(name, set()).add("png")
+        else:
+            raw = d.m_Script if hasattr(d, "m_Script") else d.script
+            if isinstance(raw, str):
+                raw = raw.encode("utf-8", "surrogateescape")
+            (dest / name).write_bytes(raw)
+            got.setdefault(name, set()).add("map")
+    return got
+
+
+RAIN_SOUNDS = ("shortLightRainLoop", "rainHeavy1", "rainLightUnderground1", "rainMedUnderground1")
+_SFX_BUNDLES = ("loadedsoundeffects",)
+
+
+def rain_sounds_dir() -> Path:
+    return assets_dir() / "rain"
+
+
+def rain_sounds_missing() -> list[str]:
+    return [n for n in RAIN_SOUNDS if not (rain_sounds_dir() / f"{n}.wav").is_file()]
+
+
+def extract_rain_sounds(install: Path) -> list[str]:
+    """雨声循环从音效资源包取出、封装成 wav；返回这次写出的片名。"""
+    from .audio.fsbogg import fsb_to_wav
+
+    todo = rain_sounds_missing()
+    if not todo:
+        return []
+    out = rain_sounds_dir()
+    out.mkdir(parents=True, exist_ok=True)
+    done = []
+    for name, fsb in _bundle_clips(Path(install), todo, _SFX_BUNDLES).items():
+        try:
+            data = fsb_to_wav(fsb)
+        except ValueError:
+            continue
+        tmp = out / f"{name}.wav.part"
+        tmp.write_bytes(data)
+        tmp.replace(out / f"{name}.wav")
+        done.append(name)
+    return done
+
+
+def rain_atlas_missing() -> bool:
+    return not any(
+        (d / RAIN_ATLAS).is_file() and (d / f"{RAIN_ATLAS}.png").is_file()
+        for d in (assets_dir(), bundled_assets_dir())
+    )
+
+
+def extract_rain_atlas(install: Path) -> bool:
+    """提取水花图集。"""
+    import UnityPy
+
+    res = Path(install) / _ATLAS_REL
+    if not res.is_file():
+        return False
+    return _extract_named(UnityPy, res, (RAIN_ATLAS,), assets_dir()).get(RAIN_ATLAS) == {"png", "map"}
+
+
 _STREAMING = Path("RainWorld_Data") / "StreamingAssets"
 _AUDIO_BUNDLES = ("music_songs",)
 _LOOSE_AUDIO = (("music/songs", ".mp3"),)
 
 
-def _bundle_clips(install: Path, names) -> dict[str, bytes]:
+def _bundle_clips(install: Path, names, bundles=_AUDIO_BUNDLES) -> dict[str, bytes]:
     import UnityPy
     from UnityPy.helpers.ResourceReader import get_resource_data
 
     want, got = set(names), {}
-    for bundle in _AUDIO_BUNDLES:
+    for bundle in bundles:
         path = install / _STREAMING / "AssetBundles" / bundle
         if not path.is_file() or not want - got.keys():
             continue

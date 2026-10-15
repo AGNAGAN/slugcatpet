@@ -1,4 +1,4 @@
-"""后空翻够取：走到起跳点→驻停→高后空翻。"""
+"""后空翻够：走到起跳点，停稳后高后空翻。"""
 
 from __future__ import annotations
 
@@ -8,16 +8,16 @@ from .reach import Reach, Estimate, RUNNING, DONE, GIVEUP, reach_assist, walk_ba
 from .jump_arc import get_arc, get_backflip_arc
 from .jump_reach import JumpReach, PLAN_HIT_RADIUS, SETTLE_MAX, SETTLE_VX
 
-TOP_CLEAR = 20.0  # 窗顶余量：高于此线视为被 clamp，弃解
+TOP_CLEAR = 20.0  # 弧线高过窗口顶这条线就会被截住，不用
 
 
 def takeoff_c0_h(stats):
-    """站立起跳瞬间 chunk0 距地高。"""
+    """站立起跳时 chunk0 离地高度。"""
     return get_arc(stats, 0, 0).takeoff_h
 
 
 def best_launch_hit(arc, gx, gy, launch_y, xmin, xmax, radius, hipx):
-    """定 launch_y，扫掠 launch_x 取走+飞最省解；越窗顶余量弃整弧。"""
+    """起跳高度固定为 launch_y，找走路加飞行耗时最少的 launch_x；弧线碰到窗顶就整条不用。"""
     best = None
     best_t = None
     for i, (px, py) in enumerate(arc.points):
@@ -34,7 +34,7 @@ def best_launch_hit(arc, gx, gy, launch_y, xmin, xmax, radius, hipx):
 
 
 def sweep_hit_topsafe(arc, dx, dy, radius, c0y):
-    """扫掠命中 + 窗顶过滤，回 tick（1 起）。"""
+    """同 sweep_hit，弧线碰到窗顶返回 None；tick 从 1 起。"""
     r2 = radius * radius
     for i, (px, py) in enumerate(arc.points):
         if c0y + py < TOP_CLEAR:
@@ -49,7 +49,7 @@ class BackflipReach(Reach):
     key = "backflip"
 
     def _plan(self, goal):
-        # 泳/零重力退避，普通跳够得着则不翻
+        # 游泳、失重时不翻，普通跳够得着也不翻
         pet = self.pet
         body = pet.body
         if getattr(body, "swimming", False) or getattr(body, "zerog", False):
@@ -83,7 +83,11 @@ class BackflipReach(Reach):
 
 
 class BackflipReachController:
-    """走到起跳 x → 驻停 → 起跳瞬间以实际 chunk0 重选方向。"""
+    """走到起跳点、停稳，起跳时按实际 chunk0 位置重选方向。"""
+
+    def on_geometry(self):
+        """只在地上走、跳，不受杆增删影响。"""
+        return True
 
     def __init__(self, pet, goal):
         self.pet = pet
@@ -146,7 +150,7 @@ class BackflipReachController:
         return None
 
     def _cleanup(self):
-        # 非手操路径无 ANIM_RESET 兜底，终止需手动清理
+        # 不是手动控制时没有 ANIM_RESET 兜底，要自己清
         body = self.pet.body
         body.animation = None
         body.jump_boost = 0.0

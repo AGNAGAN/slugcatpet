@@ -1,4 +1,4 @@
-"""界面调色板：前端面板共用的颜色值（字符串用于 QSS，QColor 用于自绘）。"""
+"""界面配色：字符串给 QSS 用，QColor 给自绘用。"""
 
 from __future__ import annotations
 

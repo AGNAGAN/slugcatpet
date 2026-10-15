@@ -1,4 +1,4 @@
-"""飞升超度 Ascension：冲击波→悬浮回正→追锁蓄能→闪→劫持光标。"""
+"""超度特效：冲击波、悬浮回正、追着光标蓄能、闪光、劫持光标。"""
 
 from __future__ import annotations
 import math
@@ -55,7 +55,7 @@ class Ascension:
         self.flashed = False
         self.flash_t = 0
         self.bobp = 0.0
-        # mouse=burst偏移滞后；mark=平滑body位
+        # rubber_mouse 是光点相对身体的滞后偏移，rubber_mark 是平滑后的身体位置
         self.rubber_mouse_x = 0.0
         self.rubber_mouse_y = 0.0
         bx, by = self.body.chunk0.x, self.body.chunk0.y
@@ -87,12 +87,12 @@ class Ascension:
             win.add_spark(c1.x, c1.y, math.cos(ang) * sp, math.sin(ang) * sp, white=True)
 
     def _body_root(self):
-        """触手根锚 = chunk0（上半身）。"""
+        """触手根部在 chunk0（上半身）。"""
         c0 = self.body.chunk0
         return (c0.x, c0.y)
 
     def _hip_pos(self):
-        """臀部光斑锚 = (chunk1*2+chunk0)/3。"""
+        """臀部光斑位置：(chunk1 * 2 + chunk0) / 3。"""
         c0, c1 = self.body.chunk0, self.body.chunk1
         return ((c1.x * 2.0 + c0.x) / 3.0, (c1.y * 2.0 + c0.y) / 3.0)
 
@@ -124,7 +124,7 @@ class Ascension:
         self.rubber_mark_x, self.rubber_mark_y = c0.x, c0.y
 
     def _tick_tentacles(self):
-        """推进 4 条触手；触手纯图形，不施力。"""
+        """推进 4 条触手，只是图形，不施力。"""
         target_vis = 0 if (self.upright > 0) else 4
         if self.tentacles_visible < target_vis and (self.timer % 18 == 0):
             self.tentacles_visible += 1
@@ -237,7 +237,7 @@ class Ascension:
         self.win.stop_cursor_hijack()
 
     def draw_under(self, p, ts):
-        """身体下层：触手 + 臀部光斑；在 gfx.draw_sprites 前调用。"""
+        """画在身体下层的触手和臀部光斑，须在 gfx.draw_sprites 之前调用。"""
         if self.darken > 0.0:
             self._draw_ghost_distortion(p)
             self._draw_tentacles(p, ts)

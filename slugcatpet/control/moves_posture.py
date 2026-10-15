@@ -1,10 +1,10 @@
-"""姿态过渡与趴行掉头状态机（控制路径专用，y↓），cy==+1 脚踩地。"""
+"""手动控制的姿势过渡：站起、趴下、趴着掉头（y↓）。"""
 
 from __future__ import annotations
 
 
 def toggle_standing(body, inp0, inp1) -> None:
-    """上键升沿→standing=true(StandUp 意图)；下键升沿→standing=false(DownOnFours 意图)。"""
+    """刚按下上时 standing 设为 True（要站起），刚按下下时设为 False（要趴下）。"""
     if inp0.y == 1 and inp1.y != 1:
         # 坡度/头顶实心检查：pet 无坡/砖 → 恒真
         body.standing = True

@@ -1,4 +1,4 @@
-"""工匠手操爆炸跳（y 已翻转）。"""
+"""爆破的机制：爆跳、招架、燃料与过热、自爆（y↓）。"""
 
 from __future__ import annotations
 
@@ -17,16 +17,16 @@ from ...world.explosionfx import (
 from ...core.vecmath import _dirvec
 
 
-CAPACITY = 10  # counter≥此→自爆
-WARN_AT = 5  # 过热警告阈（随 CAPACITY 走 max(1,容量-5)）
-OVERHEAT_AT = 7  # 眩晕惩罚阈（随 CAPACITY 走 max(1,容量-3)）
+CAPACITY = 10  # 燃料计数到此自爆
+WARN_AT = 5  # 过热警告线，max(1, CAPACITY - 5)
+OVERHEAT_AT = 7  # 从这里起爆跳会眩晕，max(1, CAPACITY - 3)
 JUMP_COOLDOWN = 150.0
 PARRY_COOLDOWN = 40.0
 PARRY_STONE_R = 300.0
 PARRY_CAT_R = 200.0
 PARRY_STUN = 80
 PARRY_KNOCK = 30.0
-DEATH_RAD = 350.0  # 自爆力场：半径/力/最低眩晕
+DEATH_RAD = 350.0  # 自爆冲击：半径、力度、最低眩晕
 DEATH_FORCE = 26.2
 DEATH_MIN_STUN = 160.0
 
@@ -46,7 +46,7 @@ def ensure(body) -> None:
 
 
 def _push_angle(ax, ay, bx, by):
-    """爆炸推角：a→b 方向朝「上」插值 20%；pet 上=(0,-1)。"""
+    """爆炸推开的方向：a→b 方向往上偏 20%，上为 (0, -1)。"""
     dx, dy = _dirvec(ax, ay, bx, by)
     if dx == 0.0 and dy == 0.0:
         return (0.0, -1.0)
@@ -55,7 +55,7 @@ def _push_angle(ax, ay, bx, by):
 
 
 def pyro_explosion(pet, body) -> None:
-    """工匠自爆的爆炸部分（不含死亡终态）：特效+力场推邻猫+抖窗。"""
+    """自爆的爆炸部分，不含死亡：特效、推开附近的猫、震动窗口。"""
     body._ctrl_pyro_counter = CAPACITY
     c0 = body.chunk0
     x = lerp(c0.x, c0.last_x, 0.35)
@@ -121,8 +121,8 @@ def fire_air_jump(pet, body, ix, iy) -> None:
 
 
 def _zerog_burst(body, ix, iy) -> None:
-    """零重力爆冲（y 翻号）：无输入随机方向，vel 9/8。"""
-    nx, ny = float(ix), float(iy)  # 上=+1，写 vy 时取负（y↓ 约定）
+    """失重爆冲：没有方向输入时随机取向，头、臀速度 9 / 8。"""
+    nx, ny = float(ix), float(iy)  # 输入上为 +1，写 vy 时取负
     while nx == 0.0 and ny == 0.0:
         nx = 0.0 if random.random() <= 0.33 else (1.0 if random.random() <= 0.5 else -1.0)
         ny = 0.0 if random.random() <= 0.33 else (1.0 if random.random() <= 0.5 else -1.0)
@@ -156,7 +156,7 @@ class PyroController:
     def update(self, body, inp0, inp1, want_pre, can_pre) -> None:
         tick_fuel(self.pet, body)
         trigger = (want_pre > 0 and inp0.pckp) or (inp0.pckp and not inp1.pckp)
-        low_grav = body.bodyMode == "ZeroG" or body.room_gravity <= 0.1  # 零/低重力豁免：压下也可空中爆跳
+        low_grav = body.bodyMode == "ZeroG" or body.room_gravity <= 0.1  # 失重或低重力时按着下也能空中爆跳
         if (
             trigger
             and not body._ctrl_pyro_jumped
@@ -227,7 +227,7 @@ class PyroController:
             yield other
 
     def _stun_other(self, other, ticks) -> None:
-        """砸晕先例：有 FSM 走 apply_stun（入 Stunned 态），否则直写 body.stun。"""
+        """有状态机时走 apply_stun 进入 Stunned，否则直接写 body.stun。"""
         beh = getattr(other, "behavior", None)
         if beh is not None:
             beh.apply_stun(int(ticks))

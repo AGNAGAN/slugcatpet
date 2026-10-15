@@ -1,1 +1,1 @@
-"""UI panels: hud/tabbar/setup_panel."""
+"""界面：主题、面板、通用控件。"""
