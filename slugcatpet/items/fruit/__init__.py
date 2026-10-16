@@ -7,9 +7,9 @@ from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPainterPath, QPen,
 
 from ...rendering.graphics import _ang_from_up
 from ...rendering.primitives import draw_fruit, draw_rope
-from ..base import CARRYABLE, EDIBLE, ItemKind
+from ..base import CARRYABLE, EDIBLE, ItemKind, dump_loose
 from ..state import ItemState
-from .model import PLACE_HANGING_FRAC, make_fruit
+from .model import PLACE_HANGING_FRAC, Fruit, Stalk, make_fruit
 
 STALK_ROOT_W = 3.0
 STALK_TIP_W = 2.0
@@ -34,6 +34,19 @@ class FruitKind(ItemKind):
 
     def make(self, win, lx, ly, seed):
         return make_fruit(lx, ly, win._HL, seed=seed, zerog=win.zerog_on)
+
+    def dump(self, f):
+        return dump_loose(f, bites=f.bites, hang=f.state == ItemState.HANGING and f.stalk is not None)
+
+    def load(self, win, d, fit):
+        f = Fruit(*fit.inside(float(d["x"]), float(d["y"])), seed=int(d.get("seed", 0)))
+        f.bites = int(d.get("bites", f.bites))
+        if d.get("hang") and not win.zerog_on:
+            f.state = ItemState.HANGING
+            f.stalk = Stalk(f)
+        else:
+            f.state = ItemState.FREE
+        return f
 
     def drop(self, win, f):
         f.stalk = None

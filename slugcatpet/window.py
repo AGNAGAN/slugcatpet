@@ -185,6 +185,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self.cfg_cursor_shape = bool(self._params.get("cursor_shape", True))
         self.cfg_freeze_hide_ui = bool(self._params.get("freeze_hide_ui", True))
         self.cfg_friendly_fire = bool(self._params.get("friendly_fire", False))
+        self.cfg_keep_items = bool(self._params.get("keep_items", False))
         self.cfg_fps = self._params.get("fps", "auto")  # "auto"=跟显示器刷新率
         self.cfg_power_save = bool(self._params.get("power_save", True))
         self.cfg_water_depth = clampf(
@@ -222,6 +223,10 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self.anim.start()
         QGuiApplication.instance().primaryScreenChanged.connect(self._watch_screen)
         self._watch_screen()
+        if self.cfg_keep_items:
+            from .items import scene
+
+            scene.restore(self, self._params.get("scene_last"))
 
     def _build_pets(self):
         saved = self._params.get("pets")
@@ -634,6 +639,16 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
 
     def set_friendly_fire(self, on):
         self.cfg_friendly_fire = self._params["friendly_fire"] = bool(on)
+
+    def set_keep_items(self, on):
+        self.cfg_keep_items = self._params["keep_items"] = bool(on)
+
+    def blueprints(self):
+        """存着的布局蓝图 [{name, size, items}]，就地增删。"""
+        v = self._params.get("blueprints")
+        if not isinstance(v, list):
+            v = self._params["blueprints"] = []
+        return v
 
     def set_cursor_shape(self, on):
         self.cfg_cursor_shape = self._params["cursor_shape"] = bool(on)
@@ -1271,7 +1286,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
     def _static_sig(self):
         from .items import kinds
 
-        return tuple(k.static_sig(self) for k in kinds())
+        return (*(k.static_sig(self) for k in kinds()), self._ghosts is not None)
 
     def _draw_click_pads(self, p):
         """猫的抓点下铺一层近乎透明的底，接住点击。"""
@@ -1288,6 +1303,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         p.restore()
 
     def _draw_overlay(self, p):
+        self._draw_ghosts(p)
         if self._place_mode:
             self._draw_place_hint(p)
 
@@ -1354,7 +1370,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             self._snow.draw(p, self._WL, self._HL, self._scale)
             p.save()
             p.setTransform(QTransform.fromScale(self._scale, self._scale))  # 雨定格不动，不跟着震
-            self.rain.draw(p, self._scale)
+            self.rain.draw(p, self._scale, self._scene_painted)
             p.restore()
             replay(p, ops[k:])
         finally:

@@ -233,6 +233,7 @@ def main():
         return
 
     from . import skins
+    from .items import scene
 
     skins.configure(params.get("skins_scan_external", True))
     skins.reload()
@@ -273,6 +274,10 @@ def main():
             }
             for p in pet.all_pets()
         ]
+        if pet.cfg_keep_items:
+            params["scene_last"] = scene.capture(pet)
+        else:
+            params.pop("scene_last", None)
         params["skins_scan_external"] = skins.scan_external()
         params["schema_version"] = SCHEMA_VERSION
         _save_params(params)
@@ -421,7 +426,7 @@ def main():
 
     from .platform.envwatch import EnvironmentWatcher
 
-    envwatch = EnvironmentWatcher([pet, tab, hud, settings, music], pet)
+    envwatch = EnvironmentWatcher([pet, tab, hud], pet, plain=[settings, music])
     envwatch.start()
     pet._refresh_top_cb = envwatch.force_top
     app._envwatch = envwatch

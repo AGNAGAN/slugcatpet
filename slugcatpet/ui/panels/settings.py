@@ -92,7 +92,7 @@ class SettingsWindow(QWidget):
         self._hud = hud
         self._write_state = write_state
         window._settings_panel = self  # 供 window 反向同步世界态
-        self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowStaysOnTopHint)
+        self.setWindowFlags(Qt.WindowType.Window)
         self.setWindowTitle(t("settings_title"))
         self.setStyleSheet(_QSS)
         self._outer = QVBoxLayout(self)
@@ -450,6 +450,15 @@ class SettingsWindow(QWidget):
         btn = QPushButton(t("settings_keybinds_btn"))
         btn.clicked.connect(self._on_keybinds)
         self._row(v, "settings_keybinds", btn)
+        self._check(
+            v,
+            "settings_keep_items",
+            w.cfg_keep_items,
+            lambda on: (w.set_keep_items(on), self._write_state()),
+        )
+        btn = QPushButton(t("settings_keybinds_btn"))
+        btn.clicked.connect(self._on_blueprints)
+        self._row(v, "settings_blueprints", btn)
 
     def _section_perf(self, v):
         v.addWidget(self._header(t("settings_perf_section")))
@@ -530,6 +539,17 @@ class SettingsWindow(QWidget):
         from .keybinds import KeybindDialog
 
         dlg = KeybindDialog(self._keybinds_saved, self._window._hotkey_filter, parent=self)
+        dlg.finished.connect(lambda _r: self._look_finished(dlg))
+        self._dlg = dlg
+        dlg.place_center(self)
+        dlg.open()
+
+    def _on_blueprints(self):
+        if self._dlg is not None:
+            return
+        from .blueprints import BlueprintDialog
+
+        dlg = BlueprintDialog(self._window, self._write_state, parent=self)
         dlg.finished.connect(lambda _r: self._look_finished(dlg))
         self._dlg = dlg
         dlg.place_center(self)

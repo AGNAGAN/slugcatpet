@@ -9,19 +9,49 @@ from ...world.rain import SHELTER_MARGIN
 
 ARRIVE = 12.0
 RETRY = 200  # 走不过去后多久再试
+SPACING = 36.0  # 躲雨时和别的猫隔开的距离
+SCAN_STEP = 4.0
 
 
 def exposed(fsm) -> bool:
+    """身上有一处淋得到（和雨砸的范围一样）。"""
     rain = fsm.win.rain
     b = fsm.body
-    return rain.exposed(b.chunk0.x, b.chunk0.y) or rain.exposed(b.chunk1.x, b.chunk1.y)
+    return rain.touches(b.chunk0) or rain.touches(b.chunk1)
+
+
+def _taken(fsm):
+    """别的猫已经躲着或正要去躲的位置。"""
+    out = []
+    for o in fsm.social.others(fsm.win):
+        beh = o.behavior
+        st = beh._states.get("SeekShelter") if beh is not None else None
+        if beh is not None and beh.state == "SeekShelter" and st is not None and st.target is not None:
+            out.append(st.target)
+        elif not fsm.win.rain.exposed(o.body.chunk1.x, o.body.chunk1.y):
+            out.append(o.body.chunk1.x)
+    return out
 
 
 def shelter_x(fsm):
+    """离自己最近、和别的猫隔得开的躲雨位置；都站满了就挨着最近的。"""
     b = fsm.body
     lo = 0.0 if b.walk_min is None else b.walk_min
     hi = fsm.WL if b.walk_max is None else b.walk_max
-    return fsm.win.rain.nearest_shelter_x(b.chunk1.x, lo, hi, SHELTER_MARGIN)
+    spans = fsm.win.rain.floor_spans(lo, hi, SHELTER_MARGIN)
+    if not spans:
+        return None
+    x, taken = b.chunk1.x, _taken(fsm)
+    best = None
+    for a, c in spans:
+        p = min(max(x, a), c)
+        n = int((c - a) // SCAN_STEP) + 1
+        for q in sorted((a + k * SCAN_STEP for k in range(n)), key=lambda q: abs(q - p)):
+            if all(abs(q - t) >= SPACING for t in taken):
+                if best is None or abs(q - x) < abs(best - x):
+                    best = q
+                break
+    return best if best is not None else fsm.win.rain.nearest_shelter_x(x, lo, hi, SHELTER_MARGIN)
 
 
 class SeekShelter(State):
@@ -33,6 +63,7 @@ class SeekShelter(State):
         super().__init__(fsm)
         self._exec = None
         self.cooldown = 0
+        self.target = None  # 要去的躲雨位置，别的猫据此让开
 
     def enter(self):
         fsm = self.fsm
@@ -43,7 +74,7 @@ class SeekShelter(State):
         fsm._clear_hands()
         fsm.climb = None
         self._exec = None
-        x = shelter_x(fsm)
+        x = self.target = shelter_x(fsm)
         if x is None:
             return
         g = point_goal(x, fsm.win._HL, radius=ARRIVE)
@@ -80,6 +111,7 @@ class SeekShelter(State):
         if self._exec is not None:
             self._exec.cancel()
             self._exec = None
+        self.target = None
         fsm.release_organs()
         fsm.body.stop_walk()
         fsm.climb = None

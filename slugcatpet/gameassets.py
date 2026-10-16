@@ -164,7 +164,15 @@ def _extract_named(UnityPy, res: Path, names, dest: Path) -> dict[str, set[str]]
     return got
 
 
-RAIN_SOUNDS = ("shortLightRainLoop", "rainHeavy1", "rainLightUnderground1", "rainMedUnderground1")
+RAIN_SOUNDS = (
+    "shortLightRainLoop",
+    "rainHeavy1",
+    "rainLightUnderground1",
+    "rainMedUnderground1",
+    "shortDeathRainLoop",
+    "RWTW_RainRumble_LOOP",
+    "click1A",
+)
 _SFX_BUNDLES = ("loadedsoundeffects",)
 
 

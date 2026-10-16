@@ -18,6 +18,10 @@ HIT_STONE = "stone"
 HIT_SPEAR = "spear"
 HIT_SLAM = "slam"
 
+GHOST_RGB = (110, 170, 255)  # 布局蓝图预览
+GHOST_OPACITY = 0.6
+DIMMED_OPACITY = 0.35  # 预览时场上会被换掉的物品
+
 
 def creatures(win):
     """场上的活物（不论死活），按物品注册表和放置顺序。"""
@@ -26,6 +30,13 @@ def creatures(win):
 
 def alive_creature(o) -> bool:
     return getattr(o, "creature", False) and not o.dead
+
+
+def dump_loose(obj, **extra):
+    """散落物的存档：还在场上（没吃掉、没消解）就存位置和种子。"""
+    if obj.state in (ItemState.EATEN, ItemState.GONE) or getattr(obj, "dissolve", -1) >= 0:
+        return None
+    return {"x": obj.x, "y": obj.y, "seed": obj._id, **extra}
 
 
 class ItemKind:
@@ -49,6 +60,18 @@ class ItemKind:
     dead_state = ItemState.EATEN
     varies = False  # 每件物体提供的用法随状态变（见 affords_now）
     dissolve_ticks = 40  # 消解（淡出）用的帧数
+    blueprint = False  # 归布局蓝图管
+
+    def dump(self, obj):
+        """存档用的字典（坐标为当时的逻辑坐标）；None 不存。"""
+        return None
+
+    def load(self, win, d, fit):
+        """按 dump 的字典重建物体，坐标经 fit 换到当前屏幕；不入场，None 为放弃。"""
+        return None
+
+    def draw_ghost(self, win, p, obj):
+        """布局蓝图预览里的虚影。"""
 
     def affords_now(self, obj, use) -> bool:
         """varies 时：这件物体眼下提不提供 use。"""

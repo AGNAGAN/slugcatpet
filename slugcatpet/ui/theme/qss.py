@@ -247,6 +247,23 @@ KEYBINDS = (
     f'#kbStatus[warn="true"]{{color:{WARN};}}'
 )
 
+BLUEPRINTS = (
+    FORM + f"#bpHint{{color:{TEXT_DIM};font-size:11px;background:transparent;}}"
+    f"#bpCount{{color:{TEXT_DIM};font-size:12px;background:transparent;}}"
+    "QScrollArea,#bpList{background:transparent;border:none;}"
+    f"#bpCard{{background:{TRACK_BG};border:1px solid {BORDER};border-radius:8px;}}"
+    f"#bpCard:hover{{border-color:{RADIO_BORDER_HOVER};}}"
+    f'#bpCard[selected="true"]{{border:2px solid {ACCENT};}}'
+    f"#bpName{{color:{TEXT};font-size:13px;font-weight:600;background:transparent;}}"
+    f"#bpMeta{{color:{TEXT_DIM};font-size:11px;background:transparent;}}"
+    f'#bpMeta[warn="true"]{{color:{WARN};}}'
+    f"#bpTag{{color:{ACCENT};font-size:11px;background:transparent;}}"
+    "#bpCard QPushButton{font-size:11px;padding:3px 10px;border-radius:6px;}"
+    f"#bpStatus{{color:{TEXT_DIM};font-size:11px;background:transparent;}}"
+    f'#bpStatus[warn="true"]{{color:{WARN};}}'
+    f"#btnGhost:disabled{{color:{TEXT_DISABLED};border-color:{BORDER};}}"
+)
+
 VOLUME_POP = (
     f"#volPop{{background:{BG_CARD};border:1px solid {BORDER};border-radius:8px;}}"
     f"#volPopVal{{color:{ACCENT};font-size:11px;background:transparent;}}"

@@ -9,7 +9,7 @@ from ...core.units import lerp
 from ...core.vecmath import _ang_from_up
 from ...rendering.primitives import blit
 from ...world.liquid_drip import draw_drips
-from ..base import CARRYABLE, EDIBLE, ItemKind
+from ..base import CARRYABLE, EDIBLE, ItemKind, dump_loose
 from ..eggbug.palette import palette
 from ..state import ItemState
 from .model import BITES, BugEgg
@@ -35,6 +35,16 @@ class BugEggKind(ItemKind):
 
     def make(self, win, lx, ly, seed):
         return BugEgg(lx, ly, seed=seed)
+
+    def dump(self, e):
+        return dump_loose(e, hue=e.hue, bites=e.bites, swell=e.swell)
+
+    def load(self, win, d, fit):
+        x, y = fit.inside(float(d["x"]), float(d["y"]))
+        e = BugEgg(x, y, seed=int(d.get("seed", 0)), hue=float(d.get("hue", 0.0)))
+        e._bites = int(d.get("bites", BITES))
+        e.swell = float(d.get("swell", 1.0))
+        return e
 
     def make_room(self, win):
         live = [e for e in win.bugeggs if e.dissolve < 0]

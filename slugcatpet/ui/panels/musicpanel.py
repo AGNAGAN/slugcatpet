@@ -79,7 +79,7 @@ class MusicPanel(QWidget):
         self._write_state = write_state
         self._on_close = on_close
         self._syncing = False  # 程序改列表/滑块时抑制回调
-        self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowStaysOnTopHint)
+        self.setWindowFlags(Qt.WindowType.Window)
         self.setWindowTitle(t("music_title"))
         self.setStyleSheet(_QSS)
         self.setMinimumWidth(420)

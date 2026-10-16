@@ -323,6 +323,8 @@ def collide_objects(entities) -> None:
 
 
 def _collide_pair(a, b, a_chunks, b_chunks) -> None:
+    a_fix = getattr(a, "steady", False) and not hasattr(b, "steady")
+    b_fix = getattr(b, "steady", False) and not hasattr(a, "steady")
     for ca in a_chunks:
         if not ca.collide_with_objects:
             continue
@@ -336,7 +338,8 @@ def _collide_pair(a, b, a_chunks, b_chunks) -> None:
             dist = math.hypot(dx, dy)
             if dist >= rad_sum:
                 continue
-            ap, bp = getattr(ca, "pinned", False), getattr(cb, "pinned", False)  # 世界物体无 pinned
+            ap = a_fix or getattr(ca, "pinned", False)  # 世界物体无 pinned
+            bp = b_fix or getattr(cb, "pinned", False)
             if ap and bp:
                 continue
             if dist < 1e-9:

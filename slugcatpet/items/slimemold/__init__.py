@@ -11,7 +11,7 @@ from ...core.gfxmath import _hsl2rgb
 from ...core.units import clampf, inv_lerp, lerp
 from ...rendering.graphics import _ang_from_up
 from ...rendering.primitives import blit, draw_fruit
-from ..base import CARRYABLE, EDIBLE, ItemKind
+from ..base import CARRYABLE, EDIBLE, ItemKind, dump_loose
 from ..state import ItemState
 from .model import STUCK_GAP, TENDRIL_JAG_K, SlimeMold, _dirvec, _lerp_map
 
@@ -95,6 +95,22 @@ class SlimeMoldKind(ItemKind):
         sx, sy, bx, by = _edge_anchor(win, lx, ly)
         m = SlimeMold(bx, by, seed=seed)
         m.stick_to(sx, sy)
+        return m
+
+    def dump(self, m):
+        stuck = m.state == ItemState.HANGING and m.stuck_pos is not None
+        return dump_loose(m, bites=m.bites, stick=list(m.stuck_pos) if stuck else None)
+
+    def load(self, win, d, fit):
+        seed = int(d.get("seed", 0))
+        stick = d.get("stick")
+        if stick:
+            sx, sy, bx, by = _edge_anchor(win, *fit.inside(float(stick[0]), float(stick[1])))
+            m = SlimeMold(bx, by, seed=seed)
+            m.stick_to(sx, sy)
+        else:
+            m = SlimeMold(*fit.inside(float(d["x"]), float(d["y"])), seed=seed)
+        m.bites = int(d.get("bites", m.bites))
         return m
 
     def on_enter_place(self, win):

@@ -9,7 +9,7 @@ from PySide6.QtGui import QColor, QPolygonF
 
 from ...core.units import clampf, lerp
 from ...rendering.primitives import draw_stone, draw_stone_trail
-from ..base import CARRYABLE, HIT_STONE, THROWABLE, ItemKind, creatures
+from ..base import CARRYABLE, HIT_STONE, THROWABLE, ItemKind, creatures, dump_loose
 from ..state import ItemState
 from .model import Stone
 
@@ -44,6 +44,12 @@ class StoneKind(ItemKind):
 
     def make(self, win, lx, ly, seed):
         return Stone(lx, ly, seed=seed)
+
+    def dump(self, s):
+        return dump_loose(s)
+
+    def load(self, win, d, fit):
+        return Stone(*fit.inside(float(d["x"]), float(d["y"])), seed=int(d.get("seed", 0)))
 
     def drop(self, win, s):
         for pet in win.pets:

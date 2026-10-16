@@ -97,6 +97,9 @@ class PetUnit:
         margin = self.layout_data.canvas_w / 2.0
         self.body.walk_min = margin
         self.body.walk_max = w._WL - margin
+        self.body.floor_spans = lambda: [
+            s for p in w.pets if p is not self and (s := p.body.lying_span()) is not None
+        ]
         self.atlas = self._make_atlas()
         self.gfx = SlugcatGraphics(self.body, self.layout_data, self.atlas, cat=self.cat, look=self.look)
         for _ in range(40):

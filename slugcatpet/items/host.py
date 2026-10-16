@@ -12,6 +12,7 @@ from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
 from ..control.hotkey import HK_PLACE_ESC, VK_ESCAPE
 from ..i18n import t
 from . import get as _kind, kinds
+from .base import GHOST_OPACITY
 from .state import ItemState
 
 PLACE_BANNER_BG = (0, 0, 0, 150)
@@ -55,6 +56,7 @@ class ItemHost:
         self._place_mode = False
         self._place_kind = None  # 物品 key 或 "remove"
         self._place_preview = None
+        self._ghosts = None  # 布局蓝图预览：[(类型, 物体)]
         self._stun_rng = random.Random(98765)
 
     def _items(self):
@@ -149,6 +151,38 @@ class ItemHost:
         k.add(self, obj)
         self.world_version += 1
         return obj
+
+    def admit_item(self, k, obj):
+        """把重建好的物体放进场上，种子计数跳过它的种子。"""
+        sk = k.seed_key or k.key
+        seed = int(getattr(obj, "_id", 0))
+        self._item_seeds[sk] = max(self._item_seeds.get(sk, 0), seed + 1)
+        if hasattr(obj, "_impact_cb"):
+            obj._impact_cb = self._shake_impact
+        k.add(self, obj)
+        self.world_version += 1
+        if k.geometry:
+            self.geometry_version += 1
+        self.update()
+
+    def set_ghosts(self, ghosts):
+        """显示或撤掉布局蓝图预览。"""
+        self._ghosts = ghosts or None
+        self._ops_key = None  # 定格时也重画
+        self.update()
+
+    def ghosting(self, k) -> bool:
+        """正在预览，k 类场上的物品要画淡。"""
+        return self._ghosts is not None and k.blueprint
+
+    def _draw_ghosts(self, p):
+        if self._ghosts is None:
+            return
+        p.save()
+        p.setOpacity(GHOST_OPACITY)
+        for k, o in self._ghosts:
+            k.draw_ghost(self, p, o)
+        p.restore()
 
     def enter_place_mode(self, key):
         k = _kind(key)

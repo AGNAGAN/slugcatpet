@@ -6,7 +6,7 @@ from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QLinearGradient, QPainterPath, QPainterPathStroker, QPen
 
 from ...core.vecmath import _seg_dist
-from ..base import CLIMBABLE, ItemKind
+from ..base import CLIMBABLE, DIMMED_OPACITY, GHOST_RGB, ItemKind
 from ..state import ItemState
 from .model import HORIZONTAL, MIN_LENGTH, POLE_RAD, TOP_MARGIN, VERTICAL, Pole
 
@@ -36,8 +36,8 @@ def _static(p, on):
         fn()
 
 
-def _rod(p, ax, ay, bx, by):
-    core = QPen(QColor(*POLE_COLOR))
+def _rod(p, ax, ay, bx, by, color=POLE_COLOR):
+    core = QPen(QColor(*color))
     core.setWidthF(POLE_RAD * 2.0)
     core.setCapStyle(Qt.PenCapStyle.FlatCap)
     p.setPen(core)
@@ -53,6 +53,7 @@ class PoleKind(ItemKind):
     mobile = False
     geometry = True
     dead_state = ItemState.GONE
+    blueprint = True
 
     def __init__(self, key, pole_kind):
         self.key = key
@@ -63,6 +64,27 @@ class PoleKind(ItemKind):
 
     def make(self, win, lx, ly, seed):
         return Pole(self.pole_kind, *_ends(win, self.pole_kind, lx, ly), seed=seed)
+
+    def dump(self, pl):
+        if pl.state != ItemState.FREE:
+            return None
+        return {"ax": pl.ax, "ay": pl.ay, "bx": pl.bx, "by": pl.by, "seed": pl._id}
+
+    def load(self, win, d, fit):
+        left = float(d["ax"]) <= 0.0
+        side = None if self.pole_kind == VERTICAL else ("l" if left else "r")
+        bx, by = fit.inside(float(d["bx"]), float(d["by"]), xedge=side)
+        if self.pole_kind == VERTICAL:
+            ax, ay = bx, win._HL
+            by = min(max(by, TOP_MARGIN), win._HL - MIN_LENGTH)
+        else:
+            ax, ay = (0.0 if left else win._WL), by
+            if abs(bx - ax) < MIN_LENGTH:
+                bx = ax + (MIN_LENGTH if ax == 0.0 else -MIN_LENGTH)
+        return Pole(self.pole_kind, ax, ay, bx, by, seed=int(d.get("seed", 0)))
+
+    def draw_ghost(self, win, p, pl):
+        _rod(p, pl.ax, pl.ay, pl.bx, pl.by, color=GHOST_RGB)
 
     def tick(self, win):
         """杆不动。"""
@@ -90,6 +112,8 @@ class PoleKind(ItemKind):
     def draw(self, win, p):
         _static(p, True)
         p.save()
+        if win.ghosting(self):
+            p.setOpacity(DIMMED_OPACITY)
         for pl in win.poles:
             _rod(p, pl.ax, pl.ay, pl.bx, pl.by)
         p.restore()

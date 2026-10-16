@@ -91,9 +91,10 @@ class EnvironmentWatcher(QObject):
         parent=None,
         topmost=None,
         monitor_provider=None,
+        plain=(),
     ):
         super().__init__(parent)
-        self._windows = list(windows)
+        self._windows = list(windows) + list(plain)  # plain 只随全屏收起，不保持置顶
         self._pet = pet
         self._state_provider = state_provider or _default_state_provider
         self._foreground_provider = foreground_provider or _default_foreground_provider
@@ -101,7 +102,7 @@ class EnvironmentWatcher(QObject):
         self._fullscreen = False
         self._mode = "normal"  # normal / hide / sink
         self._streak = 0
-        self._topmost = topmost or TopmostKeeper(self._windows, is_suspended=lambda: self._fullscreen)
+        self._topmost = topmost or TopmostKeeper(windows, is_suspended=lambda: self._fullscreen)
         self._vis_snapshot: list[bool] | None = None
         self._area = None
         self._geo = None

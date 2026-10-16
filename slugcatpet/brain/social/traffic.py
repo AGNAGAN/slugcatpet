@@ -88,8 +88,11 @@ def _rec(pet):
         if anim == "StandOnBeam":
             return _Rec(pet, ("S", round(b.pole_y)), c1.x, 0.0, ix, abs(c1.vx), None, can)
         return None
-    if not b.on_floor() and pet._HL - c1.y > GROUND_BAND:
+    grounded = b.on_floor()
+    if not grounded and pet._HL - c1.y > GROUND_BAND:
         return None
+    if not grounded:  # 贴地飞过的只占位，不叫别的猫让
+        return _Rec(pet, ("F",), c1.x, 0.0, 0, abs(c1.vx), None, False)
     goal = b.walk_target_x if b.is_moving() else None
     d = _sign(goal - c1.x) if goal is not None else _sign(b.move_dir)
     can = can and (fsm.state == "MakeWay" or b.standing)

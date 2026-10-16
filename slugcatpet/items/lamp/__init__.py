@@ -11,7 +11,7 @@ from PySide6.QtGui import QBrush, QColor, QPainter, QPainterPath, QPainterPathSt
 from ...core.units import clampf
 from ...core.vecmath import _seg_dist
 from ...rendering.primitives import draw_fruit, draw_rope
-from ..base import WARM, ItemKind
+from ..base import DIMMED_OPACITY, GHOST_RGB, WARM, ItemKind
 from ..state import ItemState
 from .model import Lamp
 
@@ -20,6 +20,7 @@ LAMP_BULB_FLESH = (255, 255, 255)
 LAMP_BULB_OUTLINE = (255, 51, 0)
 LAMP_GLOW_COLOR = (255, 51, 0)
 LAMP_GLOW_ALPHA = 130
+LAMP_GHOST_FLESH = (205, 225, 255)
 LAMP_TILT_MAX_DEG = 25.0
 LAMP_STICK_OUTSET = 40.0
 LAMP_HIT_STICK = 3.0  # 灯杆命中半宽
@@ -49,7 +50,19 @@ def _geom(win, lx, ly):
     return ax, ay, lx, ly, edge
 
 
-def _shape(p, atlas, ax, ay, bx, by, opacity, glow_radius=None):
+def _shape(
+    p,
+    atlas,
+    ax,
+    ay,
+    bx,
+    by,
+    opacity,
+    glow_radius=None,
+    stick=LAMP_STICK_COLOR,
+    flesh=LAMP_BULB_FLESH,
+    outline=LAMP_BULB_OUTLINE,
+):
     p.save()
     if opacity < 1.0:
         p.setOpacity(opacity)
@@ -64,7 +77,7 @@ def _shape(p, atlas, ax, ay, bx, by, opacity, glow_radius=None):
         n = 8
         pts = [(sx + (tx - sx) * i / (n - 1), sy + (ty - sy) * i / (n - 1)) for i in range(n)]
         widths = [2.0 * (root_w + (0.5 - root_w) * (i / (n - 1))) for i in range(n)]
-        draw_rope(p, pts, widths, color=LAMP_STICK_COLOR)
+        draw_rope(p, pts, widths, color=stick)
         bulb_rot = math.degrees(math.atan2(ax - bx, by - ay))
     draw_fruit(
         p,
@@ -73,8 +86,8 @@ def _shape(p, atlas, ax, ay, bx, by, opacity, glow_radius=None):
         by,
         bulb_rot,
         3,
-        flesh_color=LAMP_BULB_FLESH,
-        outline_color=LAMP_BULB_OUTLINE,
+        flesh_color=flesh,
+        outline_color=outline,
         scalex=0.8,
         scaley=0.9,
     )
@@ -100,10 +113,47 @@ class LampKind(ItemKind):
     late_tick = True
     geometry = True
     dead_state = ItemState.GONE
+    blueprint = True
 
     def make(self, win, lx, ly, seed):
         ax, ay, bx, by, edge = _geom(win, lx, ly)
         return Lamp(ax, ay, bx, by, edge, seed=seed)
+
+    def dump(self, lamp):
+        if lamp.state != ItemState.FREE:
+            return None
+        return {
+            "ax": lamp.anchor_x,
+            "ay": lamp.anchor_y,
+            "bx": lamp.bulb_x,
+            "by": lamp.bulb_y,
+            "edge": lamp.edge,
+            "seed": lamp._id,
+        }
+
+    def load(self, win, d, fit):
+        edge = d["edge"]
+        if edge not in ("top", "bottom", "left", "right"):
+            return None
+        xe = {"left": "l", "right": "r"}.get(edge)
+        ye = "t" if edge == "top" else None
+        bx, by = fit.inside(float(d["bx"]), float(d["by"]), xe, ye)
+        ax, ay = fit.x(float(d["ax"]), xe), fit.y(float(d["ay"]), ye)
+        return Lamp(ax, ay, bx, by, edge, seed=int(d.get("seed", 0)))
+
+    def draw_ghost(self, win, p, lamp):
+        _shape(
+            p,
+            win.atlas,
+            lamp.anchor_x,
+            lamp.anchor_y,
+            lamp.bulb_x,
+            lamp.bulb_y,
+            1.0,
+            stick=GHOST_RGB,
+            flesh=LAMP_GHOST_FLESH,
+            outline=GHOST_RGB,
+        )
 
     def on_enter_place(self, win):
         win._lamp_tilt = random.uniform(-LAMP_TILT_MAX_DEG, LAMP_TILT_MAX_DEG)
@@ -146,7 +196,7 @@ class LampKind(ItemKind):
             lamp.anchor_y,
             lamp.bulb_x,
             lamp.bulb_y,
-            1.0,
+            DIMMED_OPACITY if win.ghosting(self) else 1.0,
             glow_radius=lamp.glow_radius(),
         )
 

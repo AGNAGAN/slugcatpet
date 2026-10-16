@@ -205,6 +205,7 @@ class SlugcatBody:
 
         self.walk_min = None
         self.walk_max = None
+        self.floor_spans = None  # 返回别的猫趴在地上占的 [(左, 右)]，挑目的地时绕开
 
         self.suspended = False
         self.hover = False
@@ -279,6 +280,11 @@ class SlugcatBody:
     def collision_chunks(self):
         return (self.chunk0, self.chunk1)
 
+    @property
+    def steady(self):
+        """睡着时只被别的猫挤动，物品推不动。"""
+        return self.sleeping
+
     def clamp_cold(self):
         self.cold = 0.0 if self.cold < 0.0 else (1.0 if self.cold > 1.0 else self.cold)
 
@@ -300,7 +306,35 @@ class SlugcatBody:
         x = float(x)
         if self.walk_min is not None:
             x = min(max(x, self.walk_min), self.walk_max)
+        if self.floor_spans is not None:
+            x = self._beside_lying(x)
         self.walk_target_x = x
+
+    def lying_span(self):
+        """趴在地上时身体占的横向范围（含半径）；没趴着为 None。"""
+        if self.bodyMode not in ("Crawl", "Dead") or not self.on_floor():
+            return None
+        c0, c1 = self.chunk0, self.chunk1
+        return min(c0.x - c0.rad, c1.x - c1.rad), max(c0.x + c0.rad, c1.x + c1.rad)
+
+    def _beside_lying(self, x):
+        """目的地落在趴着的猫身上时，改到离自己近的那一边，挨着它站。"""
+        pad = self.chunk1.rad
+        spans = sorted((lo - pad, hi + pad) for lo, hi in self.floor_spans())
+        merged = []
+        for lo, hi in spans:
+            if merged and lo <= merged[-1][1]:
+                merged[-1][1] = max(merged[-1][1], hi)
+            else:
+                merged.append([lo, hi])
+        here = self.chunk1.x
+        for lo, hi in merged:
+            if lo < x < hi:
+                near, far = (lo, hi) if here < (lo + hi) * 0.5 else (hi, lo)
+                if self.walk_min is None or self.walk_min <= near <= self.walk_max:
+                    return near
+                return far
+        return x
 
     def stop_walk(self):
         self.walk_target_x = None
@@ -1188,12 +1222,14 @@ class SlugcatBody:
                 self.standing = c0.y < c1.y
                 self._flip_spin = 0
         move_x = 0
+        if self.walk_target_x is not None and self.floor_spans is not None:
+            self.walk_target_x = self._beside_lying(self.walk_target_x)  # 定下目标后才有猫躺在那
         if self.walk_target_x is not None:
             dx = self.walk_target_x - c1.x
             if abs(dx) > WALK_STOP_EPS:
                 move_x = 1 if dx > 0 else -1
                 self.facing = move_x
-            else:
+            elif self.on_floor():  # 空中经过不算到，落地偏了接着走
                 self.walk_target_x = None
         else:
             move_x = self.move_dir
@@ -1345,6 +1381,14 @@ class SlugcatBody:
         elif self.sleeping and self._prev_end_x1 is not None:
             # 被别的猫挤开就睡在新位置，不和碰撞来回拉扯
             self.crawl_anchor += c1.x - self._prev_end_x1
+        # 躺平时头要伸出去，贴墙时臀离墙留出整个身长
+        lo, hi = c1.rad, self.W - c1.rad
+        reach = self.conn_rest + c0.rad
+        if self.facing < 0:
+            lo = max(lo, reach)
+        elif self.facing > 0:
+            hi = min(hi, self.W - reach)
+        self.crawl_anchor = clampf(self.crawl_anchor, lo, hi)
         h = self.lie_haste
         self.crawl_pose = min(1.0, self.crawl_pose + 0.025 * h)
         c1.x += (self.crawl_anchor - c1.x) * (tuning.SLEEP_ANCHOR_EASE if self.sleeping else 0.06 * h)

@@ -10,7 +10,7 @@ from PySide6.QtGui import QColor, QPainterPath, QPainterPathStroker
 from ...core.units import clampf, lerp
 from ...core.vecmath import _ang_from_up, _seg_dist
 from ...rendering.primitives import blit
-from ..base import CARRYABLE, CLIMBABLE, HIT_SPEAR, THROWABLE, ItemKind, creatures
+from ..base import CARRYABLE, CLIMBABLE, HIT_SPEAR, THROWABLE, ItemKind, creatures, dump_loose
 from ..state import ItemState
 from .model import BODY, FREE, HALF_LEN, SURE_STICK, STICK_CHANCE, STICK_MIN_SPEED, STICK_RANGE, THROW_SPEED
 from .model import TIP_PIVOT, WALL, Spear
@@ -25,6 +25,7 @@ STAB_STUN_K = 30.0  # 晕的帧数 = 伤害 × 此值 + STAB_STUN_BONUS
 STAB_STUN_BONUS = 20.0
 STAB_PUSH_MAX = 10.0
 LETHAL = 1.0  # 一下伤害到此即死
+_WALL_DIR = {"l": (-1, 0), "r": (1, 0), "t": (0, -1), "b": (0, 1)}  # 扎进哪面墙 → 投掷方向
 PIN_DAMAGE = 0.9  # 伤害高过此值、贴着墙时把那一节钉在墙上
 TILE = 20.0
 FLY_SLOTS = 5
@@ -70,6 +71,30 @@ class SpearKind(ItemKind):
 
     def make(self, win, lx, ly, seed):
         return Spear(lx, ly, seed=seed)
+
+    def dump(self, s):
+        if s.needle >= 0:
+            return None
+        if s.mode == WALL and s.wall is not None:
+            return dump_loose(s, wall=s.wall[0], along=s.wall[2])
+        return dump_loose(s)
+
+    def load(self, win, d, fit):
+        side = d.get("wall")
+        if side is None:
+            return Spear(*fit.inside(float(d["x"]), float(d["y"])), seed=int(d.get("seed", 0)))
+        if side not in _WALL_DIR:
+            return None
+        along = float(d["along"])
+        if side in ("l", "r"):
+            x, y = 0.0, clampf(fit.y(along), 0.0, win._HL)
+        else:
+            x, y = clampf(fit.x(along), 0.0, win._WL), 0.0
+        s = Spear(x, y, seed=int(d.get("seed", 0)))
+        s.throw_dir = _WALL_DIR[side]
+        s.stick(win._WL, win._HL)
+        s.vibrate = 0
+        return s
 
     def can_place(self, win):
         return sum(1 for s in win.spears if s.needle < 0) < self.cap

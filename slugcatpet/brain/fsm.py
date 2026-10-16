@@ -426,6 +426,8 @@ class BehaviorFSM:
             self._transition(target)
 
     def _enter(self, st):
+        arm = self.body.arm_aim
+        arm["l"] = arm["r"] = None
         state = self._states.get(st)
         if state is not None:
             self.hands.on_enter(state)
@@ -504,6 +506,8 @@ class BehaviorFSM:
     def _clear_hands(self):
         self.gfx.hand_aim["l"] = None
         self.gfx.hand_aim["r"] = None
+        self.body.arm_aim["l"] = None
+        self.body.arm_aim["r"] = None
 
     def _dismiss_kill_dialog(self):
         if getattr(self.win, "_kill_dialog", None) is not None:
