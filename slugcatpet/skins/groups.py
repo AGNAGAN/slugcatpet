@@ -43,18 +43,20 @@ SPECIES_ALIASES: dict[str, dict[str, str]] = {
     "artificer": {"FaceC": "FaceA", "FaceD": "FaceB"},
 }
 
+# 幼崽形态的头和脸 → 皮肤里的通用帧
+PUP_ALIASES: dict[str, str] = {"HeadC": "HeadA", "PFaceA": "FaceA", "PFaceB": "FaceB"}
+
 _DIGITS = re.compile(r"^(.*?)(\d+)$")
 
 
 def generic_frame(frame: str, species: str | None) -> str:
-    """物种专属帧名换成皮肤通用帧名；无映射原样返回。"""
-    aliases = SPECIES_ALIASES.get(species or "")
-    if not aliases:
-        return frame
+    """物种专属帧名、幼崽帧名换成皮肤通用帧名；无映射原样返回。"""
     m = _DIGITS.match(frame)
-    if m and m.group(1) in aliases:
-        return aliases[m.group(1)] + m.group(2)
-    return frame
+    if not m:
+        return frame
+    prefix = m.group(1)
+    alias = PUP_ALIASES.get(prefix) or SPECIES_ALIASES.get(species or "", {}).get(prefix)
+    return alias + m.group(2) if alias else frame
 
 
 # 归一化锚点（y↓）

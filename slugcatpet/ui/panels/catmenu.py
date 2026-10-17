@@ -73,7 +73,7 @@ def _add_hold(menu, pet, enabled):
     )
 
 
-def build_cat_menu(pet, pets=None, open_settings=None, parent=None) -> QMenu:
+def build_cat_menu(pet, pets=None, parent=None) -> QMenu:
     pets = pets if pets is not None else list(getattr(pet.window, "pets", [pet]))
     label = pet_label(pet, pets)
     menu = QMenu(parent)
@@ -86,9 +86,6 @@ def build_cat_menu(pet, pets=None, open_settings=None, parent=None) -> QMenu:
     if getattr(pet.window, "frozen", False):
         # 定格时只能解除定格
         menu.addAction(t("menu_unfreeze")).triggered.connect(lambda: pet.window.set_frozen(False))
-        s = menu.addAction(t("menu_open_settings"))
-        if open_settings is not None:
-            s.triggered.connect(lambda: open_settings())
         return menu
 
     beh = pet.behavior
@@ -116,6 +113,12 @@ def build_cat_menu(pet, pets=None, open_settings=None, parent=None) -> QMenu:
         _add_hold(menu, pet, not blocked and pet._kill_dialog is None)
 
     w = pet.window
+    if not pet.cat.pup:
+        pup = menu.addAction(t("menu_pup"))
+        pup.setCheckable(True)
+        pup.setChecked(pet.look.pup)
+        pup.triggered.connect(lambda on: w.set_pet_pup(pet, on))
+    menu.addSeparator()
     if not getattr(pet, "controlled", False):
         hide = menu.addAction(t("menu_hide_pet"))
         hide.setEnabled(len(w.pets) > 1)
@@ -124,8 +127,4 @@ def build_cat_menu(pet, pets=None, open_settings=None, parent=None) -> QMenu:
         menu.addAction(t("menu_release_all_held")).triggered.connect(w.release_all_held)
     if getattr(w, "_hidden_pets", None):
         menu.addAction(t("menu_show_all")).triggered.connect(w.show_all_pets)
-    menu.addAction(t("refresh_top")).triggered.connect(lambda: pet.window.refresh_top())
-    s = menu.addAction(t("menu_open_settings"))
-    if open_settings is not None:
-        s.triggered.connect(lambda: open_settings())
     return menu

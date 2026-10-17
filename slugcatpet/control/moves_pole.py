@@ -215,9 +215,10 @@ def _pole_jump(body, inp0):
     if inp0.x == 0:
         if inp0.y > 0:
             if body._ctrl_slide_up < 1:
+                k = body.stats.pole_slide_up_fac
                 for c in (c0, c1):
-                    c.y -= 4.5
-                    c.vy -= 2.0
+                    c.y -= 4.5 * k
+                    c.vy -= 2.0 * k
                 body._ctrl_slide_up = SLIDE_UP
             return False
         _leave(body)
@@ -239,11 +240,12 @@ def _slide_up(body):
     c0, c1 = body.chunk0, body.chunk1
     if n > 8:
         body.pole_frame = 12
+    s = body.stats
     if n > 14:
-        c0.y -= 2.0
-        c1.y -= 2.0
-    c0.vy -= _lerpmap(n, 17.0, 0.0, 3.0, -1.2, 0.45)
-    c1.vy -= _lerpmap(n, 17.0, 0.0, 1.5, -1.4, 0.45)
+        c0.y -= 2.0 * s.pole_slide_up_lift
+        c1.y -= 2.0 * s.pole_slide_up_lift
+    c0.vy -= _lerpmap(n, 17.0, 0.0, 3.0, -1.2, 0.45) * s.pole_slide_up_fac
+    c1.vy -= _lerpmap(n, 17.0, 0.0, 1.5, -1.4, 0.45) * s.pole_slide_up_fac
 
 
 def _stand_jump(body):

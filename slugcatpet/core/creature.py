@@ -318,7 +318,7 @@ class SlugcatBody:
         return min(c0.x - c0.rad, c1.x - c1.rad), max(c0.x + c0.rad, c1.x + c1.rad)
 
     def _beside_lying(self, x):
-        """目的地落在趴着的猫身上时，改到离自己近的那一边，挨着它站。"""
+        """目的地落在趴着的猫身上时，改到离原目的地近的那一边，挨着它站；怎么过去由通行决定。"""
         pad = self.chunk1.rad
         spans = sorted((lo - pad, hi + pad) for lo, hi in self.floor_spans())
         merged = []
@@ -327,10 +327,9 @@ class SlugcatBody:
                 merged[-1][1] = max(merged[-1][1], hi)
             else:
                 merged.append([lo, hi])
-        here = self.chunk1.x
         for lo, hi in merged:
             if lo < x < hi:
-                near, far = (lo, hi) if here < (lo + hi) * 0.5 else (hi, lo)
+                near, far = (lo, hi) if x - lo <= hi - x else (hi, lo)
                 if self.walk_min is None or self.walk_min <= near <= self.walk_max:
                     return near
                 return far
@@ -1572,11 +1571,16 @@ class SlugcatBody:
                 return side
         return None
 
+    def usable_hands(self):
+        """能拿东西的手，按主手顺序。"""
+        return HANDS[: self.stats.hands]
+
     def free_hand(self, prefer=None):
-        """空手：优先 prefer，否则按主手顺序；双手满返回 None。"""
-        if prefer is not None and self.grasps[prefer] is None:
+        """空手：优先 prefer，否则按主手顺序；能用的手都满时返回 None。"""
+        hands = self.usable_hands()
+        if prefer in hands and self.grasps[prefer] is None:
             return prefer
-        for side in HANDS:
+        for side in hands:
             if self.grasps[side] is None:
                 return side
         return None
@@ -1630,7 +1634,7 @@ class SlugcatBody:
             self.eat_raise[side] = k
 
     def can_switch_hands(self):
-        return self.switch_hands == 0.0 and self.holding_any()
+        return self.switch_hands == 0.0 and self.stats.hands > 1 and self.holding_any()
 
     def start_switch_hands(self):
         """开始换手：两手收向中线，过半时交换手持物。"""

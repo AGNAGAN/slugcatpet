@@ -1,0 +1,25 @@
+{
+  "format": 1,
+  "key": "inv",
+  "order": 8,
+  "notes": "彩蛋猫：无专属能力，吃满 12 格才能睡；eye_color 是白色混 30% 暗色。",
+  "body_color": "#17244F",
+  "eye_color": "#B9BBB7",
+  "layout": "inv.json",
+  "atlases": ["base"],
+  "frames": {
+    "head": "base/HeadA",
+    "face": "base/FaceA",
+    "face_blink": "base/FaceB",
+    "legs_walk": "base/LegsA",
+    "legs_crawl": "base/LegsACrawling",
+    "legs_air": "base/LegsAAir0"
+  },
+  "abilities": {},
+  "behaviors": {},
+  "stats": {
+    "max_food": 12,
+    "food_hibernate": 12
+  },
+  "personality": {}
+}

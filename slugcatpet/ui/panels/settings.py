@@ -489,6 +489,9 @@ class SettingsWindow(QWidget):
         auto = self._check(v, "settings_autostart", autostart.is_enabled(), None)
         auto.toggled.connect(lambda on: self._on_autostart(auto, on))
         self._check(v, "settings_show_hud", self._hud.isVisible(), self._on_hud_toggled)
+        dial = getattr(w, "_rain_dial", None)
+        if dial is not None:
+            self._dial_chk = self._check(v, "settings_show_dial", dial.wanted, dial.set_wanted)
 
     @staticmethod
     def _on_autostart(chk, on):
@@ -638,6 +641,17 @@ class SettingsWindow(QWidget):
         combo = getattr(self, "_fps_combo", None)
         if combo is not None and self.isVisible():
             combo.setItemText(0, t("settings_fps_auto", hz=round(self._window.auto_fps())))
+
+    def refresh_dial(self, on):
+        """表盘常驻开关在别处改了，勾选框跟上。"""
+        chk = getattr(self, "_dial_chk", None)
+        try:
+            if chk is not None and chk.isChecked() != on:
+                chk.blockSignals(True)
+                chk.setChecked(on)
+                chk.blockSignals(False)
+        except RuntimeError:  # 重建后旧勾选框已销毁
+            self._dial_chk = None
 
     def refresh_env(self):
         if not self.isVisible():

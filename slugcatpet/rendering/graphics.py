@@ -17,6 +17,7 @@ HEAD_ADAPT_RETAIN = 0.3
 HEAD_EXAGGERATE = 0.1
 HEAD_TARGET_LERP = 0.20
 HEAD_PRELEAD = 3.0
+PUP_CHEST_PULL = 0.475  # 幼崽上身绘制点往臀部收拢的比例
 
 LEGS_AIR = HEAD_AIR
 LEGS_CONNECT_RAD = 4.0
@@ -277,11 +278,6 @@ class SlugcatGraphics(GraphicsDrawMixin):
         self._last_face_offset = self.face_offset
 
         fam = self.cat.frames
-        self._head_frames = self._family_frames(*fam["head"])
-        self._face_frames = self._family_frames(*fam["face"])
-        self._face_blink_frames = self._family_frames(*fam["face_blink"])
-        self._face_a_frames = self._family_frames(*fam["face_open"]) if "face_open" in fam else []
-        self._face_mirror_frames = self._family_frames(*fam["face_mirror"]) if "face_mirror" in fam else []
         self._leg_walk_frames = self._family_frames(*fam["legs_walk"])
         self._leg_crawl_frames = self._family_frames(*fam["legs_crawl"])
         air_key, air_frame = fam["legs_air"]
@@ -302,6 +298,13 @@ class SlugcatGraphics(GraphicsDrawMixin):
         if atlas is not None:
             self.atlas = atlas
         a = self.atlas
+        self.pup = self.cat.is_pup(self.look)
+        self.fam = fam = self.cat.frames_for(self.pup)
+        self._head_frames = self._family_frames(*fam["head"])
+        self._face_frames = self._family_frames(*fam["face"])
+        self._face_blink_frames = self._family_frames(*fam["face_blink"])
+        self._face_a_frames = self._family_frames(*fam["face_open"]) if "face_open" in fam else []
+        self._face_mirror_frames = self._family_frames(*fam["face_mirror"]) if "face_mirror" in fam else []
         self._body0, self.EYE, self._skin_colors = base_colors(
             self.look, self.cat, dict(getattr(a, "colors", {}) or {})
         )
@@ -406,6 +409,9 @@ class SlugcatGraphics(GraphicsDrawMixin):
         self._last_draw0, self._last_draw1 = list(self.draw0), list(self.draw1)
         self.draw0 = [c0.x, c0.y]
         self.draw1 = [c1.x, c1.y]
+        if self.pup:
+            self.draw0[0] += (c1.x - c0.x) * PUP_CHEST_PULL
+            self.draw0[1] += (c1.y - c0.y) * PUP_CHEST_PULL
         if b.bodyMode == "Stand":
             if b.is_moving() or b.move_dir != 0:
                 self.anim_frame += 1
@@ -460,7 +466,7 @@ class SlugcatGraphics(GraphicsDrawMixin):
         ty = self.draw0[1] + (self.draw1[1] - self.draw0[1]) * HEAD_TARGET_LERP
         ddx, ddy = self.draw0[0] - self.draw1[0], self.draw0[1] - self.draw1[1]
         dd = math.hypot(ddx, ddy) or 1.0
-        if b.bodyMode == "Crawl":
+        if b.bodyMode == "Crawl" and not self.pup:
             tx += ddx / dd * HEAD_PRELEAD * 2.5
             ty += ddy / dd * HEAD_PRELEAD
         else:
@@ -499,10 +505,11 @@ class SlugcatGraphics(GraphicsDrawMixin):
 
         if b.bodyMode == "Stand":
             c = clampf(abs(c1.vx) - 0.2, 0.0, 1.0)
-            self.draw0[0] += flip * 6.0 * c
-            self.draw0[1] -= math.cos((af + 0.0) / 6.0 * TAU) * 2.0
-            self.draw1[0] -= flip * (1.5 - af / 6.0) * 1.0
-            self.draw1[1] -= 2.0 + math.sin((af + 0.0) / 6.0 * TAU) * 4.0
+            pup = self.pup
+            self.draw0[0] += flip * (2.0 if pup else 6.0) * c
+            self.draw0[1] -= math.cos((af + 0.0) / 6.0 * TAU) * (1.5 if pup else 2.0)
+            self.draw1[0] -= flip * (1.5 - af / 6.0) * (0.25 if pup else 1.0)
+            self.draw1[1] -= 2.0 + math.sin((af + 0.0) / 6.0 * TAU) * (2.0 if pup else 4.0)
 
         elif b.bodyMode == "Crawl":
             sway_slow = math.sin(af / 21.0 * TAU)

@@ -206,6 +206,49 @@ def extract_rain_sounds(install: Path) -> list[str]:
     return done
 
 
+KARMA_SOUNDS = (
+    "karmaFuzz",
+    "karmaWheelC_1",
+    "karmaWheelC_2",
+    "karmaWheelC_3",
+    "karmaWheelC_4",
+    "karmaWheelLow",
+    "capBell2",
+    "karmaRiseA",
+    "UIWoodHit",
+)
+
+
+def karma_sounds_dir() -> Path:
+    return assets_dir() / "karma"
+
+
+def karma_sounds_missing() -> list[str]:
+    return [n for n in KARMA_SOUNDS if not (karma_sounds_dir() / f"{n}.wav").is_file()]
+
+
+def extract_karma_sounds(install: Path) -> list[str]:
+    """业力梯的音效从音效资源包取出、封装成 wav；返回这次写出的片名。"""
+    from .audio.fsbogg import fsb_to_wav
+
+    todo = karma_sounds_missing()
+    if not todo:
+        return []
+    out = karma_sounds_dir()
+    out.mkdir(parents=True, exist_ok=True)
+    done = []
+    for name, fsb in _bundle_clips(Path(install), todo, _SFX_BUNDLES).items():
+        try:
+            data = fsb_to_wav(fsb)
+        except ValueError:
+            continue
+        tmp = out / f"{name}.wav.part"
+        tmp.write_bytes(data)
+        tmp.replace(out / f"{name}.wav")
+        done.append(name)
+    return done
+
+
 def rain_atlas_missing() -> bool:
     return not any(
         (d / RAIN_ATLAS).is_file() and (d / f"{RAIN_ATLAS}.png").is_file()

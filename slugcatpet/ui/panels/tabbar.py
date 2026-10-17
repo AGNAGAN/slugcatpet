@@ -170,6 +170,8 @@ class TabBar(QWidget):
             lay.addWidget(b)
             return b
 
+        rain = btn(t("btn_rain_cycle"), True, None)
+        rain.clicked.connect(lambda: self.pet.open_rain(rain))
         btn(t("btn_music"), True, lambda: self.pet.open_music())
         btn(t("btn_open_settings"), True, self._open_settings)
         btn(t("btn_quit_app"), True, self._quit)

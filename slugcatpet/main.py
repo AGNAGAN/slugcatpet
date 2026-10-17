@@ -9,14 +9,18 @@ import time
 from pathlib import Path
 
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu
-from PySide6.QtGui import QIcon, QPixmap, QColor, QPainter
-from PySide6.QtCore import QTimer
+from PySide6.QtGui import QCursor, QIcon
+from PySide6.QtCore import QPoint, QRect, QSize, QTimer
 
 from .characters import default_def
 from .window import PetWindow
 from .ui.panels.tabbar import TabBar
 from .ui.panels.hud import HudPanel
 from .ui.panels.settings import SettingsWindow
+from .ui.raintimer import RainCard, RainDial, tray_icon
+from .ui.raintimer.text import status_line
+from .ui.raintimer.tray import arc_key
+from .world.raintimer import IDLE, RainTimer
 from .control.hotkey import (
     FROZEN_KEYS,
     GLOBAL_KEYS,
@@ -37,25 +41,9 @@ SCHEMA_VERSION = 2  # pets[] 分猫存档
 AUTOSAVE_MS = 60_000
 
 
-def _tray_icon(frozen=False) -> QIcon:
-    """托盘图标；定格时右下角加暂停角标。"""
-    pm = QPixmap(32, 32)
-    pm.fill(QColor(0, 0, 0, 0))
-    p = QPainter(pm)
-    p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-    p.setBrush(QColor(*default_def().body_color))
-    p.setPen(QColor(40, 80, 20))
-    p.drawEllipse(4, 4, 24, 24)
-    if frozen:
-        p.setPen(QColor(255, 255, 255))
-        p.setBrush(QColor(60, 110, 200))
-        p.drawEllipse(15, 15, 16, 16)
-        p.setPen(QColor(0, 0, 0, 0))
-        p.setBrush(QColor(255, 255, 255))
-        p.drawRect(19, 19, 3, 8)
-        p.drawRect(24, 19, 3, 8)
-    p.end()
-    return QIcon(pm)
+def _tray_icon(frozen=False, timer=None) -> QIcon:
+    """托盘图标；计时中带进度弧，定格时右下角加暂停角标。"""
+    return tray_icon(default_def().body_color, frozen, timer)
 
 
 def _migrate_params(params: dict) -> dict:
@@ -164,17 +152,19 @@ def _extract_scene_music_later(names):
 
 
 def _extract_rain_later():
-    """缺雨的素材且找得到游戏时在后台补提取。"""
+    """缺雨和业力梯的素材且找得到游戏时在后台补提取。"""
     from .gameassets import (
         detect_install,
+        extract_karma_sounds,
         extract_rain_atlas,
         extract_rain_sounds,
+        karma_sounds_missing,
         rain_atlas_missing,
         rain_sounds_missing,
     )
 
-    atlas, sounds = rain_atlas_missing(), bool(rain_sounds_missing())
-    if not (atlas or sounds):
+    atlas, sounds, karma = rain_atlas_missing(), bool(rain_sounds_missing()), bool(karma_sounds_missing())
+    if not (atlas or sounds or karma):
         return
 
     def run():
@@ -186,6 +176,8 @@ def _extract_rain_later():
                 extract_rain_atlas(install)
             if sounds:
                 extract_rain_sounds(install)
+            if karma:
+                extract_karma_sounds(install)
         except Exception:
             pass
 
@@ -300,7 +292,9 @@ def main():
     skin_timer.start(4000)
     app._skin_timer = skin_timer
 
-    tray = QSystemTrayIcon(_tray_icon())
+    rain_cfg = params.setdefault("rain_timer", {})
+    rain_timer = RainTimer(rain_cfg)
+    tray = QSystemTrayIcon(_tray_icon(timer=rain_timer))
     menu = QMenu()
 
     # 音乐：播放列表 = 音乐目录 + 导入的歌
@@ -342,6 +336,63 @@ def main():
     pet._rain_ambience = RainAmbience(pet, player, params)
     app._music = (player, director, music)
 
+    def _dial_context():
+        if pet.frozen and pet.cfg_freeze_hide_ui:
+            return "frozen"
+        return "env" if pet.env_hidden else None
+
+    dial = RainDial(rain_timer, pet.atlas, rain_cfg, muted=lambda: player.muted, context=_dial_context)
+    pet._rain_dial = dial
+    dial.on_wanted.append(settings.refresh_dial)
+
+    def _open_rain(anchor=None):
+        """侧边栏按钮旁或托盘旁打开雨循环卡片。"""
+        if anchor is not None:
+            rect = QRect(anchor.mapToGlobal(QPoint(0, 0)), anchor.size())
+            RainCard.open_for(rain_timer, dial, rect, ("left", "right"))
+            return
+        rect = tray.geometry()
+        if not rect.isValid() or rect.isEmpty():
+            rect = QRect(QCursor.pos(), QSize(1, 1))
+        RainCard.open_for(rain_timer, dial, rect, ("above", "below", "left", "right"))
+
+    pet._open_rain_cb = _open_rain
+    tray_look = [arc_key(rain_timer), pet.frozen]
+
+    def _refresh_tray():
+        """进度弧变了才换图标；提示每秒跟着倒计时走。"""
+        look = [arc_key(rain_timer), pet.frozen]
+        if look != tray_look:
+            tray_look[:] = look
+            tray.setIcon(_tray_icon(pet.frozen, rain_timer))
+        if pet.frozen:
+            tray.setToolTip(t("tray_frozen_tip"))
+        elif rain_timer.phase != IDLE:
+            tray.setToolTip(status_line(rain_timer))
+        else:
+            tray.setToolTip(t("app_title"))
+
+    dial.on_poll.append(_refresh_tray)
+
+    def _sync_cycle_rain():
+        """让桌面上的雨跟上雨循环的时段。"""
+        level = rain_timer.rain_level()
+        if level != pet.cycle_rain:
+            pet.set_cycle_rain(level)
+            director.refresh()
+
+    def _on_rain_timer(ev):
+        _sync_cycle_rain()
+        if ev in ("start", "rain", "clear", "stop", "extend", "lost"):
+            _save_params(params)
+
+    rain_timer.listeners.append(_on_rain_timer)
+    director.env_muted = lambda kind: (
+        kind == "rain" and pet.cycle_rain is not None and not rain_timer.music_worthy()
+    )
+    pet._cycle_rain_stopped_cb = lambda: rain_timer.stop_rain()
+    _sync_cycle_rain()
+
     def _start_scene_music():
         env = next(
             (k for k in ("blizzard", "zerog", "water", "rain") if getattr(pet, f"{k}_on", False)), "none"
@@ -351,8 +402,8 @@ def main():
     QTimer.singleShot(300, _start_scene_music)
 
     def _build_tray_menu():
-        tray.setToolTip(t("tray_frozen_tip") if pet.frozen else t("app_title"))
         menu.clear()
+        menu.addAction(t("btn_rain_cycle"), _open_rain)
         menu.addAction(t("tray_settings"), settings.open)
         menu.addAction(t("tray_music"), music.open)
         freeze_act = menu.addAction(t("tray_freeze"))
@@ -386,7 +437,11 @@ def main():
 
     pet._set_lang_cb = _set_lang
     _build_tray_menu()
+    _refresh_tray()
     tray.setContextMenu(menu)
+    tray.activated.connect(
+        lambda reason: _open_rain() if reason == QSystemTrayIcon.ActivationReason.Trigger else None
+    )
     tray.show()
     tray.showMessage(t("app_title"), t("tray_started"), QSystemTrayIcon.MessageIcon.Information, 4000)
 
@@ -426,7 +481,9 @@ def main():
 
     from .platform.envwatch import EnvironmentWatcher
 
-    envwatch = EnvironmentWatcher([pet, tab, hud], pet, plain=[settings, music])
+    envwatch = EnvironmentWatcher(
+        [pet, tab, hud, dial], pet, plain=[settings, music]
+    )  # 先下后上：界面盖在桌宠层上
     envwatch.start()
     pet._refresh_top_cb = envwatch.force_top
     app._envwatch = envwatch
@@ -453,7 +510,7 @@ def main():
             back = [w for w in hidden_ui if w in (tab, hud) or w is pet._control_hud]  # 控制可能已结束
             hidden_ui.clear()
             envwatch.reveal(back)
-        tray.setIcon(_tray_icon(on))
+        _refresh_tray()
         _build_tray_menu()
 
     pet._freeze_cb = _on_freeze

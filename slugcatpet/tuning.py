@@ -133,6 +133,7 @@ RAIN_SHELTER_POLL_MS = 250  # 下雨时取挡雨窗口的间隔
 RAIN_FPS = 30  # 雨层的出帧率
 RAIN_VOLUME = 0.6  # 默认雨声音量
 RAIN_ITEM_KICK_MAX = 3.0  # 物品单次被雨推的速度上限
+RAIN_CYCLE_DRIZZLE = 0.15  # 雨循环最后一个 pip 时的毛毛雨强度，低于危险线
 
 # 水环境（默认关）
 WATER_FULL_DEPTH = 0.55

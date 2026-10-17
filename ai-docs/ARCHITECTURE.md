@@ -174,12 +174,12 @@ tools/          params_doc.py（生成 ai-docs/PARAMS.md）、gen_arcs.py（生�
 
 大件（矛）在模型上设 `bulky = True`：同时只能拿一件，数值 `dual_wield` 的猫（矛大师）不限。拿之前用 `body.can_hold(物)` 判断，手动控制选拾取目标、生气捡武器都先过它。
 
-猫有两只手，手持物在 `body.grasps`（`l` 为主手，投掷、吃、丢下都先找它）。拿起放下走 `body.grab()` / `release()`，换手用 `start_switch_hands()`。手持物的位置由 `rendering/graphics.py` 每帧贴到手上，爬杆、趴下时跟着手的动作走。物品模型用 `edible` / `throwable` 类属性声明能不能吃、能不能当武器扔。
+猫有两只手，手持物在 `body.grasps`（`l` 为主手，投掷、吃、丢下都先找它）。拿起放下走 `body.grab()` / `release()`，换手用 `start_switch_hands()`。数值 `hands` 为 1 的猫（猫崽）只用主手、不换手，找空手统一走 `body.free_hand()`。手持物的位置由 `rendering/graphics.py` 每帧贴到手上，爬杆、趴下时跟着手的动作走。物品模型用 `edible` / `throwable` 类属性声明能不能吃、能不能当武器扔。
 
 手持物可以跨状态一直拿着，由 `brain/hands.py` 的手部管家 `fsm.hands` 管：
 
 - 每样手持物记一个理由（`EAT_LATER` 留着吃 / `WEAPON` 当武器 / `None` 没用）。行为收尾时用 `fsm.hands.adopt(物, 理由)` 把没用完的东西交给它，不要自己松手。自己拿起的东西按 `can_eat`、能不能扔推断理由。
-- 状态用 `hands` 声明进入时要几只空手（`any` / `one` / `free`），要按情况变就覆盖 `hands_needed()`。不够时管家按理由先放下一样。
+- 状态用 `hands` 声明进入时要几只空手（`any` / `one` / `free` 全空），要按情况变就覆盖 `hands_needed()`。不够时管家按理由先放下一样。
 - 管家还负责：留着吃的东西揣多久再吃（真饿了不等）、放下没用的东西、消气后放下武器、站着发呆时摆弄手里的东西（挪个地方、换手、低头看）、被拎起时甩太狠脱手或拿武器打光标挣脱、被光标抢走时的反应。
 - 肯不肯拿一件东西当武器统一用 `can_wield(身体, 物体, hunting=False)`：扎得进的对光标只在好感低于 `SPEAR_TEMPER` 时用、打猎时随时用，`spear_toss` 的猫（圣徒）不用。
 - 饿了时，手里武器上串着的能吃的东西（`impaled`）会被另一只空手取下一个留着吃，由取果行为管。
@@ -407,12 +407,15 @@ window._do_tick
 | `colors` | 自定体色 / 脸色 |
 | `tail` | 自定尾巴形状 `length` / `wideness` / `roundness`，空则跟随皮肤 |
 | `accessories` | 配件 key → 开关与颜色 |
+| `pup` | 幼崽形态 |
 
 - 部位组：`HEAD`、`FACE`、`BODY`、`ARMS`、`HIPS`、`LEGS`、`TAIL`；配件经 `Accessory.skin_group` 对应 `FACESCAR`、`GILLS`。
 - 查找：`skins.resolver_for(atlas, look, species)` 给每个部位组选来源皮肤，建出 `SkinAtlasSet`；皮肤缺该部位时回到原皮。部位的颜色和尾巴形状随它的来源皮肤。
 - 换整套（`Look.set_skin`）会清掉部位覆盖、部位颜色和自定尾巴。
 - 取色优先级（`base_colors`）：部位颜色 > 自定体色 / 脸色 > 皮肤默认色 > 猫种自带色。
 - 皮肤列表里隐藏 Dress My Slugcat 的两个绘制底稿包，其余（含内置的 Saint Shirt）都可选。
+- 幼崽形态照原版 Jolly 的幼崽：头和脸换成原版幼崽的（`CatDef.frames_for`，皮肤的头和脸不换），上身绘制点往臀部收、身体贴图压扁、尾巴每段减半，体重乘 0.7/0.75；身体间距、能力和数值不变。
+- 角色写了 `pup: true` 的猫种（猫崽）固定幼崽形态，不看 `look.pup`；判断统一用 `CatDef.is_pup(look)`。
 
 ### 新配件
 

@@ -97,6 +97,8 @@ if _IS_WIN:
 
 
 class TopmostKeeper:
+    """windows 按先下后上排列。"""
+
     def __init__(
         self,
         windows,
@@ -124,6 +126,7 @@ class TopmostKeeper:
         self._hook = None
 
     def reassert(self):
+        """有窗口丢了置顶就重新按次序整理一遍。"""
         if self._is_suspended():
             return
         for w in self._windows:
@@ -131,18 +134,17 @@ class TopmostKeeper:
                 if not w.isVisible():
                     continue
                 hwnd = int(w.winId())
-                if not hwnd:
-                    continue
-                if not (self._get_exstyle(hwnd) & WS_EX_TOPMOST):
-                    self._set_topmost(hwnd)
+                if hwnd and not (self._get_exstyle(hwnd) & WS_EX_TOPMOST):
+                    self.force_top()
+                    return
             except Exception:
                 pass
 
     def force_top(self):
-        """不看标志位，把所有可见窗口提到置顶组最上面。"""
+        """不看标志位，把所有可见窗口按列表次序（先下后上）提到置顶组最上面。"""
         if self._is_suspended():
             return
-        for w in reversed(self._windows):
+        for w in self._windows:
             try:
                 if not w.isVisible():
                     continue
@@ -176,3 +178,15 @@ class TopmostKeeper:
             self.reassert()
         except Exception:
             pass
+
+
+def raise_topmost(w) -> None:
+    """把一个窗口提到置顶组最上面，不抢前台；全屏程序上面也盖得住。"""
+    try:
+        w.raise_()
+        if _IS_WIN:
+            hwnd = int(w.winId())
+            if hwnd:
+                _win_set_topmost(hwnd)
+    except Exception:
+        pass

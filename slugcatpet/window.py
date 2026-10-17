@@ -131,6 +131,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self._refresh_top_cb = None
         self._set_lang_cb = None
         self._open_music_cb = None
+        self._open_rain_cb = None
         self.env_listeners = []  # fn(kind, on)：kind 为 "blizzard" / "zerog" / "water" / "rain"
         self._hotkey_filter = None
         self._control_hud = None  # 非 None 即受控中
@@ -160,6 +161,8 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self.water_surface = None
 
         self.rain_on = False
+        self.cycle_rain = None  # 雨循环驱动的雨：None / "drizzle" / "storm"
+        self._cycle_rain_stopped_cb = None  # 手动关掉雨循环的大雨时回调
         self.cfg_rain_amount = clampf(float(self._params.get("rain_amount", tuning.RAIN_AMOUNT)), 0.05, 1.0)
         self.rain = Rain(seed=self._seed)
         self._shelter_timer = QTimer(self)
@@ -510,6 +513,8 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self._freeze.discard(reason)
         if self._shutting_down:
             return
+        if reason == "env" and self._shelter_timer.isActive():  # 先取好遮挡再出画面
+            self._poll_shelters()
         self._last_ns = self._clock.nsecsElapsed()
         self._last_vsync = False
         self._mode = None
@@ -519,6 +524,11 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
     def frozen(self):
         """用户定格中。"""
         return "user" in self._freeze
+
+    @property
+    def env_hidden(self):
+        """别的程序全屏，桌宠收起中。"""
+        return "env" in self._freeze
 
     def set_frozen(self, on):
         """定格：世界停在这一帧；进入前解除光标劫持、退出放置模式，免得光标被锁住或点击被拦。"""
@@ -812,22 +822,54 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             self.water_surface = WaterSurface(self._WL, self._HL, tuning.WATER_SPACING, seed=self._seed)
 
     def set_rain(self, on):
+        """手动开关雨；关掉雨循环的大雨算提前停雨。"""
+        storm = self.cycle_rain == "storm"
+        self.cycle_rain = None
+        self._switch_rain(on, self.cfg_rain_amount * RAIN_I_MAX)
+        if not on and storm and self._cycle_rain_stopped_cb is not None:
+            self._cycle_rain_stopped_cb()
+
+    def set_cycle_rain(self, level):
+        """雨循环驱动的雨：drizzle 毛毛雨，storm 下到最大、不看雨量设置，None 停；会关掉其它环境。"""
+        if level == self.cycle_rain:
+            return
+        if level is None:
+            self.cycle_rain = None
+            if self.rain_on:
+                self._switch_rain(False, 0.0)
+        else:
+            for kind, off in (
+                ("blizzard", self.set_blizzard),
+                ("zerog", self.set_zerog),
+                ("water", self.set_water),
+            ):
+                if getattr(self, f"{kind}_on"):
+                    off(False)
+            self.cycle_rain = level
+            self._switch_rain(True, tuning.RAIN_CYCLE_DRIZZLE if level == "drizzle" else RAIN_I_MAX)
+        sp = getattr(self, "_settings_panel", None)
+        if sp is not None and hasattr(sp, "refresh_env"):
+            sp.refresh_env()
+
+    def _switch_rain(self, on, target):
         if bool(on) != self.rain_on:
             self._env_changed("rain", bool(on))
         self.rain_on = bool(on)
-        self.rain.set_target(self.cfg_rain_amount * RAIN_I_MAX if on else 0.0)
+        self.rain.set_target(target if on else 0.0)
         if on and not self._shelter_timer.isActive():
             self._poll_shelters()
             self._shelter_timer.start()
 
     def set_rain_amount(self, amount):
-        """设雨量（0~1）。"""
+        """设雨量（0~1）；雨循环的雨不跟着变。"""
         self.cfg_rain_amount = self._params["rain_amount"] = clampf(float(amount), 0.05, 1.0)
-        if self.rain_on:
+        if self.rain_on and self.cycle_rain is None:
             self.rain.set_target(self.cfg_rain_amount * RAIN_I_MAX)
 
     def _poll_shelters(self):
-        """取挡雨窗口的矩形，换算到逻辑坐标。"""
+        """取挡雨窗口的矩形，换算到逻辑坐标；全屏收起时不取，免得把全屏程序当成遮挡。"""
+        if self.env_hidden:
+            return
         from .platform import shelters
 
         dpr = self.devicePixelRatioF() or 1.0
@@ -1120,6 +1162,10 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         pet.name = (name or "").strip()
         self._after_pets_changed()
 
+    def set_pet_pup(self, pet, on):
+        pet.set_pup(on)
+        self._after_pets_changed()
+
     def _after_pets_changed(self):
         hud = self._hud
         if hud is not None and hasattr(hud, "rebuild_rows"):
@@ -1137,7 +1183,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
     def open_cat_menu(self, pet, global_pos):
         from .ui.panels.catmenu import build_cat_menu
 
-        menu = build_cat_menu(pet, self.all_pets(), open_settings=self.open_settings, parent=self)
+        menu = build_cat_menu(pet, self.all_pets(), parent=self)
         menu.exec(global_pos)
 
     def open_settings(self):
@@ -1147,6 +1193,11 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
     def open_music(self):
         if self._open_music_cb is not None:
             self._open_music_cb()
+
+    def open_rain(self, anchor=None):
+        """打开雨循环卡片，anchor 为它旁边的按钮。"""
+        if self._open_rain_cb is not None:
+            self._open_rain_cb(anchor)
 
     def set_lang(self, lang):
         if self._set_lang_cb is not None:

@@ -8,7 +8,7 @@ from .. import i18n
 from . import sources
 
 TEMPLATES_SUBDIR = "_templates"
-TEMPLATE_SPECIES = ("survivor", "monk", "hunter", "rivulet", "saint", "artificer")
+TEMPLATE_SPECIES = ("survivor", "monk", "hunter", "rivulet", "saint", "artificer", "inv")
 
 _README = {
     "zh": (

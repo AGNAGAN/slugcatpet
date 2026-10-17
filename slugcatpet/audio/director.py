@@ -78,6 +78,7 @@ class MusicDirector:
         self._path = None  # 自己放着的曲子
         self._preview = None  # 试听中的曲子路径
         self._previewed = False  # 这次弹窗里试听过，结束时要恢复场景曲
+        self.env_muted = lambda kind: False  # 这个环境此刻不放场景曲
         player.played_once.connect(self._on_played_once)
 
     @property
@@ -160,7 +161,13 @@ class MusicDirector:
     def _active(self) -> str:
         if self._settings_open and self._cfg["settings"]["track"]:
             return "settings"
+        if self._env != "none" and self.env_muted(self._env):
+            return "none"
         return self._env
+
+    def refresh(self):
+        """环境的静音条件变了，重新结算当前场景。"""
+        self._switch(enter=True)
 
     def _apply(self, enter: bool, restart: bool = False):
         """切到当前场景：enter 为真才放「一次」的曲子；本场景的曲子已在放则不重来。"""

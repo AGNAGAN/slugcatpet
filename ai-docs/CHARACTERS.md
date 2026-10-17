@@ -52,12 +52,13 @@
 | `stats` | | 数值，只写和默认不同的。字段和默认值见 `characters/stats.py` |
 | `personality` | | 性格，只写和默认不同的。见下面「性格」 |
 | `wip` | | `true` 表示还没做完，选猫列表里会标出来 |
+| `pup` | | `true` 表示猫种本身是幼崽，固定幼崽形态，菜单和外观里不显示幼崽开关 |
 
 ### frames
 
 | 语义名 | 必填 | 用途 |
 |---|---|---|
-| `head` | ✓ | 头（圣徒是 `msc/HeadB`，其余 `base/HeadA`） |
+| `head` | ✓ | 头（圣徒是 `msc/HeadB`，猫崽是 `msc/HeadC`，其余 `base/HeadA`） |
 | `face` | ✓ | 平时的脸 |
 | `face_blink` | ✓ | 眨眼 |
 | `legs_walk` / `legs_crawl` / `legs_air` | ✓ | 走 / 趴行 / 空中的腿 |

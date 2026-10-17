@@ -31,6 +31,7 @@ _KEYS = {
     "stats",
     "personality",
     "wip",
+    "pup",
 }
 _REQUIRED = ("key", "body_color", "eye_color", "layout", "atlases", "frames")
 # 语义帧名：必填 / 可选
@@ -119,6 +120,8 @@ def load_character(path: Path) -> tuple[int, CatDef]:
         isinstance(names, dict) and names and all(isinstance(v, str) for v in names.values())
     ):
         raise ValueError(f'{where}: name 应为字符串或 {{"zh": ..., "en": ...}}')
+    if not isinstance(data.get("pup", False), bool):
+        raise ValueError(f"{where}: pup 应为 true / false")
     cat = CatDef(
         key=data["key"],
         body_color=_color(data["body_color"], f"{where} body_color"),
@@ -132,6 +135,7 @@ def load_character(path: Path) -> tuple[int, CatDef]:
         stats=_override(DEFAULT_STATS, data.get("stats", {}), f"{where} stats"),
         personality=_override(DEFAULT_PERSONALITY, data.get("personality", {}), f"{where} personality"),
         wip=bool(data.get("wip", False)),
+        pup=data.get("pup", False),
         names=names,
     )
     return int(data.get("order", 1000)), cat

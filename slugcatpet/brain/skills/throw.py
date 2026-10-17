@@ -165,11 +165,11 @@ class Pitch:
         self.body.facing = self.throw_dir
 
     def aim(self, point):
-        """持武器手朝目标抬起；武器不在朝目标那侧的手里就先换手。返回是否已瞄好。"""
+        """持武器手朝目标抬起；武器不在朝目标那侧的手里且能换手时先换手。返回是否已瞄好。"""
         b, g = self.body, self.gfx
         side = self.side()
         want = "r" if self.throw_dir > 0 else "l"
-        if side != want or b.switch_hands > 0.0:
+        if (side != want and b.stats.hands > 1) or b.switch_hands > 0.0:
             b.start_switch_hands()
             g.hand_aim["l"] = g.hand_aim["r"] = None
             return False

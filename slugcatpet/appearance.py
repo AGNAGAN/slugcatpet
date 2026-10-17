@@ -26,6 +26,7 @@ class Look:
     parts: dict = field(default_factory=dict)  # 部位组 → 皮肤 id（""=原皮，EMPTY=隐藏），覆盖整套
     part_colors: dict = field(default_factory=dict)  # 部位组 → rgb
     tail: dict | None = None  # 自定尾巴形状 {length, wideness, roundness}，None=跟随皮肤
+    pup: bool = False  # 幼崽形态
 
     @classmethod
     def from_state(cls, state: dict) -> Look:
@@ -65,6 +66,7 @@ class Look:
         tail = raw.get("tail")
         if isinstance(tail, dict) and all(isinstance(tail.get(k), (int, float)) for k in TAIL_KEYS):
             look.tail = {k: float(tail[k]) for k in TAIL_KEYS}
+        look.pup = raw.get("pup") is True
         return look
 
     def to_state(self) -> dict | None:
@@ -91,6 +93,8 @@ class Look:
             out["part_colors"] = {g: _hex(c) for g, c in self.part_colors.items()}
         if self.tail:
             out["tail"] = dict(self.tail)
+        if self.pup:
+            out["pup"] = True
         return out or None
 
     def copy(self) -> Look:
@@ -101,6 +105,7 @@ class Look:
             dict(self.parts),
             dict(self.part_colors),
             dict(self.tail) if self.tail else None,
+            self.pup,
         )
 
     def wears(self, acc_cls, species: str) -> bool:

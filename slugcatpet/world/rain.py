@@ -65,7 +65,7 @@ VEIL_RGB = (128, 136, 148)  # 露天暴雨的水幕颜色，背景被雨糊成�
 VEIL_MAX = 0.3
 DIM_RGB = (19, 19, 21)  # 暴雨时猫和物品压暗到的颜色
 DIM_GRAY = 38  # 桌面压暗到的灰度上限，按列在 0 到它之间（原版 0.15 × rand）
-DIM_FROM = 0.7  # 画面强度过这个值开始压暗（原版 0.9，桌面没法真的扭曲，提前一些）
+DIM_FROM = 0.5  # 画面强度过这个值开始压暗，和暴雨阶段同起（原版 0.9，桌面没法真的扭曲，提前一些）
 DIM_MAX = 0.6
 
 SPLASH_ATLAS = "waterSprites"
@@ -128,7 +128,7 @@ def layer_opacity(k, g):
 
 def _dim_alpha(g):
     """画面强度 g 下暴雨压暗的不透明度 0~255。"""
-    return round(255 * DIM_MAX * smooth(inv_lerp(DIM_FROM, 1.0, g)))
+    return round(255 * DIM_MAX * inv_lerp(DIM_FROM, 1.0, g))
 
 
 def _box(a, r, axis):
@@ -279,15 +279,16 @@ class Rain:
         self._reach = []
         self.runs = []  # 露天段 (x0, x1, y)：雨从顶上落到 y，按窗口精确边缘切
         self.open_frac = 1.0  # 露天面积占全屏的比例
-        self.splashes = []  # (露天段序号, x, 种类, 转角, x 缩放, y 缩放, 色档)
+        self.splashes = []  # (落点 y, x, 种类, 转角, x 缩放, y 缩放, 色档)
         self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="rain")  # 贴图在后台生成
         self._parts = {}  # 各层贴图（只在后台线程里读写）：(种类, 层, 档, 分辨率) → QImage
         self._keys = OrderedDict()  # (块, 缩放, 宽, 斜度档, 关键帧) → 贴图；None 为这一帧什么都不画
         self._jobs = {}  # 同上的键 → 后台任务
         self._blend = {}  # 块 → (关键帧甲, 关键帧乙, 比例档, 混好的贴图)
+        self._drawn = {}  # 块 → 正在画的斜度档
         self._splash_pm = None
         self._splash_wait = 0
-        self._frame = None  # 定格的一帧：(画面强度, 斜度档, 各层偏移, 露天段, 水花)
+        self._frame = None  # 定格的一帧：(画面强度, 斜度档, 水花, 卷动偏移)
 
     @property
     def active(self) -> bool:
@@ -446,7 +447,7 @@ class Rain:
         tint = self.intensity / I_MAX * (SPLASH_TINTS - 1)
         for _ in range(int(total * SPLASH_PER_PX * (1.0 + push_force(self.intensity)))):
             pick = rng.random() * total
-            for k, (x0, x1, _) in enumerate(self.runs):
+            for x0, x1, top in self.runs:
                 if pick < x1 - x0:
                     break
                 pick -= x1 - x0
@@ -456,7 +457,7 @@ class Rain:
                 kind, rot, sx = 0, rng.uniform(-45.0, 45.0), (-sy if rng.random() < 0.5 else sy)
             else:
                 kind, rot, sx = 1, rng.uniform(-25.0, 25.0), rng.uniform(-1.0, 1.0) * sy
-            self.splashes.append((k, x, kind, rot, sx, sy, round(rng.random() * tint)))
+            self.splashes.append((top, x, kind, rot, sx, sy, round(rng.random() * tint)))
         self.splashes.sort(key=lambda sp: sp[0])
 
     def _slant_bucket(self):
@@ -535,7 +536,9 @@ class Rain:
         return pm
 
     def _layers(self, slot, scale, bucket, g):
-        """slot 在画面强度 g 下要铺的贴图：两张相邻关键帧按比例混成一张，没做好的用最近做好的代替。"""
+        """slot 在画面强度 g 下要铺的贴图：两张相邻关键帧按比例混成一张，没做好的用最近做好的代替。
+
+        换斜度档时先接着画旧档、旧档的强度照常跟上，新档这两张做好了再换过去。"""
         x = g * KEYS
         k0 = min(int(x), KEYS)
         f = x - k0
@@ -545,6 +548,17 @@ class Rain:
             if self._jobs[key].cancel():
                 del self._jobs[key]
         base = (slot, scale, self._WL)
+        drawn = self._drawn.get(slot, bucket)
+        if drawn != bucket:
+            for k in (k0, k1):
+                self._key_pm((*base, bucket, k))
+            if all(
+                self._keys.get((*base, bucket, k)) is not None or (*base, bucket, k) in self._keys
+                for k in (k0, k1)
+            ):
+                drawn = bucket
+        self._drawn[slot] = drawn
+        bucket = drawn
         for k in sorted(want, key=lambda k: abs(k - x)):
             if 0 <= k <= KEYS:
                 self._key_pm((*base, bucket, k))
@@ -584,12 +598,12 @@ class Rain:
     def _parts_for(self, slot, g, bucket):
         """slot 在画面强度 g 下的各层清单：(种类, 层, 档, 不透明度档)。"""
         dim = _dim_alpha(g) / 255.0
-        heavy = (curtain_level(inv_lerp(0.4, 0.75, g)), smooth(inv_lerp(0.4, 0.85, g)))  # 暴雨那层
+        heavy = (curtain_level(inv_lerp(0.4, 0.75, g)), inv_lerp(0.4, 0.85, g))  # 暴雨那层
         if slot == "shelter":
             parts = [("g", 0, 1, dim), ("c", 1, heavy[0], heavy[1] * SHELTER_K)]
         else:
-            fade = 1.0 - STREAK_FADE * smooth(inv_lerp(0.5, 0.95, g))
-            torrent = smooth(inv_lerp(0.55, 1.0, g))
+            fade = 1.0 - STREAK_FADE * inv_lerp(0.5, 0.95, g)
+            torrent = inv_lerp(0.55, 1.0, g)
             parts = [
                 ("g", 0, 1, dim),
                 ("v", 0, 1, VEIL_MAX * torrent),
@@ -597,7 +611,7 @@ class Rain:
                     "c",
                     0,
                     curtain_level(inv_lerp(0.0, 0.5, g)),
-                    smooth(inv_lerp(0.0, 0.5, g)) ** 0.6 * (1.0 - 0.7 * smooth(inv_lerp(0.5, 0.9, g))),
+                    smooth(inv_lerp(0.0, 0.5, g)) ** 0.6 * (1.0 - 0.7 * inv_lerp(0.5, 0.9, g)),
                 ),
                 ("c", 1, *heavy),
                 ("c", 2, curtain_level(inv_lerp(0.5, 1.0, g)), torrent),
@@ -642,7 +656,7 @@ class Rain:
         j = JITTER * smooth(storm(visual(self.intensity)))
         fx += self._rng.uniform(-j, j)
         fy += self._rng.uniform(-j, j)
-        self._frame = (self.intensity, self._slant_bucket(), list(self.runs), self.splashes, (fx, fy))
+        self._frame = (self.intensity, self._slant_bucket(), self.splashes, (fx, fy))
 
     def paint_rect(self, scale, margin=0.0) -> QRect:
         """本帧雨覆盖的范围（设备 px）。"""
@@ -682,7 +696,7 @@ class Rain:
         """画定格的那一帧；scene 为已画的猫和物品的范围（设备 px），暴雨时把它们压暗。"""
         if self._frame is None:
             return
-        i, bucket, runs, splashes, (fx, fy) = self._frame
+        i, bucket, splashes, (fx, fy) = self._frame
         g = visual(i)
         open_air, shelter, lit = self._clip_regions(scale)
         p.save()
@@ -714,12 +728,11 @@ class Rain:
         pms = self._splashes() if splashes else None
         if pms:
             p.setOpacity(SPLASH_OPACITY)
-            clip = -1
-            for k, x, kind, rot, sx, sy, tint in splashes:
-                y = runs[k][2]
-                if k != clip:
+            clip = None
+            for y, x, kind, rot, sx, sy, tint in splashes:
+                if y != clip:
                     p.setClipRect(QRectF(0.0, y - 1e4, self._WL, 1e4))  # 只画到落点以上
-                    clip = k
+                    clip = y
                 spm = pms[tint][kind]
                 w, h = spm.width(), spm.height()
                 p.save()

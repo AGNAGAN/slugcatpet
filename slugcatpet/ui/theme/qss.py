@@ -316,6 +316,29 @@ TABBAR_ARROW = (
     f"QPushButton:hover{{background:{ARROW_HOVER};}}"
 )
 
+RAIN_CARD = (
+    f"#rainCard{{background:{BG_CARD};border:1px solid {BORDER};border-radius:10px;}}"
+    "QLabel{background:transparent;font-size:12px;}"
+    f"#rainHead{{color:{TEXT_SOFT};font-size:13px;font-weight:600;}}"
+    f"#rainLabel{{color:{TEXT_DIM};}}"
+    f"#rainPreview{{color:{TEXT_SOFT};}}"
+    f"QPushButton{{color:{TEXT};background:{BTN_BG};border:1px solid {BORDER};"
+    "border-radius:5px;padding:4px 10px;font-size:12px;}"
+    f"QPushButton:hover{{background:{BTN_HOVER};}}"
+    f"QPushButton:checked{{background:{ACCENT_BTN};color:{TEXT_ON_ACCENT};border-color:{ACCENT_BTN};}}"
+    f"QPushButton:checked:hover{{background:{ACCENT_BTN_HOVER};}}"
+    "#rainChip{padding:4px 0;min-width:30px;}"
+    f"QLineEdit{{background:{INPUT_BG};color:{TEXT};border:1px solid {BORDER};"
+    "border-radius:5px;padding:3px 4px;font-size:12px;}"
+    f'QLineEdit[bad="true"]{{border-color:{ERROR};}}'
+    f"QCheckBox{{color:{TEXT_DIM};font-size:12px;background:transparent;}}"
+    "QCheckBox::indicator{width:13px;height:13px;border-radius:3px;"
+    f"border:1px solid {RADIO_BORDER};background:{INPUT_BG};}}"
+    f"QCheckBox::indicator:checked{{border-color:{ACCENT};background:{ACCENT};"
+    f"image:url({icon_url('check.svg')});}}"
+    f"#rainDivider{{{DIVIDER_LINE}}}" + TOOLTIP
+)
+
 TOAST = (
     f"QLabel{{color:{TEXT_TOAST};background:{BG_TOAST};border-radius:6px;padding:5px 9px;font-size:12px;}}"
 )

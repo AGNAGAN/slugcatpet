@@ -14,6 +14,8 @@ from .primitives import blit
 from .tailtex import draw_game_tail, game_tail_vertices
 from ..skins.resolver import SKIN_KEY
 
+PUP_BODY_SY = 0.5  # 幼崽身体贴图的纵向缩放
+
 TAIL_SUBDIV = 4  # 尾巴每段 Catmull-Rom 细分数
 
 
@@ -290,7 +292,7 @@ class GraphicsDrawMixin:
         body_y = chest_y + 4.0 * sleep - breath_bob  # y↓ 睡眠下沉+起伏
         body_rot = body_axis
         body_sx = self.body.stats.body_width + _lerp(_lerp(-0.05, 0.05, breath) * upright, 0.15, sleep)
-        body_sy = 1.0  # 竖直呼吸走 body_y，不缩 Y
+        body_sy = PUP_BODY_SY if self.pup else 1.0  # 竖直呼吸走 body_y
         side = self._motion_side(d0x, d0y, d1x, d1y)
         blit(
             p,
@@ -386,7 +388,7 @@ class GraphicsDrawMixin:
     def _draw_head(self, p, atlas, ts=1.0):
         hx_r, hy_r, head_ang = self.head_pose_at(ts)
         frame_idx = self._head_frame_index(head_ang)
-        frames = self._head_frames or [self.cat.frames["head"][1] + "0"]
+        frames = self._head_frames or [self.fam["head"][1] + "0"]
         frame_idx = min(max(frame_idx, 0), len(frames) - 1)
         element = frames[frame_idx]
 
@@ -434,7 +436,7 @@ class GraphicsDrawMixin:
 
         face_color = self._asc_face_color or self._color("FACE", self.EYE)
 
-        face_frames = self._face_frames or [self.cat.frames["face"][1] + "0"]
+        face_frames = self._face_frames or [self.fam["face"][1] + "0"]
         blink_frames = self._face_blink_frames or face_frames
         face_a_frames = self._face_a_frames or face_frames
         n_max_a = len(face_a_frames) - 1

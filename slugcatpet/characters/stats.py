@@ -27,6 +27,7 @@ class SlugStats:
     flip_boost: float = 5.0
 
     roll_rocket_vx_mult: float = 1.0
+    roll_rocket_spd_fac: float = 1.0
 
     # 滑铲转后空翻的冲量，横向速度为 -backflip_vx × 滑铲方向
     backflip_vx: float = 7.0
@@ -55,6 +56,9 @@ class SlugStats:
     pole_jump_head_vy: float = -8.0
     pole_jump_feet_vx: float = 5.0
     pole_jump_feet_vy: float = -7.0
+    # 竖杆上往上窜：起步和每 tick 冲量的倍数、前几 tick 上提距离的倍数
+    pole_slide_up_fac: float = 1.0
+    pole_slide_up_lift: float = 1.0
 
     buoyancy: float = 0.95
     lungs_fac: float = 1.0
@@ -89,6 +93,8 @@ class SlugStats:
     spear_toss: bool = False
     # 大件（矛）也能两手各拿一件
     dual_wield: bool = False
+    # 能用几只手拿东西，1 只时只用主手、不能换手
+    hands: int = 2
 
     def __post_init__(self):
         object.__setattr__(self, "_h", hash(tuple(getattr(self, f.name) for f in fields(self))))

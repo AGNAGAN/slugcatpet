@@ -97,6 +97,8 @@ class AppearanceDialog(CardDialog):
         self._resets = {}  # 部位组 → 该行的重置键
         self._thumbs = {}  # 缩略图缓存
 
+        if not self._pet.cat.pup:
+            self._form_block()
         row = QHBoxLayout()
         row.setSpacing(10)
         row.addWidget(_head(t("look_skin")))
@@ -135,6 +137,27 @@ class AppearanceDialog(CardDialog):
         ok = self.add_button(t("skin_done"), "primary")
         ok.clicked.connect(self.accept)
         self._sync()
+
+    # ── 体型 ──
+
+    def _form_block(self):
+        row = QHBoxLayout()
+        row.setSpacing(10)
+        row.addWidget(_head(t("look_form")))
+        adult = QRadioButton(t("look_adult"))
+        pup = QRadioButton(t("look_pup"))
+        grp = QButtonGroup(self)
+        for rb in (adult, pup):
+            grp.addButton(rb)
+            row.addWidget(rb)
+        row.addStretch(1)
+        (pup if self._look.pup else adult).setChecked(True)
+        pup.toggled.connect(self._on_pup)
+        self.body.addLayout(row)
+
+    def _on_pup(self, on):
+        self._look.pup = on
+        self._apply()
 
     # ── 整套 ──
 
@@ -426,7 +449,7 @@ class AppearanceDialog(CardDialog):
     def _frame(self, sid, grp):
         p = skins.get(sid)
         if (p is None or grp not in p.groups) and grp in ("HEAD", "FACE"):
-            return self._pet.cat.frames[grp.lower()][1] + "0"
+            return self._pet.cat.frames_for(self._pet.cat.is_pup(self._look))[grp.lower()][1] + "0"
         return SAMPLE_FRAME[grp]
 
     def _sprite(self, sid, grp, frame, rgb) -> QPixmap | None:

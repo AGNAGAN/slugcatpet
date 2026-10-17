@@ -93,12 +93,13 @@ class HandKeeper:
         self._forbid[id(obj)] = PUT_DOWN_FORBID
 
     def make_room(self, need):
-        """腾出 need 要求的空手：one=至少一只，free=两只。"""
-        want = {"one": 1, "free": 2}.get(need, 0)
+        """腾出 need 要求的空手：one=至少一只，free=全部。"""
         b = self.body
+        n = b.stats.hands
+        want = {"one": 1, "free": n}.get(need, 0)
         held = b.held_items()
         order = sorted(held, key=lambda o: _drop_rank(self.purpose_of(o)))
-        while 2 - len(held) < want and order:
+        while n - len(held) < want and order:
             obj = order.pop(0)
             self.put_down(obj)
             held.remove(obj)

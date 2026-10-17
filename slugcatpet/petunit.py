@@ -19,6 +19,8 @@ from .core.units import clampf, inv_lerp, lerp, K_VEL
 from .items.base import CLIMBABLE, WARM
 
 TAIL_SNAP = 40.0
+PUP_MASS_FAC = 0.7 / 0.75  # 原版幼崽体重 0.7、成年 0.75
+PUP_TAIL_SEG = 0.5  # 幼崽尾巴每段的长度倍数
 
 ZEROG_ROOM_GRAVITY = 0.5  # 判为零重力的阈值
 ZEROG_TAIL_RATE = 0.08
@@ -86,6 +88,7 @@ class PetUnit:
         )
         for ab in self.abilities.values():
             ab.attach_body(self, self.body)
+        self._apply_form()
         self.body.cold = float(init_state.get("cold", 0.0))
         self.body.sleepiness = float(init_state.get("sleepiness", tuning.SLEEPY_INIT))
         self.body.visual_floor_y = floor_y
@@ -106,7 +109,7 @@ class PetUnit:
             self.body.step()
             self.gfx.update()
         ax, ay = self.gfx.tail_root_world()
-        self.tail = Tail(ax, ay, self.gfx._tail_rad)
+        self.tail = Tail(ax, ay, self.gfx._tail_rad, self._tail_seg())
         self.tail.floor_y = floor_y
         self._prev_root = (ax, ay)
         self.gfx.tail_segs = self.tail.segs
@@ -185,8 +188,24 @@ class PetUnit:
     def set_look(self, look: Look):
         self.look = look
         self.gfx.look = look
+        self._apply_form()
         self._build_accessories()
         self.refresh_skin()
+
+    def _apply_form(self):
+        """幼崽形态只轻一点，体型差别在绘制里。"""
+        from .core import chunkphys as _cp
+
+        m = _cp.MASS * self.cat.stats.weight_fac * (PUP_MASS_FAC if self.cat.is_pup(self.look) else 1.0)
+        self.body.chunk0.mass = self.body.chunk1.mass = m
+
+    def _tail_seg(self) -> float:
+        return PUP_TAIL_SEG if self.cat.is_pup(self.look) else 1.0
+
+    def set_pup(self, on: bool):
+        look = self.look.copy()
+        look.pup = on
+        self.set_look(look)
 
     def look_state(self) -> dict:
         """存档用：改过外观才有 look 字段。"""
@@ -196,9 +215,10 @@ class PetUnit:
     def refresh_skin(self):
         self.atlas = self._make_atlas()
         self.gfx.apply_skin(self.atlas)
-        if tuple(self.gfx._tail_rad) != tuple(s.rad for s in self.tail.segs):
+        seg = self._tail_seg()
+        if tuple(self.gfx._tail_rad) != tuple(s.rad for s in self.tail.segs) or self.tail.seg_fac != seg:
             old = self.tail
-            self.tail = Tail(old.segs[0].x, old.segs[0].y, self.gfx._tail_rad)
+            self.tail = Tail(old.segs[0].x, old.segs[0].y, self.gfx._tail_rad, seg)
             self.tail.adopt(old)
             self.gfx.tail_segs = self.tail.segs
         w = self.window

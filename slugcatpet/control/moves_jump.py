@@ -66,7 +66,7 @@ def _roll_to_rocket(body, c0, c1, rd) -> None:
     c0.y = c1.y - 5.0
     t = inv_lerp(0.0, 25.0, body._ctrl_roll_counter)
     ang = rd * lerp(60.0, 35.0, t)
-    speed = lerp(9.5, 13.1, t)
+    speed = lerp(9.5, 13.1, t) * body.stats.roll_rocket_spd_fac
     vx, vy = vmath.degvec(ang)  # y↑ 向量
     vx *= speed
     vy *= speed

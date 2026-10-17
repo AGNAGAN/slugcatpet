@@ -28,9 +28,10 @@ class Tail:
     RAD = (6.0, 4.0, 2.5, 1.0)
     SFRIC = 0.85
 
-    def __init__(self, root_x: float, root_y: float, rads=None):
+    def __init__(self, root_x: float, root_y: float, rads=None, seg_fac: float = 1.0):
         rads = tuple(rads) if rads else Tail.RAD
-        self.conn = tuple(4.0 if i == 0 else 7.0 for i in range(len(rads)))
+        self.seg_fac = seg_fac
+        self.conn = tuple((4.0 if i == 0 else 7.0) * seg_fac for i in range(len(rads)))
         self.segs = [
             TailSeg(
                 root_x, root_y + sum(self.conn[: i + 1]), r, self.conn[i], Tail.SFRIC, 1.0 if i == 0 else 0.5
