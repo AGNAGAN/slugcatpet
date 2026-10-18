@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .._paths import resource_dir
 from .base import CatDef
-from .personality import DEFAULT_PERSONALITY
+from .personality import AXES, DEFAULT_PERSONALITY
 from .stats import DEFAULT_STATS
 
 FORMAT = 1
@@ -73,6 +73,20 @@ def _override(base, data, where):
     return replace(base, **kw)
 
 
+def _personality(data, where):
+    """性格：energy / sympathy / vary 在 0–1，kin 为 {猫种: -1–1}。"""
+    p = _override(DEFAULT_PERSONALITY, data, where)
+    for a in AXES + ("vary",):
+        if not 0.0 <= getattr(p, a) <= 1.0:
+            raise ValueError(f"{where}: {a} 应在 0–1，得到 {getattr(p, a)!r}")
+    if not all(
+        isinstance(k, str) and isinstance(v, (int, float)) and not isinstance(v, bool) and -1.0 <= v <= 1.0
+        for k, v in p.kin.items()
+    ):
+        raise ValueError(f"{where}: kin 应为 {{猫种: -1–1}}，得到 {p.kin!r}")
+    return p
+
+
 def load_character(path: Path) -> tuple[int, CatDef]:
     where = path.name
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -133,7 +147,7 @@ def load_character(path: Path) -> tuple[int, CatDef]:
         abilities=abilities,
         behaviors=behaviors,
         stats=_override(DEFAULT_STATS, data.get("stats", {}), f"{where} stats"),
-        personality=_override(DEFAULT_PERSONALITY, data.get("personality", {}), f"{where} personality"),
+        personality=_personality(data.get("personality", {}), f"{where} personality"),
         wip=bool(data.get("wip", False)),
         pup=data.get("pup", False),
         names=names,
@@ -149,4 +163,8 @@ def load_builtin(char_dir: Path = CHAR_DIR) -> dict[str, CatDef]:
         if cat.key in out:
             raise ValueError(f"角色 key 重复：{cat.key!r}")
         out[cat.key] = cat
+    for cat in out.values():
+        bad = [k for k in cat.personality.kin if k not in out]
+        if bad:
+            raise ValueError(f"{cat.key}: personality.kin 里的猫种不存在：{', '.join(bad)}")
     return out

@@ -7,6 +7,7 @@ import math
 from PySide6.QtCore import QPointF
 from PySide6.QtGui import QColor, QPainterPath, QPainterPathStroker
 
+from ... import tuning
 from ...core.units import clampf, lerp
 from ...core.vecmath import _ang_from_up, _seg_dist
 from ...rendering.primitives import blit
@@ -451,6 +452,10 @@ def _stab(win, s, pet, chunk, damage, blame=False):
     chunk.vy += py
     beh = pet.behavior
     _pierced(s, b, not b.dead)
+    if not blame and not b.dead:
+        by = next((p for p in win.pets if p.body is s.thrown_by), None)
+        if by is not None and by is not pet:
+            win.social.bonds.nudge(by, pet, tuning.BOND_SPEAR)
     if not b.dead and beh is not None:
         b.wounds += damage
         if damage >= LETHAL or b.wounds >= 1.0:

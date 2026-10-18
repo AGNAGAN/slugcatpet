@@ -7,12 +7,13 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QLabel,
+    QPlainTextEdit,
     QPushButton,
     QRadioButton,
     QButtonGroup,
 )
 from PySide6.QtCore import Qt, QPoint
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtGui import QGuiApplication, QTextDocument, QTextOption
 from ..theme import qss
 from .screens import clamp_rect
 
@@ -99,17 +100,36 @@ class CardDialog(QDialog):
         super().mouseReleaseEvent(ev)
 
 
+NOTE_MAX_HEIGHT = 170
+
+
 class ConfirmDialog(CardDialog):
-    """确认弹窗（Accepted=确认）；cancel_btn 供外部程序化点击。"""
+    """确认弹窗（Accepted=确认）；note 是附在正文下的一段原文；cancel_btn 供外部程序化点击。"""
 
     def __init__(
-        self, title: str, text: str, confirm_text: str, cancel_text: str, parent=None, width: int = 300
+        self,
+        title: str,
+        text: str,
+        confirm_text: str,
+        cancel_text: str,
+        parent=None,
+        width: int = 300,
+        note: str | None = None,
     ):
         super().__init__(title, parent, width)
+        self._note = None
         lbl = QLabel(text)
         lbl.setObjectName("cardText")
         lbl.setWordWrap(True)
         self.body.addWidget(lbl)
+        if note is not None:
+            nl = QPlainTextEdit(note)
+            nl.setObjectName("cardNote")
+            nl.setReadOnly(True)
+            nl.setWordWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
+            self._note = nl
+            nl.setFixedHeight(40)
+            self.body.addWidget(nl)
         self.confirm_btn = self.add_button(confirm_text, "danger")
         self.confirm_btn.clicked.connect(self.accept)
         self.cancel_btn = self.add_button(cancel_text, "primary")
@@ -119,6 +139,25 @@ class ConfirmDialog(CardDialog):
     def showEvent(self, ev):
         super().showEvent(ev)
         self.cancel_btn.setFocus()
+        if self._note is not None:
+            self._fit_note()
+
+    def _fit_note(self):
+        """按换行后的文字高度定文字区高度，最高 NOTE_MAX_HEIGHT，并让弹窗跟着变。"""
+        n = self._note
+        n.ensurePolished()
+        extra = n.height() - n.viewport().height()
+        doc = QTextDocument()
+        doc.setDefaultFont(n.font())
+        doc.setDefaultTextOption(n.document().defaultTextOption())
+        doc.setDocumentMargin(n.document().documentMargin())
+        doc.setPlainText(n.toPlainText())
+        doc.setTextWidth(n.viewport().width())
+        n.setFixedHeight(min(NOTE_MAX_HEIGHT, int(doc.size().height()) + extra + 8))
+        self._card.adjustSize()
+        size = self._card.size()
+        self.resize(size)
+        self._card.setGeometry(0, 0, size.width(), size.height())
 
 
 class PickDialog(CardDialog):

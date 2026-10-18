@@ -38,6 +38,7 @@ class Candidate:
         "energy_factor",
         "temper_factor",
         "cold_factor",
+        "scale",
         "one_shot",
         "freshness",
     )
@@ -56,6 +57,7 @@ class Candidate:
         one_shot,
         init=1.0,
         cold_factor=None,
+        scale=None,
     ):
         self.name = name
         self.base = base
@@ -67,13 +69,15 @@ class Candidate:
         self.energy_factor = energy_factor
         self.temper_factor = temper_factor
         self.cold_factor = cold_factor if cold_factor is not None else _one
+        self.scale = scale  # 每次抽签时再乘的权重 fn()，跟着性格变
         self.one_shot = one_shot  # True 由状态自己结束，False 在 freshness 降到 quit 时退出
         self.freshness = init
 
     def weight(self, ctx, noise):
+        base = self.base if self.scale is None else self.base * self.scale()
         return max(
             0.0,
-            self.base
+            base
             * self.energy_factor(ctx.energy)
             * self.temper_factor(ctx.temper)
             * self.cold_factor(ctx.cold)

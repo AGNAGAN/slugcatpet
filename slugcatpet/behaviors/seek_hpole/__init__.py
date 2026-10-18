@@ -224,12 +224,11 @@ class SeekHPoleBehavior(Behavior):
         p = self.p
         fsm.add_state(SeekHPole)
         fsm.register_mood_entry("hpole", "SeekHPole")
-        gate = fsm.traits.play_gate
 
         def has_hpole(ctx):
             return (
                 any(pl.kind == "horizontal" for pl in fsm.items(CLIMBABLE))
-                and ctx.energy >= gate
+                and ctx.energy >= fsm.traits.play_gate
                 and not ctx.submerged
             )
 

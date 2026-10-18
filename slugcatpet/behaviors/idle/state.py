@@ -79,6 +79,8 @@ class IdleStand(State):
             return
         if fsm.intents.pick():
             return
+        if self._lounge():
+            return
         self._idle_hold = self._roll_idle_hold()
         self._idle_pace()
 
@@ -121,7 +123,7 @@ class IdleStand(State):
         prob = tuning.STARE_BASE_PROB + (tuning.STARE_NEAR_PROB - tuning.STARE_BASE_PROB) * _stare_nearness(
             bd
         )
-        prob *= fsm.traits.activity
+        prob *= fsm.traits.activity * (1.0 + tuning.BOND_STARE * max(0.0, fsm.social.bond(fsm.win, best)))
         if bd < tuning.STARE_ENGAGE_DIST:
             prob *= tuning.STARE_ENGAGE_MULT
         if fsm.rng.random() < prob:
@@ -134,9 +136,27 @@ class IdleStand(State):
         if not fsm.body.is_moving() and fsm.rng.random() < p:
             motor.wander(fsm)
 
+    def _lounge(self):
+        """懒猫闲待到点时有时就地趴下，趴的时长同一段闲待。"""
+        fsm = self.fsm
+        b = fsm.body
+        if (
+            fsm.traits.lounge <= 0.0
+            or not b.on_floor()
+            or b.swimming
+            or fsm.win.rain.dangerous()
+            or fsm.rng.random() >= fsm.traits.lounge
+        ):
+            return False
+        from ..rest.states import LOUNGE, lie_down
+
+        fsm._states["LieDown"].lounge_ticks = self._roll_idle_hold()
+        return fsm.run_tasks("lie_down", LOUNGE) or lie_down(fsm, LOUNGE)
+
     def _roll_idle_hold(self):
         """接着闲待一阵再重选。"""
-        return self.fsm.rng.randint(tuning.HANG_HOLD_MIN, tuning.HANG_HOLD_MAX)
+        n = self.fsm.rng.randint(tuning.HANG_HOLD_MIN, tuning.HANG_HOLD_MAX)
+        return round(n * self.fsm.traits.idle_hold)
 
     def _zerog_idle(self, cursor):
         fsm = self.fsm

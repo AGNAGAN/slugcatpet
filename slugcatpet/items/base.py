@@ -11,7 +11,8 @@ THROWABLE = "throwable"
 CLIMBABLE = "climbable"
 WARM = "warm"
 CARRYABLE = "carryable"
-USES = frozenset((EDIBLE, THROWABLE, CLIMBABLE, WARM, CARRYABLE))
+TOY = "toy"
+USES = frozenset((EDIBLE, THROWABLE, CLIMBABLE, WARM, CARRYABLE, TOY))
 
 # 活物被什么打中，传给模型的 struck()
 HIT_STONE = "stone"
@@ -61,6 +62,7 @@ class ItemKind:
     varies = False  # 每件物体提供的用法随状态变（见 affords_now）
     dissolve_ticks = 40  # 消解（淡出）用的帧数
     blueprint = False  # 归布局蓝图管
+    secondary = False  # 右键点中会调 on_secondary
 
     def dump(self, obj):
         """存档用的字典（坐标为当时的逻辑坐标）；None 不存。"""
@@ -69,6 +71,20 @@ class ItemKind:
     def load(self, win, d, fit):
         """按 dump 的字典重建物体，坐标经 fit 换到当前屏幕；不入场，None 为放弃。"""
         return None
+
+    def keeps(self, obj) -> bool:
+        """清空时留下。"""
+        return False
+
+    def removal_note(self, obj) -> str | None:
+        """单个移除前要确认时，给出弹窗里展示的内容；None 直接移除。"""
+        return None
+
+    def on_secondary(self, win, obj, global_pos):
+        """右键点中 obj（secondary 为真时）。"""
+
+    def draw_overlay(self, win, p):
+        """盖在所有层之上、不受地面线裁剪的提示。"""
 
     def draw_ghost(self, win, p, obj):
         """布局蓝图预览里的虚影。"""

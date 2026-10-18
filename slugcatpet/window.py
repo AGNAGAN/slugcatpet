@@ -267,6 +267,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
                 spawn_x=spawn_x,
                 look=Look.from_state(state),
                 name=state.get("name") or "",
+                personality=state.get("personality"),
             )
             if state.get("dead") and pet.behavior is not None:
                 pet.behavior.enter_dead()
@@ -276,6 +277,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             pet = self._hidden_pets.pop(0)
             pet.hidden = False
             self.pets.append(pet)
+        self.social.bonds.load(self._params.get("bonds"), self.all_pets())
 
     @property
     def body(self):
@@ -1105,6 +1107,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         else:
             self._take_off_stage(pet)
             self.pets.remove(pet)
+        self.social.bonds.drop(pet)
         self._shown = None
         self._after_pets_changed()
         return True
@@ -1355,6 +1358,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
 
     def _draw_overlay(self, p):
         self._draw_ghosts(p)
+        self._draw_item_overlays(p)
         if self._place_mode:
             self._draw_place_hint(p)
 
@@ -1442,6 +1446,10 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             return
         if e.button() == Qt.MouseButton.RightButton:
             pos = self.to_logical(e.position().x(), e.position().y())
+            hit = self._secondary_target(pos)
+            if hit is not None:
+                hit[0].on_secondary(self, hit[1], e.globalPosition().toPoint())
+                return
             from .control.mouse import hit_test, GRAB_PAD
 
             for pet in self.pets:

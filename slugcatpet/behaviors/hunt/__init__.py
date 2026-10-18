@@ -172,7 +172,7 @@ class HuntBehavior(Behavior):
                 return 0.0
             prey = _prey(fsm, grows)
             value = max(prey_value(fsm, o) for o in prey) / 4.0
-            return max(bedtime_hunger(b), HUNT_EFFORT * snack_appeal(b, value))
+            return max(bedtime_hunger(b), HUNT_EFFORT * snack_appeal(b, value) * fsm.traits.hunt_will)
 
         def start_hunt():
             fsm._transition("Hunt")

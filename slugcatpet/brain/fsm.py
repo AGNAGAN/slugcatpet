@@ -56,7 +56,7 @@ class BehaviorFSM:
         self.hands = HandKeeper(self)
         self.mood = build_arbiter(self.rng)
         self.intents = IntentPicker(self.rng)  # 待机到点时挑下一件事
-        self.looker = ObjectLooker(self.rng, self.traits.activity)
+        self.looker = ObjectLooker(self.rng, self.traits)
 
         self.state = "IdleStand"
         self.timer = 0
@@ -385,7 +385,8 @@ class BehaviorFSM:
         self.body.energy_change(cur.energy_delta(self.traits.drain))
         if cur.needs and cur.energy != REST and self.state != "Dead":
             k = tuning.SLEEPY_VIG_MULT if cur.energy == VIGOROUS else 1.0
-            self.body.sleepiness = min(1.0, self.body.sleepiness + tuning.SLEEPY_RATE * k)
+            gain = tuning.SLEEPY_RATE * k * self.traits.sleepy
+            self.body.sleepiness = min(1.0, self.body.sleepiness + gain)
         if self._force_energy is not None:
             self.body.energy = self._force_energy
         if self._force_temper is not None:

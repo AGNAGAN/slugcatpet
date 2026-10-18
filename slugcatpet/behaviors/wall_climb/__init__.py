@@ -111,12 +111,13 @@ def _mount(fsm, p):
         fsm._wall_side = -1 if fsm.body.chunk1.x < fsm.WL / 2 else 1
 
     fsm.register_mood_entry("ceiling_play", "RelocateToWall", before=face_nearer_wall)
-    gate = fsm.traits.play_gate
     mood_candidate(
         fsm,
         "ceiling_play",
         p,
-        gate=lambda ctx: ctx.energy >= gate and not ctx.submerged and hang_above_water(fsm.win),
+        gate=lambda ctx: (
+            ctx.energy >= fsm.traits.play_gate and not ctx.submerged and hang_above_water(fsm.win)
+        ),
         one_shot=False,
         energy_factor=lambda e: _lerp(e, 0.0, 1.0, p.energy_fac_tired, p.energy_fac_fresh),
         before="idle",

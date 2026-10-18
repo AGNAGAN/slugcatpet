@@ -35,7 +35,7 @@
     "sleep_eyes_open": true
   },
   "personality": {
-    "activity": 0.6,
-    "sociability": 0.35
+    "energy": 0.6,
+    "sympathy": 0.35
   }
 }

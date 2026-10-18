@@ -147,6 +147,7 @@ class SlugcatBody:
         self.pole_frame = 0  # 杆上动画帧
         self.pole_input = (0, 0)  # 杆上这一 tick 想按的方向
         self.lane_hold = 0  # 杆上被前面的猫挡住、不许按的方向
+        self.ghost = 0  # 还要穿过别的猫多少 tick（被顶下杆尖后落下）
         self.beam_span = (-1e9, 1e9)  # 吊着的横杆两端
 
         self.facing = 1  # +1 右 / -1 左
@@ -186,6 +187,7 @@ class SlugcatBody:
 
         # temper ∈[-1,1]，负疏远正亲密
         self.temper = float(temper)
+        self.temper_fac = (1.0, 1.0)  # 好感涨、跌的倍率，按性格设
 
         # food ∈[0,food_max]，上限/冬眠阈值按种族
         self.food_max = stats.max_food
@@ -205,7 +207,7 @@ class SlugcatBody:
 
         self.walk_min = None
         self.walk_max = None
-        self.floor_spans = None  # 返回别的猫趴在地上占的 [(左, 右)]，挑目的地时绕开
+        self.floor_spans = None  # 返回别的猫在地上占的 [(左, 右)]，挑目的地时绕开
 
         self.suspended = False
         self.hover = False
@@ -280,6 +282,10 @@ class SlugcatBody:
     def collision_chunks(self):
         return (self.chunk0, self.chunk1)
 
+    def collides_with(self, other):
+        """穿行期间不和别的猫相撞。"""
+        return not (isinstance(other, SlugcatBody) and (self.ghost or other.ghost))
+
     @property
     def steady(self):
         """睡着时只被别的猫挤动，物品推不动。"""
@@ -317,8 +323,12 @@ class SlugcatBody:
         c0, c1 = self.chunk0, self.chunk1
         return min(c0.x - c0.rad, c1.x - c1.rad), max(c0.x + c0.rad, c1.x + c1.rad)
 
+    def same_floor(self, other):
+        """两只猫是否在同一层地面（臀部高度相近）。"""
+        return abs(self.chunk1.y - other.chunk1.y) <= tuning.FLOOR_SAME_DY
+
     def _beside_lying(self, x):
-        """目的地落在趴着的猫身上时，改到离原目的地近的那一边，挨着它站；怎么过去由通行决定。"""
+        """目的地落在别的猫占的地方上时，改到我这一侧的边上挨着站，够不着再换另一边；怎么过去由通行决定。"""
         pad = self.chunk1.rad
         spans = sorted((lo - pad, hi + pad) for lo, hi in self.floor_spans())
         merged = []
@@ -329,7 +339,7 @@ class SlugcatBody:
                 merged.append([lo, hi])
         for lo, hi in merged:
             if lo < x < hi:
-                near, far = (lo, hi) if x - lo <= hi - x else (hi, lo)
+                near, far = (lo, hi) if self.chunk1.x < (lo + hi) / 2 else (hi, lo)
                 if self.walk_min is None or self.walk_min <= near <= self.walk_max:
                     return near
                 return far
@@ -502,6 +512,7 @@ class SlugcatBody:
 
     def step(self):
         self._prev_end_x1, self._end_x1 = self._end_x1, None
+        self.ghost = max(0, self.ghost - 1)
         self._temper_update()
         self._drag_impacts()
         if self._input_provider is not None:
@@ -1465,6 +1476,7 @@ class SlugcatBody:
         self.energy = max(0.0, min(1.0, self.energy + d))
 
     def temper_shift(self, d):
+        d *= self.temper_fac[0] if d > 0.0 else self.temper_fac[1]
         self.temper = max(-1.0, min(1.0, self.temper + d))
 
     def _temper_update(self):

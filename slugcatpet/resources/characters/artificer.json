@@ -33,9 +33,9 @@
     "throw_skill": 2
   },
   "personality": {
-    "activity": 0.75,
+    "energy": 0.75,
     "stamina": 1.1,
-    "sociability": 0.2,
+    "sympathy": 0.2,
     "diet": "carnivore",
     "meat": 4,
     "toy_pref": {

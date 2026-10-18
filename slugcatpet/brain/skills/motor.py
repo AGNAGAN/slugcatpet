@@ -25,41 +25,39 @@ def pick_social_wander_x(
     lo,
     hi,
     self_x,
-    others_x,
-    sociability,
+    others,
     rng,
     sigma,
     samples,
-    lo_thresh,
-    hi_thresh,
+    min_pull,
     move_w,
     cross_w,
     stay_gain,
     stay_span,
 ):
-    if not others_x:
+    """闲逛目标：others 为 [(挨着那只猫站的位置 x, 想靠近多少)]，往想靠近的猫身边走、离想躲的远一点。"""
+    if not others:
         return rng.uniform(lo, hi)
     span = max(1.0, hi - lo)
     inv = -1.0 / (2.0 * sigma * sigma)
-    sign = 1.0 if sociability < lo_thresh else (-1.0 if sociability > hi_thresh else 0.0)
 
-    def density(x):
-        return sum(math.exp(inv * (x - ox) ** 2) for ox in others_x)
+    def attract(x):
+        return sum(w * math.exp(inv * (x - ox) ** 2) for ox, w in others)
 
     def crossed(x):
         a, b = (self_x, x) if self_x <= x else (x, self_x)
-        return sum(1 for ox in others_x if a < ox < b)
+        return sum(1 for ox, _ in others if a < ox < b)
 
     def cost(x):
-        return sign * density(x) + move_w * abs(x - self_x) / span + cross_w * crossed(x)
+        return -attract(x) + move_w * abs(x - self_x) / span + cross_w * crossed(x)
 
     n = max(1, samples)
     step = span / n
     xs = [lo + step * (i + rng.random()) for i in range(n)]
-    if sign == 0.0:
+    if all(abs(w) < min_pull for _, w in others):
         return min(xs, key=lambda x: cross_w * crossed(x) + rng.random())
     best = min(xs, key=cost)
-    if cost(best) >= sign * density(self_x) - stay_gain:
+    if cost(best) >= -attract(self_x) - stay_gain:
         return min(max(self_x + rng.uniform(-stay_span, stay_span), lo), hi)
     return best
 
@@ -73,18 +71,15 @@ def wander(fsm):
     if fsm.win.rain.dangerous():
         b.walk_to(_dry_x(fsm, lo, hi))
         return
-    others_x = fsm.social.others_x(fsm.win)
     x = pick_social_wander_x(
         lo,
         hi,
         b.chunk1.x,
-        others_x,
-        fsm.traits.sociability,
+        fsm.social.others_pull(fsm.win),
         fsm.rng,
         fsm.WL * tuning.SOCIAL_WANDER_SIGMA_FRAC,
         tuning.SOCIAL_WANDER_SAMPLES,
-        tuning.SOCIAL_WANDER_LO,
-        tuning.SOCIAL_WANDER_HI,
+        tuning.SOCIAL_WANDER_MIN_PULL,
         tuning.SOCIAL_WANDER_MOVE_W,
         tuning.SOCIAL_WANDER_CROSS_W,
         tuning.SOCIAL_WANDER_STAY_GAIN,

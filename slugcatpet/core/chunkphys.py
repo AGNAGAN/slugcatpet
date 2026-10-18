@@ -323,6 +323,8 @@ def collide_objects(entities) -> None:
 
 
 def _collide_pair(a, b, a_chunks, b_chunks) -> None:
+    if not (getattr(a, "collides_with", None) is None or a.collides_with(b)):
+        return
     a_fix = getattr(a, "steady", False) and not hasattr(b, "steady")
     b_fix = getattr(b, "steady", False) and not hasattr(a, "steady")
     for ca in a_chunks:
@@ -342,8 +344,8 @@ def _collide_pair(a, b, a_chunks, b_chunks) -> None:
             bp = b_fix or getattr(cb, "pinned", False)
             if ap and bp:
                 continue
-            if dist < 1e-9:
-                ux, uy = 0.0, 1.0
+            if dist < 1e-9:  # 完全重合时横着推开
+                ux, uy = 1.0, 0.0
             else:
                 ux, uy = dx / dist, dy / dist
             pen = rad_sum - dist

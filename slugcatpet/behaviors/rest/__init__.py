@@ -21,10 +21,15 @@ from .states import (
 )
 
 
-def sleep_now(fsm):
-    """困了睡：食物够就冬眠，不够就打盹。"""
+def sleep_why(fsm):
+    """困了睡的原因：食物够就冬眠，不够就打盹。"""
     b = fsm.body
-    return lie_down(fsm, HIBERNATE if b.food >= b.food_hibernate else NAP)
+    return HIBERNATE if b.food >= b.food_hibernate else NAP
+
+
+def sleep_now(fsm):
+    """就地按睡的原因趴下。"""
+    return lie_down(fsm, sleep_why(fsm))
 
 
 class Rest(Behavior):
@@ -91,5 +96,9 @@ class Rest(Behavior):
         fsm.provide("exhausted", exhausted)
         fsm.register_rule(exhaust, EXHAUST)
         fsm.register_rule(sleepy, SLEEPY)
-        fsm.intents.add("sleep", want_sleep, lambda: sleep_now(fsm))
-        fsm.intents.add("rest", want_rest, lambda: lie_down(fsm, REST_A_BIT))
+
+        def settle(why):
+            return fsm.run_tasks("lie_down", why) or lie_down(fsm, why)
+
+        fsm.intents.add("sleep", want_sleep, lambda: settle(sleep_why(fsm)))
+        fsm.intents.add("rest", want_rest, lambda: settle(REST_A_BIT))

@@ -24,8 +24,11 @@
     "throw_skill": 0
   },
   "personality": {
-    "activity": 0.4,
+    "energy": 0.4,
     "stamina": 0.8,
-    "sociability": 0.9
+    "sympathy": 0.75,
+    "kin": {
+      "survivor": 0.5
+    }
   }
 }

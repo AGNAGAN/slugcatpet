@@ -135,6 +135,11 @@ CARD = (
     f"#cardRoot{{background:{BG_CARD};border-radius:14px;border:1px solid {BORDER};}}"
     f"#cardTitle{{color:{TEXT_SOFT};font-size:15px;font-weight:600;background:transparent;}}"
     f"#cardText{{color:{TEXT};font-size:13px;background:transparent;}}"
+    f"#cardNote{{color:{TEXT_SOFT};font-size:13px;background:{INPUT_BG};border:1px solid {BORDER};"
+    "border-radius:8px;padding:8px 10px;}"
+    "#cardNote QScrollBar:vertical{width:6px;background:transparent;margin:0;}"
+    f"#cardNote QScrollBar::handle:vertical{{background:{BORDER};border-radius:3px;min-height:20px;}}"
+    "#cardNote QScrollBar::add-line:vertical,#cardNote QScrollBar::sub-line:vertical{height:0;}"
     "QLabel{background:transparent;}"
     "QPushButton{font-size:12px;padding:6px 14px;border-radius:8px;}"
     + _BTN_PRIMARY
@@ -146,6 +151,19 @@ CARD = (
     f"border:1px solid {BORDER};background:{TRACK_BG};}}"
     f"QRadioButton::indicator:checked{{background:{ACCENT_BTN_HOVER};border-color:{ACCENT_BTN_HOVER};}}"
     + TOOLTIP
+)
+
+PEARL_EDITOR = (
+    CARD + f"QPlainTextEdit{{background:{INPUT_BG};color:{TEXT};border:1px solid {BORDER};border-radius:6px;"
+    "padding:4px 6px;font-size:13px;}"
+    + f"QCheckBox{{color:{TEXT};font-size:12px;spacing:8px;background:transparent;}}"
+    + "QCheckBox::indicator{width:13px;height:13px;border-radius:3px;"
+    + f"border:1px solid {BORDER};background:{INPUT_BG};}}"
+    + f"QCheckBox::indicator:checked{{background:{ACCENT_BTN_HOVER};border-color:{ACCENT_BTN_HOVER};}}"
+    + f"#pearlCount{{color:{TEXT_HINT};font-size:11px;background:transparent;}}"
+    + "#pearlSwatch{border:2px solid transparent;border-radius:12px;padding:0;"
+    + "min-width:24px;max-width:24px;min-height:24px;max-height:24px;}"
+    + f"#pearlSwatch:checked{{border-color:{TEXT};}}"
 )
 
 FORM = (

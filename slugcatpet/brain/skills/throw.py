@@ -55,8 +55,8 @@ def wieldable(fsm, s, hunting=False):
     )
 
 
-def wieldable_items(fsm, hunting=False):
-    return [s for s in fsm.items(THROWABLE) if wieldable(fsm, s, hunting)]
+def wieldable_items(fsm, hunting=False, use=THROWABLE):
+    return [s for s in fsm.items(use) if wieldable(fsm, s, hunting)]
 
 
 def in_band(body, point):
@@ -71,15 +71,17 @@ def in_band(body, point):
 
 
 class WeaponPickup:
-    """选一件地上的武器走过去拿起；update() 返回 running / got / lost / failed。"""
+    """选一件地上提供 use 的东西（默认是能扔的武器）走过去拿起；update() 返回 running / got / lost / failed。"""
 
-    def __init__(self, fsm, score, claim_state, hunting=False, accept=None):
+    def __init__(self, fsm, score, claim_state, hunting=False, accept=None, use=THROWABLE, slot="stone"):
         self.fsm = fsm
         self.body = fsm.body
         self.score = score
         self.accept = accept  # 只挑这个函数认可的武器
         self.claim_state = claim_state
         self.hunting = hunting
+        self.use = use
+        self.slot = slot
         self.target = None
         self.grab_side = "r"
         self.timer = 0
@@ -87,14 +89,14 @@ class WeaponPickup:
 
     def select(self):
         """挑 score 最小的一件并占住；没有可拿的返回 False。"""
-        stones = wieldable_items(self.fsm, self.hunting)
+        stones = wieldable_items(self.fsm, self.hunting, self.use)
         if self.accept is not None:
             stones = [s for s in stones if self.accept(s)]
         if not stones:
             return False
         c0 = self.body.chunk0
         self.target = min(stones, key=lambda s: self.score(s, math.hypot(c0.x - s.x, c0.y - s.y)))
-        self.fsm.social.claim(self.fsm.win, "stone", self.target, self.claim_state)
+        self.fsm.social.claim(self.fsm.win, self.slot, self.target, self.claim_state)
         self.grab_side = self._pick_side()
         self.fails = 0
         self.timer = 0
@@ -124,7 +126,7 @@ class WeaponPickup:
         if self._grab_dist() < GRAB_REACH and b.free_hand() is not None:
             b.stop_walk()
             b.grab(s, b.free_hand(self.grab_side))
-            self.fsm.social.release(self.fsm.win, "stone")
+            self.fsm.social.release(self.fsm.win, self.slot)
             return "got"
         stalled = abs(b.chunk0.x - s.x) < GRAB_REACH or not b.is_moving()
         if stalled and self.timer > APPROACH_TIMEOUT:

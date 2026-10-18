@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 
+from ... import tuning
 from ...items.base import HIT_SLAM, creatures
 
 COOLDOWN = 20
@@ -100,6 +101,7 @@ class HeavyImpact:
         for o in cats:
             if stun > 0 and not o.body.dead:
                 o.behavior.apply_stun(stun, blame=False)
+                pet.window.social.bonds.nudge(pet, o, tuning.BOND_SLAM)
             _push(o.body, push_x, vy)
         for f in flies:
             f.struck(HIT_SLAM)

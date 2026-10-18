@@ -12,7 +12,9 @@ from .cursor_lick import CursorLick
 from .dodge_kill import DodgeKill
 from .fetch import Fetch, ForageBehavior
 from .hold import HoldBehavior
+from .huddle import Huddle
 from .hunt import HuntBehavior
+from .pearl_play import PearlPlayBehavior
 from .perch import PerchBehavior
 from .idle import Idle
 from .makeway import MakeWayBehavior
@@ -24,6 +26,7 @@ from .rest import Rest
 from .riv_flip import RivFlip
 from .riv_snatch import RivSnatch
 from .seek_hpole import SeekHPoleBehavior
+from .share import ShareBehavior
 from .swim import Swim
 from .wall_climb import WallClimb
 from .warmth import Warmth
@@ -56,6 +59,9 @@ BUILTIN = (
     PerchBehavior,
     RainBehavior,
     HoldBehavior,
+    Huddle,
+    ShareBehavior,
+    PearlPlayBehavior,
 )
 
 REGISTRY: dict[str, type[Behavior]] = {cls.key: cls for cls in BUILTIN}

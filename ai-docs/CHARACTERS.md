@@ -28,7 +28,7 @@
   "abilities": {"pyro": {}},
   "behaviors": {},
   "stats": {"runspeed_fac": 1.2, "max_food": 9, "drown_threshold": 0.5, "karma_cap": 0},
-  "personality": {"activity": 0.75, "sociability": 0.2, "diet": "carnivore", "meat": 4,
+  "personality": {"energy": 0.75, "sympathy": 0.2, "diet": "carnivore", "meat": 4,
                   "toy_pref": {"pyro_romp": 1.4}}
 }
 ```
@@ -71,16 +71,20 @@
 
 | 字段 | 默认 | 说明 |
 |---|---|---|
-| `activity` | 0.5 | 好动程度 |
+| `energy` | 0.5 | 精力：低的懒散，高的活泼 |
+| `sympathy` | 0.5 | 亲和：低的冷淡，高的亲人 |
+| `vary` | 0 | 新猫的精力、亲和在默认值附近随机的幅度，1 为全范围（猫崽 1） |
+| `kin` | `{}` | 猫种 → 和这种猫一见面的关系（-1–1），如僧侣和白猫互写 0.5 |
 | `stamina` | 1.0 | 耐力，越低越容易累 |
 | `cold_gain_fac` | 1.0 | 变冷的速度 |
-| `sociability` | 0.5 | 发呆时往别的猫身边走（高）还是走开（低） |
 | `swim_zeal` | 0.5 | 喜不喜欢水，0.5 及以下视为中性 |
 | `diet` | `omnivore` | `omnivore` 杂食 / `carnivore` 肉食（偏好肉，吃一样只得 1/4 格，蛋虫蛋除外）/ `vegetarian` 素食（不吃肉）/ `special` 同素食 |
 | `meat` | 0 | 啃尸体每口得几个 1/4 格，0 为不啃（猎手、工匠 4，大胃王 2） |
 | `toy_pref` | `{}` | 心情名 → 权重乘子 |
 
 每个字段具体作用在哪，见 [PARAMS.md](PARAMS.md) 的「性格」一节。
+
+`energy` 和 `sympathy` 是猫种的默认值。每只猫新建时按它（和 `vary`）定一份自己的，存进存档，用户可以在设置里每只猫那行的「性格」按钮里用滑条改。其余字段跟着猫种走。
 
 猫闲下来挑到「玩」时，会在玩的心情里按权重抽一个，`toy_pref[心情名]` 会乘到对应的权重上。心情名见 [PARAMS.md](PARAMS.md)。去爬架待着不是心情。
 

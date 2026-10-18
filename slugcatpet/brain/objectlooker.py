@@ -7,9 +7,9 @@ from .. import tuning
 
 
 class ObjectLooker:
-    def __init__(self, rng, look_fac=1.0):
+    def __init__(self, rng, traits=None):
         self.rng = rng
-        self.look_fac = look_fac
+        self.traits = traits  # 东张西望频率乘 traits.activity
         self.mode = "nothing"  # "cursor"、物体或 "nothing"
         self.time_looking = 0
 
@@ -35,7 +35,8 @@ class ObjectLooker:
     def update(self, head, candidates):
         if self.mode != "nothing" and not any(c[0] == self.mode for c in candidates):
             self._look_at_nothing()
-        if self.rng.random() < tuning.LOOK_UPDATE_PROB * self.look_fac:
+        act = 1.0 if self.traits is None else self.traits.activity
+        if self.rng.random() < tuning.LOOK_UPDATE_PROB * act:
             self._reconsider(head, candidates)
         if self.rng.random() < tuning.LOOK_NOTHING_PROB:
             self._look_at_nothing()

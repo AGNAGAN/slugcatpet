@@ -30,7 +30,7 @@ def mood_candidate(fsm, name, p, gate, one_shot=True, energy_factor=_one, before
     fsm.mood.add(
         Candidate(
             name,
-            base=p.mood_base * fsm.traits.mood_weight(name),
+            base=p.mood_base,
             start=p.mood_start,
             quit=p.mood_quit,
             decay=p.mood_decay,
@@ -40,6 +40,7 @@ def mood_candidate(fsm, name, p, gate, one_shot=True, energy_factor=_one, before
             temper_factor=_one,
             one_shot=one_shot,
             init=p.mood_init,
+            scale=lambda: fsm.traits.mood_weight(name),
         ),
         before=before,
     )

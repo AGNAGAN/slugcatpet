@@ -42,5 +42,7 @@
     "throw_skill": 0,
     "hands": 1
   },
-  "personality": {}
+  "personality": {
+    "vary": 1.0
+  }
 }

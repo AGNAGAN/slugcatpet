@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 
+from ... import tuning
 from ..state import CROWD
 
 LEAD = 10  # 按对方速度提前这么多 tick 开始让
@@ -17,6 +18,7 @@ SWIM_TURN = 0.35  # 想游方向的横向分量超过此值才算往一边游
 PATIENCE = 60  # 杆上被挡停这么久还过不去就不走了
 SHOVE_TICKS = 20  # 顶着杆尖上的猫往上挤这么久就把它顶下去
 SHOVE_FALL_VX = 3.5  # 被顶下去时的横向速度
+SHOVE_GHOST = 45  # 被顶下去后穿过别的猫的 tick，免得和杆上的猫撞翻
 YIELD = ("lie", "swap", "clear", "stop")  # 由让路状态执行的指令
 
 
@@ -103,13 +105,15 @@ def _knock_off(pet):
     """把站在杆尖上的猫顶下去，往它偏的那侧掉。"""
     b = pet.body
     if getattr(pet, "controlled", False) or pet.held is not None or not b.on_pole:
-        return
+        return False
     side = _sign(b.chunk0.x - b.pole_x) or (b.facing or 1)
     b.let_go_pole()
     b.chunk0.vx += side * SHOVE_FALL_VX
     b.chunk1.vx += side * SHOVE_FALL_VX * 0.4
+    b.ghost = SHOVE_GHOST
     if pet.behavior is not None:
         pet.behavior.pole_lost()
+    return True
 
 
 class Traffic:
@@ -150,7 +154,8 @@ class Traffic:
         for p, top in self._shoving.items():
             if self.shove[p] >= SHOVE_TICKS:
                 self.shove.pop(p)
-                _knock_off(top)
+                if _knock_off(top):
+                    self.social.bonds.nudge(p, top, tuning.BOND_SHOVE)
 
     def _scan(self, a, recs, held):
         kind = a.lane[0]

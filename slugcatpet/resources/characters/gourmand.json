@@ -32,9 +32,9 @@
     "throw_skill": 2
   },
   "personality": {
-    "activity": 0.4,
+    "energy": 0.4,
     "stamina": 0.9,
-    "sociability": 0.75,
+    "sympathy": 0.75,
     "meat": 2
   }
 }

@@ -53,6 +53,8 @@ class ItemHost:
             setattr(self, k.store, None if k.single else [])
         self._item_seeds = {}
         self._drag = None  # (kind, obj, 上一帧光标)
+        self._item_dialog = None  # 物品开着的编辑弹窗
+        self._confirm_dialog = None  # 单个移除前的确认弹窗
         self._place_mode = False
         self._place_kind = None  # 物品 key 或 "remove"
         self._place_preview = None
@@ -248,9 +250,10 @@ class ItemHost:
         if self._drag is not None and self._drag[1] is obj:
             self._drag = None
 
-    def clear_kind(self, key):
+    def clear_kind(self, key, keep=False):
+        """清掉一类物品；keep 时留下该类标记要留的（写过的珍珠）。"""
         k = _kind(key)
-        objs = list(k.objects(self))
+        objs = [o for o in k.objects(self) if not (keep and k.keeps(o))]
         for o in objs:
             self._forget(k, o)
             k.discard(self, o)
@@ -263,7 +266,7 @@ class ItemHost:
 
     def clear_all_items(self):
         for k in kinds():
-            self.clear_kind(k.key)
+            self.clear_kind(k.key, keep=True)
 
     def _remove_target(self, pos):
         """光标下最近的可移除物体；杆身上算 0，光标落在小物体内部时小物体优先。"""
@@ -281,13 +284,72 @@ class ItemHost:
         if hit is None:
             return False
         k, obj = hit
+        note = k.removal_note(obj)
+        if note is None:
+            self._remove_item(k, obj)
+        else:
+            self._confirm_remove(k, obj, note)
+        return True
+
+    def _remove_item(self, k, obj):
+        if obj not in k.objects(self):
+            return
         self._forget(k, obj)
         k.discard(self, obj)
         if k.geometry:
             self.geometry_version += 1
         self.world_version += 1
         self.update()
-        return True
+
+    def _confirm_remove(self, k, obj, note):
+        """移除前弹窗展示内容，确认才移除；弹窗期间先退出移除模式，结束后接着进。"""
+        if self._confirm_dialog is not None:
+            return
+        from PySide6.QtWidgets import QDialog
+
+        from ..ui.widgets.dialogs import ConfirmDialog
+
+        dlg = ConfirmDialog(
+            t("dlg_confirm_title"),
+            t(f"dlg_remove_{k.key}"),
+            t("dlg_remove_yes"),
+            t("dlg_kill_no"),
+            parent=self,
+            note=note or t("dlg_remove_empty"),
+        )
+
+        def done(result):
+            self._confirm_dialog = None
+            dlg.deleteLater()
+            if result == QDialog.DialogCode.Accepted:
+                self._remove_item(k, obj)
+            self.enter_remove_mode()
+
+        dlg.finished.connect(done)
+        self._confirm_dialog = dlg
+        self._exit_place_mode()
+        dlg.place_center()
+        dlg.show()
+        dlg.activateWindow()
+
+    def _secondary_target(self, pos):
+        """右键点中的物体：有右键用法的物品类型里、光标够得着的那件。"""
+        if pos is None:
+            return None
+        cx, cy = pos
+        for k in _g().grab:
+            if not k.secondary:
+                continue
+            best, bestd = None, 1e9
+            for o in k.objects(self):
+                if not k.grabbable(o):
+                    continue
+                d = k.grab_dist(o, cx, cy)
+                if d <= o.rad + k.grab_pad and d < bestd:
+                    best, bestd = o, d
+            if best is not None:
+                return k, best
+        return None
 
     def _grab_target(self, pos):
         if pos is None:
@@ -386,6 +448,11 @@ class ItemHost:
     def _items_zerog(self):
         for k in kinds():
             k.on_zerog(self)
+
+    def _draw_item_overlays(self, p):
+        for k in _g().stores:
+            if self._present(k):
+                k.draw_overlay(self, p)
 
     def _draw_items_under(self, p):
         self._draw_kinds(p, lambda k: k.draw_under(self, p))

@@ -26,10 +26,10 @@
     "spear_toss": true
   },
   "personality": {
-    "activity": 0.4,
+    "energy": 0.4,
     "stamina": 0.8,
     "cold_gain_fac": 0.5,
-    "sociability": 0.3,
+    "sympathy": 0.3,
     "diet": "vegetarian",
     "toy_pref": {
       "ceiling_play": 1.4

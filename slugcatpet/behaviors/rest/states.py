@@ -15,7 +15,7 @@ T_POINT_WAKE = 160  # 起身后指光标最长时长（tick）
 WAKE_STABILIZE_TICKS = 30  # 落地稳定多久才算醒透
 
 # 趴下的原因
-EXHAUST, REST_A_BIT, NAP, HIBERNATE = "exhaust", "rest", "nap", "hibernate"
+EXHAUST, REST_A_BIT, NAP, HIBERNATE, LOUNGE = "exhaust", "rest", "nap", "hibernate", "lounge"
 SLEEPS = (NAP, HIBERNATE)
 
 
@@ -43,6 +43,7 @@ class LieDown(State):
     energy = REST
     why = EXHAUST
     next_why = None
+    lounge_ticks = 0  # 趴着发呆多久，进入前由待机设
 
     def enter(self):
         fsm = self.fsm
@@ -62,6 +63,8 @@ class LieDown(State):
             return
         if self.why == REST_A_BIT:
             done = fsm.timer >= tuning.REST_TICKS or fsm.body.energy >= tuning.REST_DONE_ENERGY
+        elif self.why == LOUNGE:
+            done = fsm.timer >= self.lounge_ticks
         else:
             done = fsm.body.energy >= tuning.EXHAUST_EXIT_ENERGY
         if done:

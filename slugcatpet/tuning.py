@@ -18,6 +18,16 @@ PLAY_ENERGY_GATE = 0.40
 PERS_ACT_SPREAD = 1.0
 PERS_GATE_SPREAD = 0.20
 PERS_GATE_FLOOR = 0.20
+PERS_ROLL_PUSH = 1.5  # 随机个体性格时往两端推的力度（原版 PushFromHalf 1.5）
+PERS_NEUTRAL_LO = 0.35  # 精力、亲和在这两值之间时，新加的作用都不生效
+PERS_NEUTRAL_HI = 0.65
+PERS_IDLE_SLOW = 3.0  # 最懒的猫闲待时长倍数
+PERS_IDLE_FAST = 0.6  # 最活泼的猫闲待时长倍数
+PERS_LOUNGE_PROB = 0.35  # 最懒的猫闲待到点时就地趴下的概率
+PERS_SLEEPY_GAIN = 0.5  # 最懒的猫困意多涨这么多
+PERS_TEMPER_SPREAD = 0.5  # 最亲人的猫好感涨 ×1.5、跌 ×0.5，最冷淡的反过来
+PERS_LICK_SPREAD = 0.4  # 最亲人的猫舔光标前等的时间 ×0.6，最冷淡的 ×1.4
+PERS_HUNT_SHY = 0.7  # 最亲人的猫不饿时打猎的意愿 ×0.3
 
 # 做完一件事后先站一会再挑下一件
 IDLE_BREATHER = 50
@@ -218,11 +228,30 @@ LOOK_MIN_INTEREST = 0.20
 LOOK_DIST_NEAR = 400.0
 LOOK_CURSOR_BASE = 1.00
 LOOK_ITEM_BASE = 0.80
+# 猫际关系（brain/social/bonds.py）
+BOND_TICK = 40  # 每隔这么多 tick 结算一次
+BOND_NEAR = 140.0  # 两只猫的头离这么近算在一起
+BOND_NEAR_GAIN = 0.001  # 在一起时每次结算变化这么多（再乘 BOND_NEAR_BASE 加双方亲和的平均）
+BOND_REST_MULT = 3.0  # 两只都趴着、睡着时变好的倍数
+BOND_RELAX = 0.002  # 每次结算往初始关系回这么多比例
+BOND_NEAR_BASE = 0.5  # 双方亲和平均为 0 时在一起的变化倍数；平均到 -0.5 以下就越待越疏远
+FLOOR_SAME_DY = 40.0  # 两只猫臀部高度相差这么多以内算在同一层地面
+BOND_SHOVE = -0.15  # 被顶下杆尖
+BOND_SLAM = -0.15  # 被重压撞晕
+BOND_SPEAR = -0.3  # 被扔出的矛扎中
+BOND_STARE = 1.0  # 和关系好的猫对视的概率最多多这么多倍
+BOND_SHARE = 0.25  # 分享食物时
+SHARE_HOLD = 6000  # 分享的食物给对方留这么久，期间别的猫不拿
+SHARE_TOSS_VX = 1.5  # 放下时朝对方轻推的速度
+HUDDLE_TOUCH = 12.0  # 两只趴着的猫身子相隔这么近算挨着
+HUDDLE_COLD = (1.0, 0.75, 0.6)  # 挨着 0 / 1 / 2 只以上时变冷速度的倍数
+
 # 待机兜底：踱步
 PACE_PROB = 0.0016
-# 待机走位：按 sociability 决定靠近、远离或随机
-SOCIAL_WANDER_LO = 0.4
-SOCIAL_WANDER_HI = 0.6
+# 待机走位：按亲和与关系靠近或远离各只猫，都不明显时随机
+SOCIAL_SYM_PULL = 2.0  # 亲和 0 / 1 对应想靠近 -1 / 1
+SOCIAL_BOND_PULL = 1.0  # 关系 -1 / 1 再加这么多
+SOCIAL_WANDER_MIN_PULL = 0.2  # 对谁的远近意愿都不到这个就随便走
 SOCIAL_WANDER_SAMPLES = 11
 SOCIAL_WANDER_SIGMA_FRAC = 0.15
 SOCIAL_WANDER_MOVE_W = 0.6

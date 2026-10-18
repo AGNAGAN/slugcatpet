@@ -26,6 +26,7 @@ from ...i18n import t
 from ..._paths import resource_dir
 from ...window import MAX_PETS
 from .catmenu import variant_label, pet_label
+from .personality import open_personality
 from ..widgets.dialogs import ConfirmDialog, PickDialog
 from ..theme import qss
 from ...platform import autostart
@@ -257,6 +258,9 @@ class SettingsWindow(QWidget):
             sk = QPushButton(t("look_button"))
             sk.clicked.connect(lambda _c, p=pet: self._on_look(p))
             row.addWidget(sk)
+            ps = QPushButton(t("pers_button"))
+            ps.clicked.connect(lambda _c, p=pet: open_personality(p, pets, parent=self))
+            row.addWidget(ps)
             if pet.hidden:
                 vis = QPushButton(t("settings_show_pet"))
                 vis.clicked.connect(lambda _c, p=pet: w.show_pet(p) and self._rebuild())

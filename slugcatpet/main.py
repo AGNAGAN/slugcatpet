@@ -254,6 +254,7 @@ def main():
                 "variant": p.variant,
                 **p.look_state(),
                 "name": p.name,
+                "personality": p.personality,
                 "hidden": p.hidden,
                 "energy": p.body.energy,
                 "temper": p.body.temper,
@@ -266,6 +267,7 @@ def main():
             }
             for p in pet.all_pets()
         ]
+        params["bonds"] = pet.social.bonds.dump()
         if pet.cfg_keep_items:
             params["scene_last"] = scene.capture(pet)
         else:

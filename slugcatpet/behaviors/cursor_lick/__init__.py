@@ -108,6 +108,7 @@ def _mount(fsm, p):
 
     def lick_rule(cursor):
         need = _lerpmap(fsm.body.temper, -1.0, 1.0, p.dwell_ticks * 1.5, p.dwell_ticks * 0.5)
+        need *= fsm.traits.lick_wait
         if (
             fsm.state == "IdleStand"
             and not fsm.grab.active

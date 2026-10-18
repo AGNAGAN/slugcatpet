@@ -172,13 +172,11 @@ def _mount(fsm, p):
         energy=VIGOROUS,
     )
 
-    energy_gate = fsm.traits.play_gate
-
     def gate(ctx):
         return (
             not ctx.submerged
             and not getattr(fsm.body, "zerog", False)
-            and ctx.energy >= energy_gate
+            and ctx.energy >= fsm.traits.play_gate
             and _pole_reachable(fsm)
         )
 

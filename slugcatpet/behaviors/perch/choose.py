@@ -1,4 +1,4 @@
-"""选落脚点：在走得到、不用挤过别的猫的杆上位置里随机挑，合群的偏向靠近别的猫。"""
+"""选落脚点：在走得到、不用挤过别的猫的杆上位置里随机挑，偏向靠近想亲近的猫、远离想躲的猫。"""
 
 from __future__ import annotations
 
@@ -18,19 +18,26 @@ class Mark:
 
 def crowd_points(fsm):
     """别的猫的头和它们预约的落脚点。"""
+    return [(x, y) for x, y, _ in crowd_pull(fsm)]
+
+
+def crowd_pull(fsm):
+    """crowd_points 各点再带上我想靠近那只猫多少：[(x, y, w)]。"""
     out = []
     for o in fsm.social.others(fsm.win):
-        out.append((o.body.chunk0.x, o.body.chunk0.y))
+        w = fsm.social.pull(fsm.win, o)
+        out.append((o.body.chunk0.x, o.body.chunk0.y, w))
         m = fsm.social.held(o, "perch")
         if m is not None:
-            out.append((m.x, m.y))
+            out.append((m.x, m.y, w))
     return out
 
 
 def pick(fsm, cm, start, bar=None, exclude=None):
     """从 start 挑一个落脚点：(位置, 路线)；bar 给定时只在这根杆上挑；没有能去的 None。"""
     dist, came = cm.reach_costs(start, tuning.PERCH_COST_LIMIT)
-    crowd = crowd_points(fsm)
+    pulls = crowd_pull(fsm)
+    crowd = [(x, y) for x, y, _ in pulls]
     r2 = tuning.PERCH_CROWD_R**2
     cands = []
     rain = fsm.win.rain
@@ -49,15 +56,14 @@ def pick(fsm, cm, start, bar=None, exclude=None):
         return None
     rng = fsm.rng
     spot = rng.choice(cands)
-    lean = fsm.traits.sociability - 0.5
-    if crowd and rng.random() < abs(lean) * 2.0:
+    if pulls and rng.random() < max(abs(w) for _, _, w in pulls):
 
         def spread(s):
             hx, hy = cm.head(s)
-            return sum(math.hypot(hx - ox, hy - oy) for ox, oy in crowd)
+            return sum(w * math.hypot(hx - ox, hy - oy) for ox, oy, w in pulls)
 
         alt = rng.choice(cands)
-        spot = min(spot, alt, key=spread) if lean > 0 else max(spot, alt, key=spread)
+        spot = min(spot, alt, key=spread)
     return spot, cm.path_to(came, start, spot)
 
 

@@ -20,5 +20,10 @@
   "stats": {
     "max_food": 7
   },
-  "personality": {}
+  "personality": {
+    "sympathy": 0.75,
+    "kin": {
+      "monk": 0.5
+    }
+  }
 }

@@ -9,7 +9,7 @@ from .abilities import instantiate as build_abilities
 from .appearance import Look
 from . import tuning
 from .characters import get as get_cat_def
-from .characters.personality import Traits
+from .characters.personality import Traits, clean_axes, default_axes, roll_axes
 from .control.vmath import dirvec
 from .core.creature import SlugcatBody
 from .rendering.graphics import SlugcatGraphics
@@ -39,13 +39,17 @@ class PetUnit:
         spawn_x: float | None = None,
         look: Look | None = None,
         name: str = "",
+        personality: dict | None = None,
     ):
         self.window = window
         self.index = index
         self.id = pet_id
         self.variant = variant
         self.cat = get_cat_def(variant)
-        self.traits = Traits(self.cat.personality)
+        self.personality = clean_axes(personality, self.cat.personality) or roll_axes(
+            self.cat.personality, self._roll_rng()
+        )
+        self.traits = Traits(self.cat.personality, self.personality)
         self.abilities = build_abilities(self.cat)  # key → Ability
         self.tags = body_tags(self.cat.abilities)
         self.organs = {}  # 能力建的器官（key → 器官对象）
@@ -86,6 +90,7 @@ class PetUnit:
             karma=init_state.get("karma"),
             stats=self.cat.stats,
         )
+        self.body.temper_fac = self.traits.temper_fac
         for ab in self.abilities.values():
             ab.attach_body(self, self.body)
         self._apply_form()
@@ -100,9 +105,7 @@ class PetUnit:
         margin = self.layout_data.canvas_w / 2.0
         self.body.walk_min = margin
         self.body.walk_max = w._WL - margin
-        self.body.floor_spans = lambda: [
-            s for p in w.pets if p is not self and (s := p.body.lying_span()) is not None
-        ]
+        self.body.floor_spans = lambda: w.social.floor_spans(self)
         self.atlas = self._make_atlas()
         self.gfx = SlugcatGraphics(self.body, self.layout_data, self.atlas, cat=self.cat, look=self.look)
         for _ in range(40):
@@ -165,6 +168,21 @@ class PetUnit:
             if cls is not None:
                 return cls(self)
         return None
+
+    def _roll_rng(self):
+        seed = getattr(self.window, "_seed", None)  # 测试/复现用；None=随机
+        return random.Random() if seed is None else random.Random(seed * 7919 + self.index)
+
+    def set_personality(self, axes: dict):
+        """改个体性格，作用立即生效。"""
+        self.personality = clean_axes(axes, self.cat.personality)
+        self.traits.apply(self.personality)
+        self.body.temper_fac = self.traits.temper_fac
+
+    def default_personality(self) -> dict:
+        """恢复默认：猫种默认值，会随机的猫种重新随机一份。"""
+        p = self.cat.personality
+        return roll_axes(p, random.Random()) if p.vary > 0.0 else default_axes(p)
 
     def set_held(self, on):
         """定身开关。"""
@@ -374,6 +392,7 @@ class PetUnit:
             if b.cold > 0.8:
                 cg *= 0.5
             cg *= self.traits.cold_gain  # 低=更耐寒
+            cg *= tuning.HUDDLE_COLD[min(w.social.lying_beside(self), len(tuning.HUDDLE_COLD) - 1)]
             cg = clampf(cg, -1.0, tuning.COLD_GAIN_CLAMP_HI)  # 勿改
             cold_gain = cg
             b.cold += cg

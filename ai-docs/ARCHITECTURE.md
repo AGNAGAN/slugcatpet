@@ -8,7 +8,7 @@
 ```
 slugcatpet/
   core/         物理：两节质点身体、碰撞、游泳 / 憋气、尾巴、水中上下错开。不认识任何猫种或物品
-  items/        物品：果子、石头、矛、竖杆 / 横杆、暖灯、黏菌、蝙蝠、蛋虫、蛋虫蛋。每种一个子目录
+  items/        物品：果子、石头、矛、竖杆 / 横杆、暖灯、黏菌、蝙蝠、蛋虫、蛋虫蛋、珍珠。每种一个子目录
   world/        环境：雪、雨、气泡、爆炸特效（水在 core/water.py）
   abilities/    能力：舌头、飞升、爆破、空翻、水生、重压、骨针
   accessories/  配件：疤、鳃、尾巴斑点。纯外观、会动、能单独设颜色
@@ -75,7 +75,7 @@ tools/          params_doc.py（生成 ai-docs/PARAMS.md）、gen_arcs.py（生�
 | 意图 | 谁登记 | 效用 |
 |---|---|---|
 | 闲待 | 发呆 | `HANG_UTIL` |
-| 玩 | 发呆 | `PLAY_UTIL` × 好动程度，累了、困了降；选中后由心情抽签决定玩什么 |
+| 玩 | 发呆 | `PLAY_UTIL` × 精力换算的好动程度，累了、困了降；选中后由心情抽签决定玩什么 |
 | 歇一会 | 休息 | 体力越低越想 |
 | 睡 | 休息 | 困意越高越想，太冷时为 0 |
 | 吃 / 打猎 | 取果 / 打猎 | 「睡前要吃够」和「顺手吃」取大（`brain/needs.py`） |
@@ -108,6 +108,7 @@ tools/          params_doc.py（生成 ai-docs/PARAMS.md）、gen_arcs.py（生�
 | `swim` | 游泳：换气、休息之后 | | 取果：游过去抓住、就地啃 |
 | `zerog` | 失重待机：最前面 | | 取果：飘过去抓住、就地啃 |
 | `zerog_aim` | 失重时朝目标漂之后（闲逛、追食物） | 目标 x, y | 失重吐舌 |
+| `lie_down` | 主动要歇、要睡、懒着趴下之前（强制趴下、睡不走这里） | 趴下原因 | 挨着睡 |
 
 ### 技能槽
 
@@ -131,7 +132,8 @@ tools/          params_doc.py（生成 ai-docs/PARAMS.md）、gen_arcs.py（生�
 | `throwable` 能扔 | 石头、矛 | 生气扔石头 / 矛、打猎 |
 | `climbable` 能爬 | 竖杆、横杆、扎在墙上的矛 | 爬架、上横杆（溪流、圣徒的上杆方式），以及取果时的杆网寻路 |
 | `warm` 能取暖 | 暖灯 | 取暖 |
-| `carryable` 能拿 | 果子、石头、矛、黏菌、蝙蝠、蛋虫蛋、蛋虫尸体 | 手动控制时拾取 |
+| `carryable` 能拿 | 果子、石头、矛、黏菌、蝙蝠、蛋虫蛋、蛋虫尸体、珍珠 | 手动控制时拾取 |
+| `toy` 能玩 | 珍珠 | 玩珍珠 |
 
 行为用 `fsm.items(用法)` 取场上的这类物品，顺序和放置顺序一致。
 
@@ -144,6 +146,17 @@ tools/          params_doc.py（生成 ai-docs/PARAMS.md）、gen_arcs.py（生�
 - 打猎只打 `huntable` 的活物（蝙蝠要在飞），打下来能吃到多少由 `loot_quarters(traits)` 或它本身的营养定；大活物只用扎得进的武器打。
 - 骨针扎中活物按 `needle_quarters` 喂矛大师，再调目标的 `drained()`（蛋虫被吸过就不爆蛋）。
 - 雨推、舌头不粘、猫东张西望也按 `creature` 认。
+
+### 珍珠
+
+`items/pearl/`：物理沿用石头（`Pearl` 继承 `Stone`，不当武器扔），另带 `text`、`color`、`glyph`。`color` 为空是没写过的灰珍珠。
+
+- 右键（物品类型设 `secondary = True`，实现 `on_secondary`）打开 `ui/panels/pearl_editor.py`：文字最多 `TEXT_MAX` 个字符，色板 `PALETTE`，勾选悬浮符文。确认后珍珠变色；符文编号在第一次勾选时随机定下并存档。
+- 编辑期间 `editing` 为真：珍珠停在原处，不碰撞、不能被拖或被猫拿（`affords_now` 为假），猫手里的先松开。
+- 光标停在写过字的静止珍珠上 `HOVER_DELAY` 个 tick 后，`draw_overlay` 在它旁边画文字框。
+- 符文（`TinyGlyph0–13`）只在珍珠静止 `CALM_TICKS` 个 tick 后浮出，被拿起、拖着、飞行时收起。
+- 清空（`clear_all_items`）经 `keeps()` 留下写过的珍珠；逐个移除前经 `removal_note()` 弹窗展示文字，确认才移除。
+- 猫玩珍珠由 `behaviors/pearl_play/` 管：走过去拿起、拿着晃一会儿、放下或随手抛开。
 
 ### 场景存取
 
@@ -195,18 +208,24 @@ tools/          params_doc.py（生成 ai-docs/PARAMS.md）、gen_arcs.py（生�
 
 ### 性格
 
-性格数据在 `characters/personality.py` 的 `CatPersonality`，换算后的作用在同文件的 `Traits` 里，每只猫算一次。
+性格数据在 `characters/personality.py` 的 `CatPersonality`，换算后的作用在同文件的 `Traits` 里。
 行为和引擎只读 `fsm.traits`，不读原始数值。每个性格轴作用在哪，登记在同文件的 `EFFECTS`，参数文档会列出来。
 
-- 心情候选的权重统一乘 `traits.mood_weight(心情名)`（`activity` 和 `toy_pref`）。用 `mood_candidate()` 建候选就自动带上。
+- 精力（`energy`）、亲和（`sympathy`）每只猫一份（`pet.personality`，存档），新猫按猫种默认值和 `vary` 定；性格弹窗（`ui/panels/personality.py`）用 `pet.set_personality()` 改，`Traits.apply()` 原地重算，立即生效。
+- 所以行为要在用的时候读 `fsm.traits`，不要在 `mount` 时存下来。
+- 两轴在中性带（`PERS_NEUTRAL_LO`–`HI`）内时，后加的作用（闲待时长、趴着发呆、困意、好感涨跌、舔光标、打猎意愿）都不生效。
+- 好感涨跌统一在 `body.temper_shift()` 里乘 `traits.temper_fac`，各处照常调用即可。
+- 心情候选的权重在抽签时乘 `traits.mood_weight(心情名)`（精力和 `toy_pref`）。用 `mood_candidate()` 建候选就自动带上。
 - 食性用 `traits.eats(物品)` 判断想不想吃，`traits.food_time()` 让肉食者偏好肉。身体能不能吃另算，见上面的 `can_eat`。
 
 ### 多猫协调
 
 `brain/social/`，每个世界 tick 推进一次。行为只经这里了解别的猫，不直接读别的猫的内部状态。
 
-- 感知：`others(我)`、`state_of(猫)`、`others_x(我)`。
-- 占用：`claim(我, 槽, 目标, 状态)` 占住一个目标，状态结束、被拖、晕、死时自动失效；
+- 感知：`others(我)`、`state_of(猫)`、`wants_food(猫, 东西)`、`lying_beside(我)`。
+- 关系（`bonds.py`）：每对猫一个亲疏值，`bond(我, 它)` 读。两只猫离得近时按双方亲和慢慢变好或变差（都趴着变好更快），被分享时变好，被顶下杆尖、被重压撞晕、被扔出的矛扎中时变差，平时慢慢回到初始值（猫种 `kin`）。存在存档的 `bonds` 里，移除猫时清掉它的。
+- 远近意愿：`pull(我, 它)` 由我的亲和和我们的关系算出，-1 躲开到 1 凑近。闲逛走位（`others_pull`）、爬架选位、挨着睡、分享都按它。
+- 占用：`claim(我, 槽, 目标, 状态, ttl)` 占住一个目标，状态结束、被拖、晕、死、到时时自动失效；
   `free_for(我, 目标)` 判断能不能去，别的猫占着时只有比它近一半以上才抢。取果、捡石头、爬竖杆都是先判断能不能去、选定后占住。去横杆也会登记，但还不判断别的猫占没占。
 - 通行（`traffic.py`）：所有让路判断都在这里。按通道（地面、水里、吊横杆、站横杆、竖杆、失重抓杆）提前找出谁挡路、谁让，给让的一方下指令 `order(我)`：
   - 地面：让的趴下，过的跨过去。
@@ -286,7 +305,7 @@ window._do_tick
 
 `brain/objectlooker.py`，待机兜底：
 
-- 每 tick 以 `LOOK_UPDATE_PROB`（乘性格的 look 系数）的概率重新评估兴趣，目标不再存在则不看。
+- 每 tick 以 `LOOK_UPDATE_PROB`（乘精力换算的好动程度）的概率重新评估兴趣，目标不再存在则不看。
 - 看腻按评估次数计：超过 `LOOK_INTEREST_DECAY_UPDATES` 次后兴趣打折，更有意思的候选（光标、物体、别的猫）才会取代当前目标。
 - 另有 `LOOK_NOTHING_PROB` 的概率谁也不看。
 
@@ -430,6 +449,7 @@ window._do_tick
 2. 在 `Traits` 里换算成行为要用的量。
 3. 在 `EFFECTS` 登记它作用在哪。
 4. 在需要它的行为里读 `fsm.traits`。角色 JSON 的 `personality` 里就能写这个字段了。
+5. 要每只猫一份、能在弹窗里调，再加进 `AXES`，并在 `i18n.py` 加 `pers_<轴>`、`pers_<轴>_lo`、`pers_<轴>_hi` 文案。
 
 界面样式：配色在 `ui/theme/palette.py`，样式表在 `ui/theme/qss.py`。
 
