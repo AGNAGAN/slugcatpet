@@ -547,8 +547,12 @@ class ClimbMap:
             return None
         return abs(c - v) / speed, ("reach",)
 
-    def reach_costs(self, start, limit, target=None):
-        """耗时 limit 内能到的位置：({位置: 耗时}, {位置: (上一位置, 动作)})；到 target 就停。"""
+    def _wet(self, rain, spot):
+        """大雨时这个位置露天。"""
+        return rain.keeps_out(*self.head(spot))
+
+    def reach_costs(self, start, limit, target=None, rain=None):
+        """耗时 limit 内能到的位置：({位置: 耗时}, {位置: (上一位置, 动作)})；到 target 就停；给了 rain 时大雨里不经过露天的位置。"""
         dist = {start: 0.0}
         came = {}
         heap = [(0.0, start)]
@@ -564,6 +568,8 @@ class ClimbMap:
             for dst, cost, act in self.edges(s):
                 ng = g + cost
                 if ng <= limit and ng < dist.get(dst, math.inf):
+                    if rain is not None and self._wet(rain, dst):
+                        continue
                     dist[dst] = ng
                     came[dst] = (s, act)
                     heapq.heappush(heap, (ng, dst))
@@ -593,8 +599,8 @@ class ClimbMap:
             target = min(floors, key=lambda s: dist[s])
         return self.path_to(came, start, target)
 
-    def search(self, start, gx, gy):
-        """A*：够着 (gx, gy) 的路线和总耗时；找不到 None。"""
+    def search(self, start, gx, gy, rain=None):
+        """A*：够着 (gx, gy) 的路线和总耗时；找不到 None；给了 rain 时大雨里不经过露天的位置。"""
         if start is None:
             return None
         if start[0] == "F" and not self._maybe_touchable(gx, gy):
@@ -628,6 +634,8 @@ class ClimbMap:
             for dst, cost, act in self.edges(s):
                 ng = g + cost
                 if ng < best_g.get(dst, math.inf):
+                    if rain is not None and self._wet(rain, dst):
+                        continue
                     best_g[dst] = ng
                     came[dst] = (s, act)
                     heapq.heappush(openq, (ng + hcost(dst), ng, dst))

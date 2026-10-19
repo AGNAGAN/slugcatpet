@@ -8,6 +8,7 @@ IDLE, DRY, RAIN = "idle", "dry", "rain"
 DRY_DEFAULT = 25 * 60
 RAIN_DEFAULT = 5 * 60
 DRY_MIN, DRY_MAX = 60, 12 * 3600
+RAIN_MIN, RAIN_MAX = 60, 3600
 EXTEND_S = 5 * 60  # 「再晚 / 再下 5 分钟」
 SLACK_S = 15  # 轮询晚于时段结束这么久（关机、睡眠）就当中断
 HALF_MIN_S = 5 * 60  # 晴天短于这个不弹半程
@@ -52,7 +53,7 @@ class RainTimer:
 
     @rain_s.setter
     def rain_s(self, v):
-        self._cfg["rain_s"] = int(max(0, v))
+        self._cfg["rain_s"] = int(max(RAIN_MIN, min(RAIN_MAX, v))) if v else 0
 
     @property
     def loop(self) -> bool:

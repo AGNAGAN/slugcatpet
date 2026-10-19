@@ -11,6 +11,7 @@ SWP_NOMOVE = 0x0002
 SWP_NOACTIVATE = 0x0010
 WS_EX_TOPMOST = 0x00000008
 GWL_EXSTYLE = -20
+GWLP_HWNDPARENT = -8
 EVENT_SYSTEM_FOREGROUND = 0x0003
 WINEVENT_OUTOFCONTEXT = 0x0000
 WINEVENT_SKIPOWNPROCESS = 0x0002
@@ -65,6 +66,16 @@ if _IS_WIN:
     def _win_get_exstyle(hwnd: int) -> int:
         v = _GetWindowLongPtr(wintypes.HWND(hwnd), GWL_EXSTYLE)
         return int(v) if v is not None else 0
+
+    try:
+        _SetWindowLongPtr = _user32.SetWindowLongPtrW
+        _SetWindowLongPtr.restype = ctypes.c_void_p
+        _SetWindowLongPtr.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_void_p]
+    except AttributeError:
+        _SetWindowLongPtr = _user32.SetWindowLongW
+
+    def _win_set_owner(hwnd: int, owner: int) -> None:
+        _SetWindowLongPtr(wintypes.HWND(hwnd), GWLP_HWNDPARENT, owner)
 
     def _win_set_topmost(hwnd: int) -> None:
         # 置顶但不抢前台
@@ -188,5 +199,19 @@ def raise_topmost(w) -> None:
             hwnd = int(w.winId())
             if hwnd:
                 _win_set_topmost(hwnd)
+    except Exception:
+        pass
+
+
+def own_by(owner, w) -> None:
+    """让 w 成为 owner 的从属窗口：叠放永远在 owner 之上，生命周期各管各的。"""
+    if not _IS_WIN:
+        return
+    try:
+        owner.winId()
+        w.winId()
+        w.windowHandle().setTransientParent(owner.windowHandle())
+        if w.isVisible():  # 已显示的窗口 Qt 要等下次显示才生效，直接改原生属主
+            _win_set_owner(int(w.winId()), int(owner.winId()))
     except Exception:
         pass

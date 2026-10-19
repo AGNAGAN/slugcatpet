@@ -248,16 +248,15 @@ HUDDLE_COLD = (1.0, 0.75, 0.6)  # 挨着 0 / 1 / 2 只以上时变冷速度的�
 
 # 待机兜底：踱步
 PACE_PROB = 0.0016
-# 待机走位：按亲和与关系靠近或远离各只猫，都不明显时随机
+# 待机走位：往想靠近的猫身边走、离想躲的远一点，都不明显时随机
 SOCIAL_SYM_PULL = 2.0  # 亲和 0 / 1 对应想靠近 -1 / 1
 SOCIAL_BOND_PULL = 1.0  # 关系 -1 / 1 再加这么多
-SOCIAL_WANDER_MIN_PULL = 0.2  # 对谁的远近意愿都不到这个就随便走
-SOCIAL_WANDER_SAMPLES = 11
+SOCIAL_WANDER_SAMPLES = 5  # 随机候选点个数
 SOCIAL_WANDER_SIGMA_FRAC = 0.15
 SOCIAL_WANDER_MOVE_W = 0.6
 SOCIAL_WANDER_CROSS_W = 0.8
-SOCIAL_WANDER_STAY_GAIN = 0.05
-SOCIAL_WANDER_STAY_SPAN_FRAC = 0.06
+SOCIAL_WANDER_NOISE = 0.5  # 随机扰动幅度；想靠近的程度远小于它时等于随便走
+SOCIAL_WANDER_JITTER_FRAC = 0.06  # 原地附近候选点的范围
 # 待机对视：两只发呆的猫靠近时偶尔对视
 STARE_DIST_MAX = 220.0
 STARE_DIST_NEAR = 70.0

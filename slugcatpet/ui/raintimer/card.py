@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 from ...i18n import t
-from ...world.raintimer import DRY, DRY_MAX, IDLE, RAIN
+from ...world.raintimer import DRY, DRY_MAX, IDLE, RAIN, RAIN_MAX
 from ..theme import palette, qss
 from ..widgets.tips import install as install_tip
 from .text import fmt_at, fmt_span, parse_input, status_line
@@ -32,15 +32,16 @@ INPUT_MAX_MIN = DRY_MAX // 60
 class _MinutesEdit(QLineEdit):
     """分钟输入框：上下键和滚轮每次加减 1 分钟，空着时从默认时长起算。"""
 
-    def __init__(self, fallback_min):
+    def __init__(self, fallback_min, max_min=INPUT_MAX_MIN):
         super().__init__()
         self._fallback = fallback_min
+        self._max = max_min
 
     def _bump(self, d):
         s = self.text().strip()
         if s and not s.isdigit():
             return
-        m = max(1, min(INPUT_MAX_MIN, (int(s) if s else self._fallback()) + d))
+        m = max(1, min(self._max, (int(s) if s else self._fallback()) + d))
         self.setText(str(m))
         self.textEdited.emit(self.text())
 
@@ -172,10 +173,24 @@ class RainCard(QWidget):
         tm = self._timer
         chips = []
 
-        def pick(sec):
-            tm.rain_s = sec
+        def sync():
             for c, s in chips:
                 c.setChecked(s == tm.rain_s)
+
+        def pick(sec):
+            tm.rain_s = sec
+            edit.clear()
+            edit.setPlaceholderText(str(max(1, round(tm.rain_s / 60))))
+            sync()
+
+        def apply():
+            s = edit.text().strip()
+            if not s.isdigit() or not int(s):
+                edit.clear()
+                return
+            tm.rain_s = int(s) * 60
+            edit.setText(str(round(tm.rain_s / 60)))
+            sync()
 
         row = QHBoxLayout()
         row.setSpacing(4)
@@ -187,6 +202,19 @@ class RainCard(QWidget):
                 install_tip(c, t("rt_forever"))
             chips.append((c, sec))
             row.addWidget(c)
+        edit = _MinutesEdit(lambda: max(1, round(tm.rain_s / 60)), RAIN_MAX // 60)
+        edit.setFixedWidth(INPUT_W)
+        edit.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        edit.setPlaceholderText(str(max(1, round(tm.rain_s / 60))))
+        pal = edit.palette()
+        pal.setColor(QPalette.ColorRole.PlaceholderText, QColor(palette.TEXT_HINT))
+        edit.setPalette(pal)
+        if tm.rain_s and tm.rain_s not in [m * 60 for m in RAIN_PRESETS]:
+            edit.setText(str(round(tm.rain_s / 60)))
+        edit.returnPressed.connect(apply)
+        edit.editingFinished.connect(apply)
+        row.addWidget(edit)
+        row.addWidget(self._label(t("rt_unit_min"), "rainLabel"))
         return row
 
     def _after_row(self):

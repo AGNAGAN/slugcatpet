@@ -38,7 +38,9 @@ class ClimbPathReach(Reach):
             return None
         gx, gy = goal.pos()
         where = (start[0], start[1], round(start[2] / START_BUCKET)) if start[0] == "F" else start
-        key = (where, round(gx / 4.0), round(gy / 4.0))
+        rain = getattr(pet, "rain", None)
+        rain = rain if rain is not None and rain.dangerous() else None
+        key = (where, round(gx / 4.0), round(gy / 4.0), rain and rain.version)
         plans = cm.__dict__.setdefault("plans", {})
         if key not in plans:
             budget = getattr(pet, "_plan_budget", None)
@@ -46,7 +48,7 @@ class ClimbPathReach(Reach):
                 return self._last.get(goal.key())  # 这一 tick 额度满了，先按上次的结果答
             if len(plans) > PLAN_CACHE:
                 plans.clear()
-            plans[key] = cm.search(start, gx, gy)
+            plans[key] = cm.search(start, gx, gy, rain)
         if len(self._last) > PLAN_CACHE:
             self._last.clear()
         self._last[goal.key()] = plans[key]
@@ -181,7 +183,8 @@ class ClimbController:
 
     def _search(self, start):
         gx, gy = self.goal.pos()
-        return self.cm.search(start, gx, gy)
+        rain = getattr(self.pet, "rain", None)
+        return self.cm.search(start, gx, gy, rain if rain is not None and rain.dangerous() else None)
 
     def cancel(self):
         """停下；还抓着杆就接着抓着，之后去哪由上层定。"""

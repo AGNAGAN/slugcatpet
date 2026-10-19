@@ -19,6 +19,10 @@ PATIENCE = 60  # 杆上被挡停这么久还过不去就不走了
 SHOVE_TICKS = 20  # 顶着杆尖上的猫往上挤这么久就把它顶下去
 SHOVE_FALL_VX = 3.5  # 被顶下去时的横向速度
 SHOVE_GHOST = 45  # 被顶下去后穿过别的猫的 tick，免得和杆上的猫撞翻
+REST_TICKS = 10  # 被别的猫托着不动这么久就滑下来
+REST_SPEED = 1.2
+SLIP_VX = 2.5  # 滑下来时的横向速度
+SLIP_GHOST = 10  # 滑下来时穿过别的猫的 tick
 YIELD = ("lie", "swap", "clear", "stop")  # 由让路状态执行的指令
 
 
@@ -101,6 +105,33 @@ def _rec(pet):
     return _Rec(pet, ("F",), c1.x, 0.0, d, abs(c1.vx), goal, can)
 
 
+def _resting_on(pet, pets):
+    """不动地停在别的猫身上（脚不着地、也不在杆上）：返回托着它的猫，没有 None。"""
+    b = pet.body
+    if b.on_floor() or b.on_pole or b.swimming or b.chunk1.vx**2 + b.chunk1.vy**2 > REST_SPEED**2:
+        return None
+    x, y = b.chunk1.x, b.chunk1.y
+    for o in pets:
+        ob = getattr(o, "body", None)
+        if ob is None or o is pet:
+            continue
+        if any(abs(c.x - x) < CONTACT["F"] and 0.0 < c.y - y < GROUND_BAND for c in (ob.chunk0, ob.chunk1)):
+            return o
+    return None
+
+
+def _slip_off(pet, under):
+    """把停在别的猫身上的猫往外侧滑下去。"""
+    b = pet.body
+    if getattr(pet, "controlled", False) or pet.held is not None:
+        return
+    ub = under.body
+    side = _sign(b.chunk1.x - (ub.chunk0.x + ub.chunk1.x) * 0.5) or (b.facing or 1)
+    b.chunk0.vx += side * SLIP_VX
+    b.chunk1.vx += side * SLIP_VX
+    b.ghost = SLIP_GHOST
+
+
 def _knock_off(pet):
     """把站在杆尖上的猫顶下去，往它偏的那侧掉。"""
     b = pet.body
@@ -121,6 +152,8 @@ class Traffic:
         self.social = social
         self.orders = {}  # 猫 → Order
         self.tips = set()  # 有猫站着（或正爬上去）的杆尖所在通道
+        self.ground = set()  # 在地面通道上的猫
+        self.rest = {}  # 猫 → (被托着不动了几 tick, 托着它的猫)
         self.held = {}  # 猫 → 在杆上被挡停了几 tick
         self.shove = {}  # 猫 → 顶着杆尖上的猫往上挤了几 tick
         self._shoving = {}  # 本 tick 往上挤的猫 → 杆尖上的猫
@@ -129,6 +162,7 @@ class Traffic:
     def update(self):
         self.orders.clear()
         self.tips.clear()
+        self.ground.clear()
         pets = self.social.win.pets
         lanes = {}
         self._hop_cd = {p: n - 1 for p, n in self._hop_cd.items() if n > 1}
@@ -139,8 +173,16 @@ class Traffic:
             r = _rec(p)
             if r is not None:
                 lanes.setdefault(r.lane, []).append(r)
+                if r.lane[0] == "F":
+                    self.ground.add(p)
                 if r.lane[0] == "V" and p.body.animation != "ClimbOnBeam":
                     self.tips.add(r.lane)
+        rest = {}
+        for r in lanes.get(("F",), ()):
+            under = _resting_on(r.pet, pets)
+            if under is not None:
+                rest[r.pet] = (self.rest.get(r.pet, (0, None))[0] + 1, under)
+        self.rest = rest
         held = {}
         self._shoving = {}
         for recs in lanes.values():
@@ -149,6 +191,9 @@ class Traffic:
             for a in recs:
                 if a.d:
                     self._scan(a, recs, held)
+        for p, (n, under) in rest.items():
+            if n >= REST_TICKS:
+                _slip_off(p, under)
         self.held = {p: self.held.get(p, 0) + 1 for p in held}
         self.shove = {p: self.shove.get(p, 0) + 1 for p in self._shoving}
         for p, top in self._shoving.items():

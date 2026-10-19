@@ -20,7 +20,7 @@ from .rendering.primitives import blit
 from .petunit import PetUnit
 from .brain.social import Social
 from .core import chunkphys
-from .core.units import clampf, lerp
+from .core.units import TICK_RATE, clampf, lerp
 from .core.water import WaterSurface
 from .world.effects import EffectsMixin
 from .world.rain import Rain, I_MAX as RAIN_I_MAX, push_force
@@ -168,6 +168,9 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self._shelter_timer = QTimer(self)
         self._shelter_timer.setInterval(tuning.RAIN_SHELTER_POLL_MS)
         self._shelter_timer.timeout.connect(self._poll_shelters)
+        self._env_rain = QTimer(self)  # 别的程序全屏、世界冻结时，雨强度仍按时间推进
+        self._env_rain.setInterval(1000)
+        self._env_rain.timeout.connect(self._advance_env_rain)
         self._ambient_shown = QRect()  # 屏上现有雪、雨的范围
         self._ambient_ns = 0
         self._ambient_tick = -1
@@ -510,9 +513,17 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
     def freeze(self, reason):
         self._freeze.add(reason)
         self._set_mode(False)
+        if reason == "env":
+            self._env_rain.start()
+
+    def _advance_env_rain(self):
+        if "user" not in self._freeze:
+            self.rain.advance(TICK_RATE)
 
     def unfreeze(self, reason):
         self._freeze.discard(reason)
+        if reason == "env":
+            self._env_rain.stop()
         if self._shutting_down:
             return
         if reason == "env" and self._shelter_timer.isActive():  # 先取好遮挡再出画面
@@ -1227,9 +1238,11 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self.stop_control()
         pet.set_held(False)
         from .control.session import enter_control
+        from .platform.topmost import own_by
         from .ui.panels.controlhud import ControlHud
 
         hud = ControlHud(self, pet)
+        own_by(self, hud)
         enter_control(pet, hud.current_input)
         self._control_hud = hud
         hud.show()  # 须同步执行，勿 QTimer 推迟
@@ -1340,7 +1353,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
     def _static_sig(self):
         from .items import kinds
 
-        return (*(k.static_sig(self) for k in kinds()), self._ghosts is not None)
+        return (*(k.static_sig(self) for k in kinds()), self._ghosts is not None, *self._shake)
 
     def _draw_click_pads(self, p):
         """猫的抓点下铺一层近乎透明的底，接住点击。"""

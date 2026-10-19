@@ -33,6 +33,7 @@ from .control.hotkey import (
     HotkeyFilter,
 )
 from .platform import cursorfx
+from .platform.topmost import own_by
 from ._paths import user_dir
 from .i18n import t
 
@@ -237,10 +238,12 @@ def main():
     pet.show()
 
     hud = HudPanel(pet, params)
+    own_by(pet, hud)
     if params.get("hud_visible"):
         hud.toggle_visible()
 
     tab = TabBar(pet, app, params)
+    own_by(pet, tab)
     tab.show()
 
     def _write_state():
@@ -344,6 +347,7 @@ def main():
         return "env" if pet.env_hidden else None
 
     dial = RainDial(rain_timer, pet.atlas, rain_cfg, muted=lambda: player.muted, context=_dial_context)
+    own_by(pet, dial)
     pet._rain_dial = dial
     dial.on_wanted.append(settings.refresh_dial)
 

@@ -21,45 +21,24 @@ def pick_open_x(fsm, margin=120.0):
     return fsm.rng.uniform(lo, hi)
 
 
-def pick_social_wander_x(
-    lo,
-    hi,
-    self_x,
-    others,
-    rng,
-    sigma,
-    samples,
-    min_pull,
-    move_w,
-    cross_w,
-    stay_gain,
-    stay_span,
-):
-    """闲逛目标：others 为 [(挨着那只猫站的位置 x, 想靠近多少)]，往想靠近的猫身边走、离想躲的远一点。"""
-    if not others:
+def pick_social_wander_x(lo, hi, self_x, marks, gap, rng, sigma, samples, move_w, cross_w, noise, jitter):
+    """闲逛目标：marks 为 [(猫的位置 x, 想靠近多少)]。候选是想靠近的猫身边（隔 gap 站在靠我这侧）、原地附近和几个随机点，取吸引最大的。"""
+    if not marks:
         return rng.uniform(lo, hi)
     span = max(1.0, hi - lo)
     inv = -1.0 / (2.0 * sigma * sigma)
+    lazy = move_w * min(1.0, sum(abs(w) for _, w in marks))  # 没有想靠近或躲开的猫时不在乎走多远
 
-    def attract(x):
-        return sum(w * math.exp(inv * (x - ox) ** 2) for ox, w in others)
-
-    def crossed(x):
+    def score(x):
         a, b = (self_x, x) if self_x <= x else (x, self_x)
-        return sum(1 for ox, _ in others if a < ox < b)
+        pull = sum(w * math.exp(inv * (x - mx) ** 2) for mx, w in marks)
+        crossed = sum(1 for mx, _ in marks if a < mx < b)
+        return pull - lazy * abs(x - self_x) / span - cross_w * crossed + noise * rng.random()
 
-    def cost(x):
-        return -attract(x) + move_w * abs(x - self_x) / span + cross_w * crossed(x)
-
-    n = max(1, samples)
-    step = span / n
-    xs = [lo + step * (i + rng.random()) for i in range(n)]
-    if all(abs(w) < min_pull for _, w in others):
-        return min(xs, key=lambda x: cross_w * crossed(x) + rng.random())
-    best = min(xs, key=cost)
-    if cost(best) >= -attract(self_x) - stay_gain:
-        return min(max(self_x + rng.uniform(-stay_span, stay_span), lo), hi)
-    return best
+    cands = [self_x + rng.uniform(-jitter, jitter)]
+    cands += [mx + math.copysign(gap, self_x - mx) for mx, w in marks if w > rng.random()]
+    cands += [rng.uniform(lo, hi) for _ in range(samples)]
+    return max((min(max(x, lo), hi) for x in cands), key=score)
 
 
 def wander(fsm):
@@ -69,34 +48,41 @@ def wander(fsm):
     if hi <= lo:
         lo, hi = WALL_MARGIN, fsm.WL - WALL_MARGIN
     if fsm.win.rain.dangerous():
-        b.walk_to(_dry_x(fsm, lo, hi))
-        return
+        span = _dry_span(fsm, lo, hi)
+        if span is None:
+            b.walk_to(_shelter_x(fsm, lo, hi))
+            return
+        lo, hi = span
     x = pick_social_wander_x(
         lo,
         hi,
         b.chunk1.x,
-        fsm.social.others_pull(fsm.win),
+        fsm.social.wander_marks(fsm.win),
+        fsm.social.floor_gap,
         fsm.rng,
         fsm.WL * tuning.SOCIAL_WANDER_SIGMA_FRAC,
         tuning.SOCIAL_WANDER_SAMPLES,
-        tuning.SOCIAL_WANDER_MIN_PULL,
         tuning.SOCIAL_WANDER_MOVE_W,
         tuning.SOCIAL_WANDER_CROSS_W,
-        tuning.SOCIAL_WANDER_STAY_GAIN,
-        fsm.WL * tuning.SOCIAL_WANDER_STAY_SPAN_FRAC,
+        tuning.SOCIAL_WANDER_NOISE,
+        fsm.WL * tuning.SOCIAL_WANDER_JITTER_FRAC,
     )
     b.walk_to(x)
 
 
-def _dry_x(fsm, lo, hi):
-    """大雨时的闲逛目标：只在有遮挡的地面上，没有遮挡就原地不动。"""
-    rain = fsm.win.rain
+def _dry_span(fsm, lo, hi):
+    """大雨时闲逛的范围：自己脚下那段有遮挡的地面；不在遮挡下返回 None。"""
     x = fsm.body.chunk1.x
-    spans = rain.floor_spans(lo, hi, SHELTER_MARGIN)
-    for a, b in spans:
+    for a, b in fsm.win.rain.floor_spans(lo, hi, SHELTER_MARGIN):
         if a <= x <= b:
-            return fsm.rng.uniform(a, b)
-    near = rain.nearest_shelter_x(x, lo, hi, SHELTER_MARGIN)
+            return a, b
+    return None
+
+
+def _shelter_x(fsm, lo, hi):
+    """不在遮挡下时去最近的遮挡，没有遮挡就原地不动。"""
+    x = fsm.body.chunk1.x
+    near = fsm.win.rain.nearest_shelter_x(x, lo, hi, SHELTER_MARGIN)
     return x if near is None else near
 
 

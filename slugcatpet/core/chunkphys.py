@@ -322,6 +322,11 @@ def collide_objects(entities) -> None:
                 _collide_pair(objs[i], objs[j], groups[i], groups[j])
 
 
+def _grounded(o) -> bool:
+    f = getattr(o, "on_floor", None)  # 只有猫的身体有
+    return f is not None and f()
+
+
 def _collide_pair(a, b, a_chunks, b_chunks) -> None:
     if not (getattr(a, "collides_with", None) is None or a.collides_with(b)):
         return
@@ -348,6 +353,12 @@ def _collide_pair(a, b, a_chunks, b_chunks) -> None:
                 ux, uy = 1.0, 0.0
             else:
                 ux, uy = dx / dist, dy / dist
+            ga, gb = _grounded(a), _grounded(b)
+            if ga != gb:  # 着地的一方不被没着地的顶动，免得叠在身上的猫带着下面的一起漂
+                ap = ap or ga
+                bp = bp or gb
+                if ap and bp:
+                    continue
             pen = rad_sum - dist
             if ap:
                 wa, wb = 0.0, 1.0

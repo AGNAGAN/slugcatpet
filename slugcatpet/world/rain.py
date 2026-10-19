@@ -60,13 +60,13 @@ CURTAIN_LEVELS = 12  # 按有效列占比分档
 # 普通、暴雨、急雨三层：暗、亮峰值不透明度，纵向模糊半径（逻辑 px）；
 # 暴雨那层屋檐下也画（打折），急雨只在露天，拉得更长，像糊住的瀑布
 CURTAIN = ((80, 66, 10), (165, 130, 10), (235, 195, 24))
-SHELTER_K = 0.75  # 屋檐下雨幕的浓度比例
+SHELTER_K = 0.375  # 屋檐下雨幕的浓度比例
 VEIL_RGB = (128, 136, 148)  # 露天暴雨的水幕颜色，背景被雨糊成一片
 VEIL_MAX = 0.3
 DIM_RGB = (19, 19, 21)  # 暴雨时猫和物品压暗到的颜色
 DIM_GRAY = 38  # 桌面压暗到的灰度上限，按列在 0 到它之间（原版 0.15 × rand）
 DIM_FROM = 0.5  # 画面强度过这个值开始压暗，和暴雨阶段同起（原版 0.9，桌面没法真的扭曲，提前一些）
-DIM_MAX = 0.6
+DIM_MAX = 0.36
 
 SPLASH_ATLAS = "waterSprites"
 SPLASH_FRAMES = ("90DegreeSplash", "TallSplash")  # 宽、高两种水花
@@ -277,6 +277,7 @@ class Rain:
         self._HL = 0.0
         self._rects = []
         self._reach = []
+        self.version = 0  # 遮挡变一次加一
         self.runs = []  # 露天段 (x0, x1, y)：雨从顶上落到 y，按窗口精确边缘切
         self.open_frac = 1.0  # 露天面积占全屏的比例
         self.splashes = []  # (落点 y, x, 种类, 转角, x 缩放, y 缩放, 色档)
@@ -315,6 +316,7 @@ class Rain:
             self._rebuild()
 
     def _rebuild(self):
+        self.version += 1
         WL, HL = self._WL, self._HL
         rects = [
             (max(x0, 0.0), max(y0, 0.0), min(x1, WL), min(y1, HL))
@@ -362,9 +364,31 @@ class Rain:
         """雨正在或将要大到露天会被推。"""
         return self.intensity > 0.0 and max(self.target, self.intensity) >= DANGER
 
-    def keeps_out(self, x, y) -> bool:
-        """大雨时这里露天，猫不去。"""
-        return self.dangerous() and self.exposed(x, y)
+    def keeps_out(self, x, y, margin=SHELTER_MARGIN) -> bool:
+        """大雨时这里露天或离遮挡边缘不到 margin，猫不去；遮挡太窄就只留正中。"""
+        if not self.dangerous():
+            return False
+        if self.exposed(x, y) or not self._reach:
+            return self.exposed(x, y)
+        reach, n = self._reach, len(self._reach)
+        i = min(max(int(x // COL_W), 0), n - 1)
+        k = math.ceil(2.0 * margin / COL_W) + 1
+        a = b = None
+        for j in range(1, k + 1):
+            if i - j < 0:
+                break
+            if reach[i - j] > y:
+                a = (i - j + 1) * COL_W
+                break
+        for j in range(1, k + 1):
+            if i + j >= n:
+                break
+            if reach[i + j] > y:
+                b = (i + j) * COL_W
+                break
+        if a is not None and b is not None:
+            margin = min(margin, (b - a) * 0.5 - COL_W)
+        return (a is not None and x - a < margin) or (b is not None and b - x < margin)
 
     def floor_spans(self, lo, hi, margin):
         """地面上有遮挡的 x 段，限在 [lo, hi] 内、两头各收 margin。"""
@@ -415,6 +439,11 @@ class Rain:
         if chunks and rng.random() ** 1.2 * 2.0 * chunks < force:
             return rng.randint(1, max(1, int(9.0 * force)))
         return 0
+
+    def advance(self, ticks):
+        """不画的时候把雨强度按 tick 数往目标推进。"""
+        i, tgt = self.intensity, self.target
+        self.intensity = min(i + RISE * ticks, tgt) if i < tgt else max(i - FALL * ticks, tgt)
 
     def step(self):
         i, tgt = self.intensity, self.target
@@ -601,8 +630,10 @@ class Rain:
         heavy = (curtain_level(inv_lerp(0.4, 0.75, g)), inv_lerp(0.4, 0.85, g))  # 暴雨那层
         if slot == "shelter":
             parts = [("g", 0, 1, dim), ("c", 1, heavy[0], heavy[1] * SHELTER_K)]
-        else:
+        elif slot == "streak":
             fade = 1.0 - STREAK_FADE * inv_lerp(0.5, 0.95, g)
+            parts = [("s", k, bucket, layer_opacity(k, g) * fade) for k in range(len(LAYERS))]
+        else:
             torrent = inv_lerp(0.55, 1.0, g)
             parts = [
                 ("g", 0, 1, dim),
@@ -615,9 +646,12 @@ class Rain:
                 ),
                 ("c", 1, *heavy),
                 ("c", 2, curtain_level(inv_lerp(0.5, 1.0, g)), torrent),
-                *(("s", k, bucket, layer_opacity(k, g) * fade) for k in range(len(LAYERS))),
             ]
-        return tuple((kind, k, lv, round(op * OP_STEPS)) for kind, k, lv, op in parts if op > 0.02 and lv)
+        return tuple(
+            (kind, k, lv, round(op * OP_STEPS))
+            for kind, k, lv, op in parts
+            if op > 0.02 and (lv or kind == "s")
+        )
 
     def _splashes(self):
         """各色档的两种水花贴图；没有图集时返回 None。"""
@@ -715,7 +749,8 @@ class Rain:
                 p.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
         offset = QPointF(-fx % CURTAIN_W, -fy % CURTAIN_H)
         for region, (pm, op) in (
-            (open_air, self._layers("open", scale, bucket, g)),
+            (open_air, self._layers("open", scale, 0, g)),
+            (open_air, self._layers("streak", scale, bucket, g)),
             (shelter, self._layers("shelter", scale, 0, g)),
         ):
             if pm is None or region.isEmpty():
