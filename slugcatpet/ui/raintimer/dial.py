@@ -3,7 +3,7 @@
 from __future__ import annotations
 import time
 
-from PySide6.QtCore import QPoint, QPointF, QRect, QRectF, QSize, Qt, QTimer
+from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, QRectF, QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QGuiApplication, QImage, QPainter, QPainterPath, QPen, QRadialGradient
 from PySide6.QtWidgets import QLabel, QWidget
 
@@ -60,18 +60,23 @@ def karma_frame(k) -> str:
 
 
 class RainDial(QWidget):
-    def __init__(self, timer, atlas, cfg, muted=lambda: False, context=lambda: None):
+    def __init__(
+        self, timer, atlas, cfg, muted=lambda: False, context=lambda: None, parent=None, embedded=False
+    ):
         """context() 返回 None、"env"（别的程序全屏）或 "frozen"（定格并收起界面）。"""
-        super().__init__()
+        self._embedded = bool(embedded and parent is not None)
+        self._host = parent if self._embedded else None
+        super().__init__(parent if self._embedded else None)
         self.timer = timer
         self._atlas = atlas
         self._cfg = cfg
         self._context = context
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool
-        )
+        if not self._embedded:
+            self.setWindowFlags(
+                Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool
+            )
+            self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.setFixedSize(SIZE, SIZE)
         self._place()
 
@@ -95,11 +100,12 @@ class RainDial(QWidget):
         self.on_wanted = []  # 常驻开关变了时回调，设置页据此同步
 
         self._sounds = KarmaSounds(muted, self)
-        self._tip = QLabel("", None)
-        self._tip.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.ToolTip
-        )
-        self._tip.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        self._tip = QLabel("", self._host if self._embedded else None)
+        if not self._embedded:
+            self._tip.setWindowFlags(
+                Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.ToolTip
+            )
+            self._tip.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self._tip.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self._tip.setStyleSheet(qss.TOAST)
         self._tip.hide()
@@ -113,6 +119,8 @@ class RainDial(QWidget):
         self._poll.timeout.connect(self._on_poll)
         self._poll.start()
         timer.listeners.append(self._on_event)
+        if self._embedded:
+            self._host.installEventFilter(self)
         if self.wanted:
             self._wake()
 
@@ -141,14 +149,30 @@ class RainDial(QWidget):
         self._wake()
         raise_topmost(self)
 
+    def _center_local(self) -> QPoint:
+        return self.pos() + self.rect().center()
+
+    def _center_global(self) -> QPoint:
+        if self._embedded:
+            return self.mapToGlobal(self.rect().center())
+        return self.frameGeometry().center()
+
     def open_card(self):
         """在表盘旁边打开雨循环卡片，开着时表盘不收起。"""
-        c = self.frameGeometry().center()
+        c = self._center_local() if self._embedded else self._center_global()
         r = int(BACKDROP_R)
         anchor = QRect(c - QPoint(r, r), QSize(2 * r, 2 * r))
         self._menu_open = True
         self._tip.hide()
-        RainCard.open_for(self.timer, self, anchor, ("right", "left", "above", "below"), self._card_closed)
+        RainCard.open_for(
+            self.timer,
+            self,
+            anchor,
+            ("right", "left", "above", "below"),
+            self._card_closed,
+            parent=self._host if self._embedded else None,
+            embedded=self._embedded,
+        )
 
     def _card_closed(self):
         self._menu_open = False
@@ -181,12 +205,32 @@ class RainDial(QWidget):
 
     def _place(self):
         pos = self._cfg.get("dial_pos")
-        scr = QGuiApplication.primaryScreen()
-        area = scr.availableGeometry() if scr is not None else None
+        if not self._embedded:
+            scr = QGuiApplication.primaryScreen()
+            area = scr.availableGeometry() if scr is not None else None
+            if isinstance(pos, list) and len(pos) == 2:
+                self.move(int(pos[0]), int(pos[1]))
+            elif area is not None:
+                self.move(area.right() - SIZE - 40, area.bottom() - SIZE - 40)
+            return
+        area = self._host.rect()
         if isinstance(pos, list) and len(pos) == 2:
-            self.move(int(pos[0]), int(pos[1]))
-        elif area is not None:
-            self.move(area.right() - SIZE - 40, area.bottom() - SIZE - 40)
+            x = max(area.x(), min(int(pos[0]), area.x() + area.width() - SIZE))
+            y = max(area.y(), min(int(pos[1]), area.y() + area.height() - SIZE))
+            self.move(x, y)
+        else:
+            self.move(area.x() + area.width() - SIZE - 40, area.y() + area.height() - SIZE - 40)
+        if self._embedded and self._host is not None:
+            self._host.refresh_input_region(force=True)
+
+    def eventFilter(self, obj, ev):
+        if self._embedded and obj is self._host:
+            try:
+                if ev.type() == QEvent.Type.Resize:
+                    self._place()
+            except AttributeError:
+                pass
+        return super().eventFilter(obj, ev)
 
     # 时钟
 
@@ -277,10 +321,18 @@ class RainDial(QWidget):
         if text != self._tip.text():
             self._tip.setText(text)
             self._tip.adjustSize()
-        g = self.frameGeometry()
-        self._tip.move(g.center().x() - self._tip.width() // 2, int(g.center().y() + BACKDROP_R + 4))
+        c = self._center_local() if self._embedded else self._center_global()
+        y = int(c.y() + BACKDROP_R + 4)
+        if self._embedded:
+            x = max(0, min(c.x() - self._tip.width() // 2, self._host.width() - self._tip.width()))
+            y = max(0, min(y, self._host.height() - self._tip.height()))
+        else:
+            x = c.x() - self._tip.width() // 2
+        self._tip.move(x, y)
         if not self._tip.isVisible():
             self._tip.show()
+            if self._embedded:
+                self._tip.raise_()
 
     def enterEvent(self, ev):
         self._hover = True
@@ -310,9 +362,14 @@ class RainDial(QWidget):
         self._wake()
         self.update()
 
+    def _pointer_pos(self, ev) -> QPoint:
+        if self._embedded:
+            return self.pos() + ev.position().toPoint()
+        return ev.globalPosition().toPoint()
+
     def mousePressEvent(self, ev):
         if ev.button() == Qt.MouseButton.LeftButton:
-            self._press = (ev.globalPosition().toPoint(), self.pos())
+            self._press = (self._pointer_pos(ev), self.pos())
             self._dragging = False
         elif ev.button() == Qt.MouseButton.RightButton:
             self.open_card()
@@ -321,12 +378,20 @@ class RainDial(QWidget):
         if self._press is None:
             return
         start, origin = self._press
-        delta = ev.globalPosition().toPoint() - start
+        delta = self._pointer_pos(ev) - start
         if not self._dragging and delta.manhattanLength() > DRAG_THRESH:
             self._dragging = True
             self._tip.hide()
         if self._dragging:
-            self.move(origin + delta)
+            p = origin + delta
+            if self._embedded:
+                p = QPoint(
+                    max(0, min(p.x(), max(0, self._host.width() - self.width()))),
+                    max(0, min(p.y(), max(0, self._host.height() - self.height()))),
+                )
+            self.move(p)
+            if self._embedded:
+                self._host.refresh_input_region(force=True)
 
     def mouseReleaseEvent(self, ev):
         if ev.button() != Qt.MouseButton.LeftButton or self._press is None:
@@ -485,7 +550,15 @@ class RainDial(QWidget):
     def showEvent(self, ev):
         self._wake()
         super().showEvent(ev)
+        if self._embedded:
+            self.raise_()
+        refresh = getattr(self._host, "refresh_input_region", None) if self._embedded else None
+        if refresh is not None:
+            refresh(force=True)
 
     def hideEvent(self, ev):
         self._tip.hide()
         super().hideEvent(ev)
+        refresh = getattr(self._host, "refresh_input_region", None) if self._embedded else None
+        if refresh is not None:
+            refresh(force=True)

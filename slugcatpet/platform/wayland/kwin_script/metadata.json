@@ -1,0 +1,12 @@
+{
+    "KPlugin": {
+        "Id": "slugcatpet",
+        "Name": "SlugcatPet overlay bridge",
+        "Description": "Places the SlugcatPet overlay, keeps it above other windows, and forwards the global cursor.",
+        "Version": "1.0",
+        "License": "MIT",
+        "EnabledByDefault": false
+    },
+    "X-Plasma-API": "javascript",
+    "X-Plasma-MainScript": "code/main.js"
+}

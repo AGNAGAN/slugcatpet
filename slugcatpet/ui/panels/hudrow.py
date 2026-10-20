@@ -253,17 +253,27 @@ class PetRow(QFrame):
             )
         return pm
 
+    def _hud_point(self, ev):
+        """事件点 → HUD 所在坐标；嵌入时是 overlay 本地坐标。"""
+        if getattr(self.hud, "_embedded", False):
+            return self.mapTo(self.hud, ev.position().toPoint())
+        return ev.globalPosition().toPoint()
+
     def mousePressEvent(self, ev):
         if ev.button() == Qt.MouseButton.LeftButton:
-            self._drag_from = ev.globalPosition().toPoint()
-            self._start_tl = self.hud.frameGeometry().topLeft()
+            self._drag_from = self._hud_point(ev)
+            self._start_tl = (
+                self.hud.pos()
+                if getattr(self.hud, "_embedded", False)
+                else self.hud.frameGeometry().topLeft()
+            )
             self._moved = False
             ev.accept()
 
     def mouseMoveEvent(self, ev):
         if self._drag_from is None or not (ev.buttons() & Qt.MouseButton.LeftButton):
             return
-        delta = ev.globalPosition().toPoint() - self._drag_from
+        delta = self._hud_point(ev) - self._drag_from
         if not self._moved and delta.manhattanLength() <= _DRAG_THRESH:
             return
         self._moved = True
@@ -275,5 +285,10 @@ class PetRow(QFrame):
             moved = self._moved
             self._drag_from = None
             if not moved:
-                self.pet.window.open_cat_menu(self.pet, ev.globalPosition().toPoint())
+                host = self.pet.window
+                if getattr(self.hud, "_embedded", False):
+                    local = self.mapTo(host, ev.position().toPoint())
+                    host.open_cat_menu(self.pet, local, local=True)
+                else:
+                    host.open_cat_menu(self.pet, ev.globalPosition().toPoint())
             ev.accept()

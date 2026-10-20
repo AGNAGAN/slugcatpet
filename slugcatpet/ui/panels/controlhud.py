@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QLayout
-from PySide6.QtCore import QPoint, Qt, QTimer
+from PySide6.QtCore import QEvent, QPoint, Qt, QTimer
 from PySide6.QtGui import QGuiApplication
 
 from ...i18n import t
@@ -22,8 +22,10 @@ _PAUSED_QSS = qss.PAUSED_TEXT
 
 
 class ControlHud(QWidget):
-    def __init__(self, window, pet):
-        super().__init__()
+    def __init__(self, window, pet, parent=None, embedded=False):
+        self._embedded = bool(embedded and parent is not None)
+        self._host = parent if self._embedded else None
+        super().__init__(parent if self._embedded else None)
         self._window = window
         self.pet = pet
         self._held = set()
@@ -31,9 +33,10 @@ class ControlHud(QWidget):
         self._drag = None
         self._keymap = {}
 
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool
-        )
+        if not self._embedded:
+            self.setWindowFlags(
+                Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool
+            )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)  # 勿设 WA_ShowWithoutActivating，键盘唯一入口
 
@@ -43,6 +46,17 @@ class ControlHud(QWidget):
         self._watch = QTimer(self)
         self._watch.timeout.connect(self._check_session)
         self._watch.start(WATCH_MS)
+        if self._embedded:
+            self._host.installEventFilter(self)
+
+    def eventFilter(self, obj, ev):
+        if self._embedded and obj is self._host:
+            try:
+                if ev.type() == QEvent.Type.Resize:
+                    self._place()
+            except AttributeError:
+                pass
+        return super().eventFilter(obj, ev)
 
     def _build(self):
         outer = QVBoxLayout(self)
@@ -87,9 +101,9 @@ class ControlHud(QWidget):
     def _place(self):
         self.layout().activate()
         size = self.sizeHint()
-        screen = QGuiApplication.primaryScreen().availableGeometry()
-        x = screen.x() + (screen.width() - size.width()) // 2
-        y = screen.y() + screen.height() - size.height() - BOTTOM_MARGIN
+        screen = self._host.rect() if self._embedded else QGuiApplication.primaryScreen().availableGeometry()
+        x = max(screen.x(), screen.x() + (screen.width() - size.width()) // 2)
+        y = max(screen.y(), screen.y() + screen.height() - size.height() - BOTTOM_MARGIN)
         self.move(x, y)
 
     # 输入来源，暂停时返回空包防冻结
@@ -122,14 +136,37 @@ class ControlHud(QWidget):
         self.setWindowOpacity(0.7 if paused else 1.0)
         self.layout().activate()  # 文字宽度变了，按原中心重新摆
         w, h = self.width(), self.height()
-        self.move(clamp_rect(QPoint(cx - w // 2, cy - h // 2), w, h))
+        p = QPoint(cx - w // 2, cy - h // 2)
+        if self._embedded:
+            p = QPoint(
+                max(0, min(p.x(), max(0, self._host.width() - w))),
+                max(0, min(p.y(), max(0, self._host.height() - h))),
+            )
+        else:
+            p = clamp_rect(p, w, h)
+        self.move(p)
+        if self._embedded:
+            self._host.refresh_input_region(force=True)
 
     # 焦点：show 即抢焦（需同步栈内）
     def showEvent(self, e):
         super().showEvent(e)
-        self.activateWindow()
+        if self._embedded:
+            # 子控件不能自己成为顶层焦点代理，先激活 overlay 表面。
+            self.window().activateWindow()
+        else:
+            self.activateWindow()
         self.raise_()
         self.setFocus()
+        refresh = getattr(self._window, "refresh_input_region", None)
+        if refresh is not None:
+            refresh(force=True)
+
+    def hideEvent(self, e):
+        super().hideEvent(e)
+        refresh = getattr(self._window, "refresh_input_region", None)
+        if refresh is not None:
+            refresh(force=True)
 
     def focusInEvent(self, e):
         super().focusInEvent(e)
@@ -160,14 +197,28 @@ class ControlHud(QWidget):
 
     def mousePressEvent(self, ev):
         if ev.button() == Qt.MouseButton.LeftButton:
-            self._drag = ev.globalPosition().toPoint() - self.frameGeometry().topLeft()
-            self.activateWindow()
+            if self._embedded:
+                self._drag = ev.position().toPoint()
+                self.window().activateWindow()
+            else:
+                self._drag = ev.globalPosition().toPoint() - self.frameGeometry().topLeft()
+                self.activateWindow()
             self.setFocus()
             ev.accept()
 
     def mouseMoveEvent(self, ev):
         if self._drag is not None and ev.buttons() & Qt.MouseButton.LeftButton:
-            self.move(clamp_rect(ev.globalPosition().toPoint() - self._drag, self.width(), self.height()))
+            if self._embedded:
+                pos = self.pos() + ev.position().toPoint() - self._drag
+                pos = QPoint(
+                    max(0, min(pos.x(), max(0, self._host.width() - self.width()))),
+                    max(0, min(pos.y(), max(0, self._host.height() - self.height()))),
+                )
+            else:
+                pos = clamp_rect(ev.globalPosition().toPoint() - self._drag, self.width(), self.height())
+            self.move(pos)
+            if self._embedded:
+                self._host.refresh_input_region(force=True)
             ev.accept()
 
     def mouseReleaseEvent(self, ev):

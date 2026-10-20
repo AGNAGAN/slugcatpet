@@ -272,6 +272,10 @@ _STR = {
     "refresh_top": {"zh": "重新置顶", "en": "Bring to front"},
     "settings_cursor_hijack": {"zh": "猫可以抢光标", "en": "Cats can grab the cursor"},
     "settings_cursor_shape": {"zh": "光标被抢时换成忙碌样式", "en": "Busy cursor while grabbed"},
+    "settings_cursor_unavailable": {
+        "zh": "当前桌面环境不提供全局光标，猫不会跟随或舔光标。",
+        "en": "This desktop does not expose a global cursor; cats cannot follow or lick it.",
+    },
     "settings_friendly_fire": {
         "zh": "友伤：猫之间的矛和招架会伤到彼此",
         "en": "Friendly fire: spears and parries hurt other cats",
@@ -312,6 +316,25 @@ _STR = {
     "settings_fps_auto": {"zh": "自动（{hz} FPS）", "en": "Auto ({hz} FPS)"},
     "settings_power_save": {"zh": "没动静时降低帧率", "en": "Lower frame rate when idle"},
     "settings_autostart": {"zh": "开机自动启动", "en": "Launch at startup"},
+    "settings_kwin_section": {"zh": "Wayland / KWin", "en": "Wayland / KWin"},
+    "settings_kwin_connected": {
+        "zh": "KWin 集成已连接：置顶、全屏检测、挡雨窗口和全局热键可用。",
+        "en": "KWin integration is connected: topmost, fullscreen detection, rain shelters, and global hotkeys are available.",
+    },
+    "settings_kwin_degraded": {
+        "zh": "KWin 集成不可用：{reason}。置顶、全屏检测、挡雨窗口和全局热键会降级。",
+        "en": "KWin integration is unavailable: {reason}. Topmost, fullscreen detection, rain shelters, and global hotkeys are degraded.",
+    },
+    "settings_kwin_no_service": {
+        "zh": "session bus 或 DBus 服务不可用",
+        "en": "session bus or DBus service unavailable",
+    },
+    "settings_kwin_no_script": {"zh": "KWin 脚本未加载", "en": "KWin script is not loaded"},
+    "settings_kwin_reload": {"zh": "重新加载 KWin 脚本", "en": "Reload KWin script"},
+    "settings_kwin_conflicts": {
+        "zh": "以下全局热键没有生效：{keys}",
+        "en": "These global shortcuts are not active: {keys}",
+    },
     "settings_pick_title": {"zh": "添加蛞蝓猫", "en": "Add a slugcat"},
     "settings_pick_cat": {"zh": "选择要添加的蛞蝓猫", "en": "Choose a slugcat to add"},
     "settings_ok": {"zh": "确定", "en": "OK"},

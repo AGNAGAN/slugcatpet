@@ -24,6 +24,8 @@ class HoverTip(QObject):
         self._lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self._lbl.setStyleSheet(qss.TOAST)
         self._lbl.hide()
+        self._overlay_lbl: QLabel | None = None
+        self._overlay_host: QWidget | None = None
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
         self._timer.timeout.connect(self._show_now)
@@ -59,6 +61,10 @@ class HoverTip(QObject):
             txt = txt()
         if not txt:
             return
+        host = w.window()
+        if getattr(host, "is_overlay", False):
+            self._show_in_overlay(host, w, str(txt))
+            return
         self._lbl.setText(str(txt))
         self._lbl.adjustSize()
         scr = (w.screen() or QGuiApplication.primaryScreen()).availableGeometry()
@@ -71,10 +77,36 @@ class HoverTip(QObject):
         self._lbl.show()
         self._lbl.raise_()
 
+    def _show_in_overlay(self, host, w, text):
+        """overlay 内工具提示：作为子 label，坐标全程用 overlay 本地逻辑坐标。"""
+        if self._overlay_host is not host or self._overlay_lbl is None:
+            if self._overlay_lbl is not None:
+                self._overlay_lbl.deleteLater()
+            lbl = QLabel("", host)
+            lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+            lbl.setStyleSheet(qss.TOAST)
+            lbl.hide()
+            self._overlay_lbl = lbl
+            self._overlay_host = host
+        lbl = self._overlay_lbl
+        lbl.setText(text)
+        lbl.adjustSize()
+        pos = w.mapTo(host, QPoint(0, w.height() + 6))
+        x = max(0, min(pos.x(), host.width() - lbl.width()))
+        y = pos.y()
+        if y + lbl.height() > host.height():
+            y = w.mapTo(host, QPoint(0, 0)).y() - lbl.height() - 6
+        y = max(0, min(y, host.height() - lbl.height()))
+        lbl.move(x, y)
+        lbl.show()
+        lbl.raise_()
+
     def _hide(self):
         self._timer.stop()
         self._pending = None
         self._lbl.hide()
+        if self._overlay_lbl is not None:
+            self._overlay_lbl.hide()
 
     def _drop(self, w):
         self._texts.pop(w, None)

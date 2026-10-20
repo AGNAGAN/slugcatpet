@@ -439,6 +439,11 @@ class SettingsWindow(QWidget):
             w.cfg_cursor_shape,
             lambda on: (w.set_cursor_shape(on), self._write_state()),
         )
+        if not w.cursor_available:
+            hint = QLabel(t("settings_cursor_unavailable"))
+            hint.setWordWrap(True)
+            hint.setStyleSheet("color: palette(mid);")
+            v.addWidget(hint)
         self._check(
             v,
             "settings_friendly_fire",
@@ -496,6 +501,39 @@ class SettingsWindow(QWidget):
         dial = getattr(w, "_rain_dial", None)
         if dial is not None:
             self._dial_chk = self._check(v, "settings_show_dial", dial.wanted, dial.set_wanted)
+        backend = getattr(w, "desktop_backend", None)
+        if getattr(w, "_wayland", False) and backend is not None:
+            v.addWidget(self._header(t("settings_kwin_section")))
+            if not getattr(backend, "available", False):
+                reason = t("settings_kwin_no_service")
+            elif not getattr(backend, "supports_geometry", False):
+                reason = t("settings_kwin_no_script")
+            else:
+                reason = ""
+            text = (
+                t("settings_kwin_connected")
+                if not reason
+                else t("settings_kwin_degraded").format(reason=reason)
+            )
+            lbl = QLabel(text)
+            lbl.setWordWrap(True)
+            lbl.setStyleSheet("color: palette(mid);")
+            v.addWidget(lbl)
+            conflicts = backend.hotkey_conflicts() if hasattr(backend, "hotkey_conflicts") else []
+            if conflicts:
+                hint = QLabel(t("settings_kwin_conflicts").format(keys=", ".join(conflicts)))
+                hint.setWordWrap(True)
+                hint.setStyleSheet("color: palette(mid);")
+                v.addWidget(hint)
+            btn = QPushButton(t("settings_kwin_reload"))
+            btn.clicked.connect(self._reload_kwin)
+            v.addWidget(btn)
+
+    def _reload_kwin(self):
+        backend = getattr(self._window, "desktop_backend", None)
+        if backend is not None:
+            backend.reload()
+        QTimer.singleShot(0, self._rebuild)
 
     @staticmethod
     def _on_autostart(chk, on):

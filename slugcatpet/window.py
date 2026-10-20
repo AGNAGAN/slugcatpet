@@ -5,8 +5,17 @@ import math
 import os
 import random
 from PySide6.QtWidgets import QWidget
-from PySide6.QtCore import Qt, QTimer, QElapsedTimer, QCoreApplication, QEvent, QRect, QPoint, QPointF
-from PySide6.QtGui import QPainter, QColor, QGuiApplication, QCursor, QTransform
+from PySide6.QtCore import (
+    Qt,
+    QTimer,
+    QElapsedTimer,
+    QCoreApplication,
+    QEvent,
+    QRect,
+    QPoint,
+    QPointF,
+)
+from PySide6.QtGui import QPainter, QColor, QGuiApplication, QCursor, QTransform, QRegion
 
 from . import tuning
 from .appearance import Look
@@ -16,6 +25,9 @@ from .rendering.display_list import FrameRecorder, replay
 from .rendering.layout import Layout
 from .rendering.pacer import FramePacer
 from .platform import vsync
+from .platform.backend import OVERLAY_TITLE, create_backend
+from .platform.wayland import is_wayland
+from .platform.wayland.regions import interaction_region
 from .rendering.primitives import blit
 from .petunit import PetUnit
 from .brain.social import Social
@@ -80,9 +92,17 @@ def _clamp_to_bounds(o, WL, HL, min_rad=0.0):
 
 
 class PetWindow(EffectsMixin, ItemHost, QWidget):
+    is_overlay = True
+
     def __init__(self, layout: Layout | None = None, debug: bool | None = None, params=None):
         super().__init__()
         self._params = params or {}
+        self._wayland = is_wayland()
+        self._backend = create_backend()
+        self._backend_attached = False
+        self._last_local_pointer: tuple[float, float] | None = None
+        self._last_input_region = None
+        self._last_input_ns = 0
         self._seed = self._params.get("seed")
         self.atlas = AtlasSet()
         self.layout_data = layout or Layout.load()
@@ -90,8 +110,15 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             debug = os.environ.get("SLUGCATPET_DEBUG") not in (None, "", "0")
         self.debug = debug
 
-        flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool
+        flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool
+        if not self._wayland:
+            # Wayland 的置顶由 KWin 脚本负责；保留 WindowStaysOnTopHint 只会让
+            # 合成器自行决定层级，无法保证覆盖普通窗口。
+            flags |= Qt.WindowType.WindowStaysOnTopHint
         self.setWindowFlags(flags)
+        if self._wayland:
+            # KWin 脚本按这个标题识别主表面，不能和设置/音乐等顶层窗口共用。
+            self.setWindowTitle(OVERLAY_TITLE)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, not self.debug)
         if self.debug:
@@ -112,7 +139,12 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self._HL = geom["HL"]  # 地板线=工作区底边，下延后不变
         self._ground_inset = geom["ground_inset"] / s if s else 0.0
         self.resize(geom["win_w"], geom["win_h"])
-        self.move(area.x(), area.y())
+        if self._wayland:
+            # Wayland 客户端不能自己设置全局位置；先绑定目标输出，位置交给 KWin。
+            # 必须在 show() 前绑定，否则窗口会沿用旧输出的 DPR。
+            self.setScreen(screen)
+        else:
+            self.move(area.x(), area.y())
 
         self.world_tick = 0  # 物理 tick 计数
         self._static_last = (None, QRect())  # 上一帧静态内容的 (签名, 范围)
@@ -126,6 +158,8 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self._bubble_rng = random.Random(0xB0BB1E)
         self.cursor_hijack = None
         self._hud = None
+        self._tab = None
+        self._rain_dial = None
         self._pets_changed_cb = None
         self._open_settings_cb = None
         self._refresh_top_cb = None
@@ -135,6 +169,8 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self.env_listeners = []  # fn(kind, on)：kind 为 "blizzard" / "zerog" / "water" / "rain"
         self._hotkey_filter = None
         self._control_hud = None  # 非 None 即受控中
+        self._overlay_cards = set()  # 嵌入 overlay 的临时卡片/弹窗
+        self._cat_menu = None
         self._freeze = set()  # 冻结原因："env" 全屏收起、"user" 定格
         self._freeze_cb = None  # fn(on)：定格开关后由 main 处理热键、托盘、界面
 
@@ -301,11 +337,130 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
     def to_logical(self, dx, dy):
         return dx / self._scale, dy / self._scale
 
+    def overlay_rect(self) -> QRect:
+        """overlay 在合成器逻辑坐标中的全局矩形（含地板下延带）。"""
+        return QRect(self._area.x(), self._area.y(), self.width(), self.height())
+
+    def _output_name(self) -> str:
+        # 不能用 self.screen()：KWin 初次放置可能先把窗口挪到光标所在输出，
+        # 但目标输出是初始化时 setScreen() 绑定的主屏。
+        scr = self._screen or QGuiApplication.primaryScreen()
+        return scr.name() if scr is not None else ""
+
+    def target_output_name(self) -> str:
+        return self._output_name()
+
+    def _sync_backend_geometry(self) -> None:
+        if not self._wayland:
+            return
+        name = self._output_name()
+        if name:
+            self._backend.configure_overlay(name, self.overlay_rect())
+
+    @property
+    def desktop_backend(self):
+        """当前桌面后端；设置页用它显示 KWin 集成状态。"""
+        return self._backend
+
+    @property
+    def cursor_available(self) -> bool:
+        """当前后端能否提供全局光标；设置页可据此显示降级提示。"""
+        return not self._wayland or bool(self._backend.supports_cursor)
+
     def cursor_logical(self):
+        """光标在宠物世界里的逻辑坐标；Wayland 桥不可用时返回本地最后位置。"""
+        if self._wayland:
+            local = self._backend.cursor_overlay_pos()
+            if local is not None:
+                x, y = self.to_logical(local[0], local[1])
+                if 0.0 <= x <= self._WL and 0.0 <= y <= self._HL:
+                    return x, y
+                return None
+            return self._last_local_pointer
         g = self.mapFromGlobal(QCursor.pos())
         return self.to_logical(g.x(), g.y())
 
+    def _overlay_panels(self):
+        """已嵌入 overlay 的控件；顶层窗口的几何坐标不能直接用于输入区域。"""
+        out = []
+        for w in (self._tab, self._hud, self._rain_dial, self._control_hud):
+            if w is not None and w.parentWidget() is self:
+                out.append(w)
+        for w in self._overlay_cards:
+            if w is not None and w.parentWidget() is self and not w.isHidden():
+                out.append(w)
+        return out
+
+    def register_overlay_widget(self, widget) -> None:
+        """登记嵌入 overlay 的临时控件，让输入区域随它显隐/移动更新。"""
+        if widget is None:
+            return
+        if widget in self._overlay_cards:
+            self.refresh_input_region(force=True)
+            return
+        self._overlay_cards.add(widget)
+        try:
+            widget.destroyed.connect(lambda _=None, w=widget: self._overlay_cards.discard(w))
+        except (AttributeError, RuntimeError):
+            pass
+        self.refresh_input_region(force=True)
+
+    def unregister_overlay_widget(self, widget) -> None:
+        self._overlay_cards.discard(widget)
+        self.refresh_input_region(force=True)
+
+    def _reflow_overlay_cards(self) -> None:
+        """overlay 尺寸变化后，把临时卡片/弹窗重新夹回可见范围。"""
+        from .ui.overlay import clamp_local
+
+        for w in list(self._overlay_cards):
+            try:
+                if w.isHidden() or w.parentWidget() is not self:
+                    continue
+                place = getattr(w, "_place", None)
+                if callable(place):
+                    place()
+                else:
+                    w.move(clamp_local(self, w.pos(), w.width(), w.height()))
+            except (AttributeError, RuntimeError):
+                pass
+
+    def _build_input_region(self) -> QRegion:
+        active_grab = any(pet.behavior is not None and pet.behavior.grab.active for pet in self.pets)
+        modal_card = any(w.isVisible() for w in self._overlay_cards)
+        full = self.debug or self._place_mode or self._drag is not None or active_grab or modal_card
+        return interaction_region(
+            self.pets,
+            list(self._items()),
+            self._overlay_panels(),
+            self._scale,
+            self.width(),
+            self.height(),
+            full=full,
+        )
+
+    def refresh_input_region(self, *, force: bool = False) -> None:
+        """重算并提交 Wayland 输入区域；非 Wayland 会话下什么都不做。"""
+        if not self._wayland or self._shutting_down:
+            return
+        handle = self.windowHandle()
+        if handle is None:
+            return
+        now = self._clock.nsecsElapsed() if hasattr(self, "_clock") else 0
+        if not force and self._last_input_ns and now - self._last_input_ns < 33_000_000:
+            return
+        region = self._build_input_region()
+        self._last_input_ns = now
+        if not force and region == self._last_input_region:
+            return
+        self._last_input_region = QRegion(region)
+        self._backend.set_input_region(self, region)
+
     def _update_passthrough(self):
+        if self._wayland:
+            # 原生 Wayland 没有 WS_EX_TRANSPARENT：用动态输入区域代替整窗穿透。
+            self.refresh_input_region()
+            return
         if self.debug:
             return
         if self._place_mode:
@@ -330,6 +485,21 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             from .control.mouse import set_passthrough
 
             set_passthrough(self._hwnd, want)
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        if not self._backend_attached:
+            # 后端不可用时保留 False，下次 show 还能重试（例如 KWin 刚启动）。
+            self._backend_attached = bool(self._backend.attach_overlay(self))
+        self._last_input_region = None
+        self.refresh_input_region(force=True)
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self._last_input_region = None
+        if self._wayland and self.isVisible():
+            self._reflow_overlay_cards()
+            self.refresh_input_region(force=True)
 
     _PHYS_DT = 1.0 / 40.0
     _MAX_DT = 0.1  # 一帧最多补 4 个 tick，防时间螺旋
@@ -585,6 +755,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         QCoreApplication.removePostedEvents(self, QEvent.Type.Paint)
         self.setUpdatesEnabled(False)
         self.hide()
+        self._backend.shutdown()
 
     @classmethod
     def display_hz(cls):
@@ -637,7 +808,12 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             self._screen = scr
             if scr is not None:
                 scr.refreshRateChanged.connect(self._watch_screen)
+                if self._wayland:
+                    self.setScreen(scr)
         self._restart_timer()
+        if self._wayland:
+            self._sync_backend_geometry()
+            self.refresh_input_region(force=True)
 
     def set_water_depth(self, depth):
         """涨水高度（0~1）"""
@@ -696,12 +872,20 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self._HL = self._floor_target = self._calc_floor()
         self._ground_inset = geom["ground_inset"] / self._scale if self._scale else 0.0
         self.resize(geom["win_w"], geom["win_h"])
-        self.move(area.x(), area.y())
+        if self._wayland:
+            scr = QGuiApplication.screenAt(area.center())
+            if scr is not None:
+                self.setScreen(scr)
+        else:
+            self.move(area.x(), area.y())
         self._items_floor_shift(old_hl, self._HL)
         self._reground(geom["WL"], self._HL)
         self._retarget_water()
         self._shown = None
         self.update()
+        if self._wayland:
+            self._sync_backend_geometry()
+            self.refresh_input_region(force=True)
 
     def set_fullscreen_mode(self, mode):
         """别的程序全屏时：hide 收起，sink 地面沉到屏幕底。"""
@@ -880,19 +1064,29 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             self.rain.set_target(self.cfg_rain_amount * RAIN_I_MAX)
 
     def _poll_shelters(self):
-        """取挡雨窗口的矩形，换算到逻辑坐标；全屏收起时不取，免得把全屏程序当成遮挡。"""
+        """取挡雨窗口的矩形，换算到宠物世界坐标；全屏收起时不取，免得把全屏程序当成遮挡。"""
         if self.env_hidden:
             return
-        from .platform import shelters
+        s = self._scale or 1
+        if self._wayland and self._backend.supports_shelters:
+            rects = self._backend.window_rects()
+        else:
+            from .platform import shelters
 
-        dpr = self.devicePixelRatioF() or 1.0
-        ox, oy, s = self.x(), self.y(), self._scale or 1
-        hwnds = [self._hwnd] if self._hwnd else []
-        self.rain.set_shelters(
-            [
-                ((x0 / dpr - ox) / s, (y0 / dpr - oy) / s, (x1 / dpr - ox) / s, (y1 / dpr - oy) / s)
+            dpr = self.devicePixelRatioF() or 1.0
+            ox, oy = self.x(), self.y()
+            hwnds = [self._hwnd] if self._hwnd else []
+            rects = [
+                QRect(
+                    round(x0 / dpr - ox),
+                    round(y0 / dpr - oy),
+                    round((x1 - x0) / dpr),
+                    round((y1 - y0) / dpr),
+                )
                 for x0, y0, x1, y1 in shelters.window_rects(hwnds)
             ]
+        self.rain.set_shelters(
+            [(r.x() / s, r.y() / s, (r.x() + r.width()) / s, (r.y() + r.height()) / s) for r in rects]
         )
 
     def _rain_update(self):
@@ -1194,11 +1388,31 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             sp.pets_changed()
         self.update()
 
-    def open_cat_menu(self, pet, global_pos):
+    def open_cat_menu(self, pet, pos, *, local=False):
+        """在猫/ HUD 行处弹出菜单。
+
+        Wayland 下 ``pos`` 是 overlay 本地坐标；菜单以 overlay 为 parent 变成
+        xdg_popup，不再使用阻塞的 ``exec()``。
+        """
         from .ui.panels.catmenu import build_cat_menu
 
         menu = build_cat_menu(pet, self.all_pets(), parent=self)
-        menu.exec(global_pos)
+        if not self._wayland:
+            menu.exec(pos if not local else self.mapToGlobal(pos))
+            return
+        if not local:
+            pos = self.mapFromGlobal(pos)
+        if self._cat_menu is not None:
+            self._cat_menu.close()
+        self._cat_menu = menu
+
+        def gone():
+            if self._cat_menu is menu:
+                self._cat_menu = None
+            menu.deleteLater()
+
+        menu.aboutToHide.connect(gone)
+        menu.popup(self.mapToGlobal(pos))
 
     def open_settings(self):
         if self._open_settings_cb is not None:
@@ -1241,11 +1455,13 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         from .platform.topmost import own_by
         from .ui.panels.controlhud import ControlHud
 
-        hud = ControlHud(self, pet)
-        own_by(self, hud)
+        hud = ControlHud(self, pet, parent=self if self._wayland else None, embedded=self._wayland)
+        if not self._wayland:
+            own_by(self, hud)
         enter_control(pet, hud.current_input)
         self._control_hud = hud
         hud.show()  # 须同步执行，勿 QTimer 推迟
+        self.refresh_input_region(force=True)
 
     def hold_controlled(self):
         """退出手动控制，让这只猫按当前姿势定身。"""
@@ -1272,6 +1488,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         if hud is not None:
             hud.close()
             hud.deleteLater()
+        self.refresh_input_region(force=True)
 
     def _draw_water(self, p):
         from PySide6.QtGui import QPolygonF, QPen
@@ -1446,7 +1663,29 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self._shown = self._scene_painted  # 雪、雨的旧范围由 _ambient_frame 管
         self._paint_ns += self._clock.nsecsElapsed() - t0
 
+    def _modal_card_blocks(self, local_pos) -> bool:
+        """嵌入卡片打开时，卡片外的点击不再传给猫/物品。"""
+        cards = [w for w in self._overlay_cards if w.isVisible()]
+        if not cards:
+            return False
+        return not any(w.geometry().contains(local_pos) for w in cards)
+
+    def _remember_pointer(self, e) -> None:
+        if self._wayland:
+            self._last_local_pointer = self.to_logical(e.position().x(), e.position().y())
+
+    def mouseMoveEvent(self, e):
+        self._remember_pointer(e)
+        super().mouseMoveEvent(e)
+
+    def leaveEvent(self, e):
+        self._last_local_pointer = None
+        super().leaveEvent(e)
+
     def mousePressEvent(self, e):
+        self._remember_pointer(e)
+        if self._modal_card_blocks(e.position().toPoint()):
+            return
         if self._place_mode:
             if e.button() == Qt.MouseButton.LeftButton:
                 self._place_click(*self.to_logical(e.position().x(), e.position().y()))
@@ -1459,6 +1698,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             return
         if e.button() == Qt.MouseButton.RightButton:
             pos = self.to_logical(e.position().x(), e.position().y())
+            local = e.position().toPoint()
             hit = self._secondary_target(pos)
             if hit is not None:
                 hit[0].on_secondary(self, hit[1], e.globalPosition().toPoint())
@@ -1470,7 +1710,10 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
                     continue
                 name, _ = hit_test(pet.body, pet.gfx, pos, pad=GRAB_PAD)
                 if name is not None:
-                    self.open_cat_menu(pet, e.globalPosition().toPoint())
+                    if self._wayland:
+                        self.open_cat_menu(pet, local, local=True)
+                    else:
+                        self.open_cat_menu(pet, e.globalPosition().toPoint())
                     return
             return
         if e.button() == Qt.MouseButton.LeftButton:

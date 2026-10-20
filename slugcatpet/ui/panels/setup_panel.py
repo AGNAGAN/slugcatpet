@@ -5,6 +5,7 @@ from pathlib import Path
 
 from PySide6.QtWidgets import (
     QWidget,
+    QDialog,
     QLabel,
     QVBoxLayout,
     QHBoxLayout,
@@ -13,7 +14,6 @@ from PySide6.QtWidgets import (
     QFileDialog,
 )
 from PySide6.QtCore import Qt, QObject, QThread, QEventLoop, Signal
-from PySide6.QtGui import QGuiApplication
 
 from ...gameassets import detect_install, ensure_atlases, extract_atlases, extract_music, SetupError
 from ...i18n import t
@@ -55,17 +55,16 @@ class _ImportWorker(QObject):
             pass
 
 
-class SetupPanel(QWidget):
-    def __init__(self):
-        super().__init__()
+class SetupPanel(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
         self._result = False
         self._loop: QEventLoop | None = None
         self._thread: QThread | None = None
         self._worker: _ImportWorker | None = None
 
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Dialog
-        )
+        # 首次启动窗口保持普通对话框；不按屏幕坐标自定位，交给合成器放置。
+        self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self._build()
 
@@ -122,8 +121,6 @@ class SetupPanel(QWidget):
         size = self._card.size()
         self.resize(size)
         self._card.setGeometry(0, 0, size.width(), size.height())
-        scr = QGuiApplication.primaryScreen().availableGeometry()
-        self.move(scr.x() + (scr.width() - size.width()) // 2, scr.y() + (scr.height() - size.height()) // 3)
 
     def _set_busy(self):
         self._status.setText(t("setup_importing"))

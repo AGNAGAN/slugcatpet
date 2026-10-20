@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QFrame, QScrollArea
-from PySide6.QtCore import QPoint, Qt, QTimer
+from PySide6.QtCore import QEvent, QPoint, Qt, QTimer
 from PySide6.QtGui import QGuiApplication
 
 from .hudrow import PetRow
@@ -17,20 +17,27 @@ _PANEL_QSS = qss.HUD_PANEL
 
 
 class HudPanel(QWidget):
-    def __init__(self, pet, params=None):
-        super().__init__()
+    def __init__(self, pet, params=None, parent=None, embedded=False):
+        self._embedded = bool(embedded and parent is not None)
+        self._host = parent if self._embedded else None
+        super().__init__(parent if self._embedded else None)
         self.pet = pet
         self.params = params if params is not None else {}
         self._drag = None
 
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool
-        )
+        if not self._embedded:
+            self.setWindowFlags(
+                Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool
+            )
+            self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        else:
+            self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
 
         self._build()
         self._place()
+        if self._embedded:
+            self._host.installEventFilter(self)
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._refresh)
@@ -99,22 +106,42 @@ class HudPanel(QWidget):
         hint = self._panel.sizeHint()
         x = self.params.get("hud_x")
         y = self.params.get("hud_y")
-        if x is None or y is None:
+        if self._embedded:
+            screen = self._host.rect()
+        elif x is None or y is None:
             screen = QGuiApplication.primaryScreen().availableGeometry()
+        else:
+            screen = available_at(QPoint(int(x), int(y)))
+        if x is None or y is None:
             pos = QPoint(screen.x() + SCREEN_PAD, screen.y() + SCREEN_PAD)
         else:
             pos = QPoint(int(x), int(y))
-            screen = available_at(pos)
         self.resize(
             hint.width() + SCROLLBAR_W, min(hint.height(), max(120, screen.height() - SCREEN_PAD * 2))
         )
         self._move_to(pos)
 
     def _move_to(self, pos):
-        p = clamp_rect(pos, self.width(), self.height())
+        if self._embedded:
+            max_x = max(0, self._host.width() - self.width())
+            max_y = max(0, self._host.height() - self.height())
+            p = QPoint(max(0, min(pos.x(), max_x)), max(0, min(pos.y(), max_y)))
+        else:
+            p = clamp_rect(pos, self.width(), self.height())
         self.move(p)
+        if self._embedded:
+            self._host.refresh_input_region(force=True)
         self.params["hud_x"] = p.x()
         self.params["hud_y"] = p.y()
+
+    def eventFilter(self, obj, ev):
+        if self._embedded and obj is self._host:
+            try:
+                if ev.type() == QEvent.Type.Resize:
+                    self._place()
+            except AttributeError:
+                pass
+        return super().eventFilter(obj, ev)
 
     def toggle_visible(self):
         # 实时记显隐（退出时查不到）
@@ -141,14 +168,33 @@ class HudPanel(QWidget):
     # 面板背景拖动整窗，行内由 PetRow 自理
     def mousePressEvent(self, ev):
         if ev.button() == Qt.MouseButton.LeftButton:
-            self._drag = ev.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            if self._embedded:
+                self._drag = ev.position().toPoint()
+            else:
+                self._drag = ev.globalPosition().toPoint() - self.frameGeometry().topLeft()
             ev.accept()
 
     def mouseMoveEvent(self, ev):
         if self._drag is not None and ev.buttons() & Qt.MouseButton.LeftButton:
-            self._move_to(ev.globalPosition().toPoint() - self._drag)
+            if self._embedded:
+                pos = self.pos() + ev.position().toPoint() - self._drag
+            else:
+                pos = ev.globalPosition().toPoint() - self._drag
+            self._move_to(pos)
             ev.accept()
 
     def mouseReleaseEvent(self, ev):
         self._drag = None
         ev.accept()
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        refresh = getattr(self.pet, "refresh_input_region", None)
+        if refresh is not None:
+            refresh(force=True)
+
+    def hideEvent(self, e):
+        super().hideEvent(e)
+        refresh = getattr(self.pet, "refresh_input_region", None)
+        if refresh is not None:
+            refresh(force=True)

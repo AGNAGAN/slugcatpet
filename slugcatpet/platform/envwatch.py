@@ -87,6 +87,7 @@ class EnvironmentWatcher(QObject):
         pet,
         state_provider=None,
         foreground_provider=None,
+        fullscreen_provider=None,
         interval_ms: int = POLL_MS,
         parent=None,
         topmost=None,
@@ -98,6 +99,7 @@ class EnvironmentWatcher(QObject):
         self._pet = pet
         self._state_provider = state_provider or _default_state_provider
         self._foreground_provider = foreground_provider or _default_foreground_provider
+        self._fullscreen_provider = fullscreen_provider
         self._monitor_provider = monitor_provider or _default_monitor_provider
         self._fullscreen = False
         self._mode = "normal"  # normal / hide / sink
@@ -152,7 +154,13 @@ class EnvironmentWatcher(QObject):
             self._streak = 0
             self._set_mode("hide")
             return
-        full = self._foreground_fullscreen()
+        if self._fullscreen_provider is not None:
+            try:
+                full = self._fullscreen_provider()
+            except Exception:
+                full = None
+        else:
+            full = self._foreground_fullscreen()
         if full is None:
             self._streak = 0
             return

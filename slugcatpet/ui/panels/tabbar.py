@@ -74,39 +74,53 @@ def _make_icon(paint, size, dpr):
 
 
 class TabBar(QWidget):
-    def __init__(self, pet, app, params=None):
-        super().__init__()
+    def __init__(self, pet, app, params=None, parent=None, embedded=False):
+        self._embedded = bool(embedded and parent is not None)
+        self._host = parent if self._embedded else None
+        super().__init__(parent if self._embedded else None)
         self.pet = pet
         self.app = app
         self.params = params or {}
         self.expanded = False
         self._drag = None
 
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool
-        )
+        if not self._embedded:
+            self.setWindowFlags(
+                Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool
+            )
+            self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        else:
+            self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
 
-        screen = QGuiApplication.primaryScreen().availableGeometry()
+        screen = self._host.rect() if self._embedded else QGuiApplication.primaryScreen().availableGeometry()
         self._y = self.params.get("tab_y", screen.y() + (screen.height() - EXPANDED_H) // 2)
         self._read_screen()
 
         self._build()
         self._apply_collapsed()
 
-        app = QGuiApplication.instance()
-        app.primaryScreenChanged.connect(self._track_screen)
-        self._track_screen()
+        if self._embedded:
+            self._host.installEventFilter(self)
+        else:
+            app = QGuiApplication.instance()
+            app.primaryScreenChanged.connect(self._track_screen)
+            self._track_screen()
 
     def _read_screen(self):
-        """取主屏可用区，收起态贴右边，纵向位置夹回屏内。"""
-        s = QGuiApplication.primaryScreen().availableGeometry()
+        """嵌入时取 overlay 本地矩形，独立窗口时取主屏可用区。"""
+        if self._embedded:
+            s = self._host.rect()
+        else:
+            s = QGuiApplication.primaryScreen().availableGeometry()
         self._screen = s
         self._edge_x = s.x() + s.width() - COLLAPSED_W
         self._y = max(s.y(), min(s.y() + s.height() - COLLAPSED_H, int(self._y)))
 
     def _track_screen(self, *_):
+        if self._embedded:
+            self._on_screen_changed()
+            return
         QGuiApplication.primaryScreen().availableGeometryChanged.connect(self._on_screen_changed)
         self._on_screen_changed()
 
@@ -129,7 +143,11 @@ class TabBar(QWidget):
         grid.setSpacing(4)
         for c in range(3):
             grid.setColumnStretch(c, 1)
-        dpr = QGuiApplication.primaryScreen().devicePixelRatio()
+        dpr = (
+            self._host.devicePixelRatioF()
+            if self._embedded
+            else QGuiApplication.primaryScreen().devicePixelRatio()
+        )
         atlas = getattr(self.pet, "atlas", None)
         place_items = [
             (
@@ -185,12 +203,15 @@ class TabBar(QWidget):
         self._arrow_moved = False
         self._arrow.setStyleSheet(qss.TABBAR_ARROW)
 
-        # 提示用顶层窗口，免得被裁切
-        self._toast_lbl = QLabel("", None)
-        self._toast_lbl.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.ToolTip
-        )
-        self._toast_lbl.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        # 提示：独立窗口时用顶层窗口免得被裁切；嵌入时作为 overlay 子控件。
+        self._toast_lbl = QLabel("", self._host if self._embedded else None)
+        if self._embedded:
+            self._toast_lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        else:
+            self._toast_lbl.setWindowFlags(
+                Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.ToolTip
+            )
+            self._toast_lbl.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self._toast_lbl.setStyleSheet(qss.TOAST)
         self._toast_lbl.hide()
         self._toast_timer = QTimer(self)
@@ -217,6 +238,7 @@ class TabBar(QWidget):
         eff = QGraphicsOpacityEffect(self._arrow)
         eff.setOpacity(0.45)
         self._arrow.setGraphicsEffect(eff)
+        self._refresh_input_region()
 
     @staticmethod
     def _divider():
@@ -241,6 +263,12 @@ class TabBar(QWidget):
         self._arrow.setText("›")
         self._arrow.setGraphicsEffect(None)
         self._arrow.raise_()
+        self._refresh_input_region()
+
+    def _refresh_input_region(self):
+        refresh = getattr(self.pet, "refresh_input_region", None)
+        if refresh is not None:
+            refresh(force=True)
 
     def toggle(self):
         if self.expanded:
@@ -253,27 +281,43 @@ class TabBar(QWidget):
         anim.setDuration(SLIDE_MS)
         anim.setStartValue(self.geometry())
         anim.setEndValue(QRect(x, self._y, w, h))
+        if self._embedded:
+            anim.valueChanged.connect(lambda _v: self._refresh_input_region())
         anim.finished.connect(done)
         anim.start()
         self._anim = anim
 
+    def _pointer_host_y(self, ev) -> float:
+        """事件点换算到 overlay/屏幕的纵向坐标。"""
+        if self._embedded:
+            return self._arrow.mapTo(self._host, ev.position().toPoint()).y()
+        return ev.globalPosition().y()
+
     def eventFilter(self, obj, ev):
+        if self._embedded and obj is self._host:
+            try:
+                if ev.type() == QEvent.Type.Resize:
+                    self._on_screen_changed()
+            except AttributeError:
+                pass
+            return super().eventFilter(obj, ev)
         if obj is self._arrow:
             try:
                 t = ev.type()
             except AttributeError:
                 return False  # 关停期丢 type，放行
             if t == QEvent.Type.MouseButtonPress and ev.button() == Qt.MouseButton.LeftButton:
-                self._arrow_press = ev.globalPosition().y() - self.y()
+                self._arrow_press = self._pointer_host_y(ev) - self.y()
                 self._arrow_moved = False
                 return False
             if t == QEvent.Type.MouseMove and self._arrow_press is not None and not self.expanded:
-                ny = int(ev.globalPosition().y() - self._arrow_press)
+                ny = int(self._pointer_host_y(ev) - self._arrow_press)
                 ny = max(self._screen.y(), min(self._screen.y() + self._screen.height() - self.height(), ny))
                 if abs(ny - self._y) > 2:
                     self._arrow_moved = True
                 self._y = ny
                 self.move(self._edge_x, ny)
+                self._refresh_input_region()
                 return False
             if (
                 t == QEvent.Type.MouseButtonRelease
@@ -300,6 +344,18 @@ class TabBar(QWidget):
         self._toast_lbl.show()
         self._toast_lbl.raise_()
         self._toast_timer.start(1600)
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        refresh = getattr(self.pet, "refresh_input_region", None)
+        if refresh is not None:
+            refresh(force=True)
+
+    def hideEvent(self, e):
+        super().hideEvent(e)
+        refresh = getattr(self.pet, "refresh_input_region", None)
+        if refresh is not None:
+            refresh(force=True)
 
     def _collapse(self):
         if self.expanded:

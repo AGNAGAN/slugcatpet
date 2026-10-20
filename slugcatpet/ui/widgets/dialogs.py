@@ -12,8 +12,9 @@ from PySide6.QtWidgets import (
     QRadioButton,
     QButtonGroup,
 )
-from PySide6.QtCore import Qt, QPoint
+from PySide6.QtCore import QEvent, QPoint, Qt
 from PySide6.QtGui import QGuiApplication, QTextDocument, QTextOption
+from ..overlay import clamp_local
 from ..theme import qss
 from .screens import clamp_rect
 
@@ -24,15 +25,26 @@ _BTN_KIND = {"primary": "btnPrimary", "ghost": "btnGhost", "danger": "btnDanger"
 
 
 class CardDialog(QDialog):
-    def __init__(self, title: str, parent=None, width: int = 300):
+    def __init__(self, title: str, parent=None, width: int = 300, embedded: bool | None = None):
         super().__init__(parent)
+        if embedded is None:
+            # 只有 overlay 自己的弹窗才嵌入。设置/音乐里的弹窗仍是普通 transient
+            # 对话框，由合成器负责定位。
+            embedded = bool(parent is not None and getattr(parent, "is_overlay", False))
+        self._embedded = bool(embedded and parent is not None)
+        self._host = parent if self._embedded else None
         self.setObjectName("cardShell")
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Dialog
-        )
+        if self._embedded:
+            self.setWindowFlags(Qt.WindowType.Widget)
+            self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        else:
+            self.setWindowFlags(
+                Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Dialog
+            )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self._drag_off = None
         self._finished = False
+        self._app_filter = False
         self._card = QWidget(self)
         self._card.setObjectName("cardRoot")
         self._card.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -69,7 +81,11 @@ class CardDialog(QDialog):
         size = self._card.size()
         self.resize(size)
         self._card.setGeometry(0, 0, size.width(), size.height())
-        if host is not None:
+        if self._embedded:
+            area = self._host.rect()
+            x = area.x() + (area.width() - size.width()) // 2
+            y = area.y() + (area.height() - size.height()) // 3
+        elif host is not None:
             g = host.frameGeometry()
             x = g.x() + (g.width() - size.width()) // 2
             y = g.y() + (g.height() - size.height()) // 2
@@ -81,18 +97,71 @@ class CardDialog(QDialog):
             x += offset.x()
             y += offset.y()
         self.move(self._clamped(QPoint(x, y)))
+        if self._embedded:
+            self._host.register_overlay_widget(self)
+            self.raise_()
 
     def _clamped(self, pos: QPoint) -> QPoint:
+        if self._embedded:
+            return clamp_local(self._host, pos, self.width(), self.height())
         return clamp_rect(pos, self.width(), self.height())
+
+    def showEvent(self, ev):
+        super().showEvent(ev)
+        if self._embedded:
+            self._host.register_overlay_widget(self)
+            self.raise_()
+            self.window().activateWindow()
+            app = QGuiApplication.instance()
+            if app is not None and not self._app_filter:
+                app.installEventFilter(self)
+                self._app_filter = True
+
+    def hideEvent(self, ev):
+        if self._embedded and self._app_filter:
+            app = QGuiApplication.instance()
+            if app is not None:
+                app.removeEventFilter(self)
+            self._app_filter = False
+        super().hideEvent(ev)
+        if self._embedded:
+            self._host.unregister_overlay_widget(self)
+
+    def eventFilter(self, obj, ev):
+        """模态卡片打开时吃掉卡片外的点击，避免点到下面的猫或面板。"""
+        if not self._embedded or not self.isVisible():
+            return super().eventFilter(obj, ev)
+        if ev.type() != QEvent.Type.MouseButtonPress:
+            return super().eventFilter(obj, ev)
+        try:
+            local = self._host.mapFromGlobal(ev.globalPosition().toPoint())
+        except (AttributeError, RuntimeError):
+            return super().eventFilter(obj, ev)
+        if self.geometry().contains(local):
+            return super().eventFilter(obj, ev)
+        # 多张确认卡叠放时，点在另一张卡上仍要放行。
+        for other in self._host.findChildren(CardDialog):
+            if other is not self and other.isVisible() and other.geometry().contains(local):
+                return super().eventFilter(obj, ev)
+        return True
 
     def mousePressEvent(self, ev):
         if ev.button() == Qt.MouseButton.LeftButton:
-            self._drag_off = ev.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            if self._embedded:
+                self._drag_off = ev.position().toPoint()
+            else:
+                self._drag_off = ev.globalPosition().toPoint() - self.frameGeometry().topLeft()
         super().mousePressEvent(ev)
 
     def mouseMoveEvent(self, ev):
         if self._drag_off is not None and (ev.buttons() & Qt.MouseButton.LeftButton):
-            self.move(self._clamped(ev.globalPosition().toPoint() - self._drag_off))
+            if self._embedded:
+                pos = self.pos() + ev.position().toPoint() - self._drag_off
+            else:
+                pos = ev.globalPosition().toPoint() - self._drag_off
+            self.move(self._clamped(pos))
+            if self._embedded:
+                self._host.refresh_input_region(force=True)
         super().mouseMoveEvent(ev)
 
     def mouseReleaseEvent(self, ev):
@@ -158,6 +227,8 @@ class ConfirmDialog(CardDialog):
         size = self._card.size()
         self.resize(size)
         self._card.setGeometry(0, 0, size.width(), size.height())
+        if self._embedded:
+            self._host.refresh_input_region(force=True)
 
 
 class PickDialog(CardDialog):

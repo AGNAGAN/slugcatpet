@@ -34,6 +34,7 @@ from .control.hotkey import (
 )
 from .platform import cursorfx
 from .platform.topmost import own_by
+from .platform.wayland import is_wayland
 from ._paths import user_dir
 from .i18n import t
 
@@ -196,10 +197,11 @@ def _freeze_heap():
 
 
 def main():
-    from .platform.appid import set_app_id
+    from .platform.appid import set_app_id, set_desktop_file_name
 
     set_app_id()  # 须在建任何窗口之前
     app = QApplication(sys.argv)
+    set_desktop_file_name()  # Wayland app_id；KWin 脚本按它识别 overlay
     app.setQuitOnLastWindowClosed(False)
 
     from .platform.singleton import SingleInstance
@@ -234,16 +236,25 @@ def main():
 
     ensure_folder()  # 不导出模板
 
+    embedded_ui = is_wayland()
     pet = PetWindow(params=params)
     pet.show()
+    if embedded_ui:
+        from .ui.overlay import migrate_ui_coords
 
-    hud = HudPanel(pet, params)
-    own_by(pet, hud)
+        migrate_ui_coords(params, pet.overlay_rect())
+
+    hud = HudPanel(pet, params, parent=pet if embedded_ui else None, embedded=embedded_ui)
+    pet._hud = hud
+    if not embedded_ui:
+        own_by(pet, hud)
     if params.get("hud_visible"):
         hud.toggle_visible()
 
-    tab = TabBar(pet, app, params)
-    own_by(pet, tab)
+    tab = TabBar(pet, app, params, parent=pet if embedded_ui else None, embedded=embedded_ui)
+    pet._tab = tab
+    if not embedded_ui:
+        own_by(pet, tab)
     tab.show()
 
     def _write_state():
@@ -346,13 +357,44 @@ def main():
             return "frozen"
         return "env" if pet.env_hidden else None
 
-    dial = RainDial(rain_timer, pet.atlas, rain_cfg, muted=lambda: player.muted, context=_dial_context)
-    own_by(pet, dial)
+    dial = RainDial(
+        rain_timer,
+        pet.atlas,
+        rain_cfg,
+        muted=lambda: player.muted,
+        context=_dial_context,
+        parent=pet if embedded_ui else None,
+        embedded=embedded_ui,
+    )
+    if not embedded_ui:
+        own_by(pet, dial)
     pet._rain_dial = dial
     dial.on_wanted.append(settings.refresh_dial)
 
     def _open_rain(anchor=None):
         """侧边栏按钮旁或托盘旁打开雨循环卡片。"""
+        if embedded_ui:
+            if anchor is not None:
+                rect = QRect(anchor.mapTo(pet, QPoint(0, 0)), anchor.size())
+                sides = ("left", "right", "above", "below")
+            elif dial.isVisible():
+                c = dial._center_local()
+                r = int(dial.height() // 2)
+                rect = QRect(c - QPoint(r, r), QSize(2 * r, 2 * r))
+                sides = ("above", "below", "left", "right")
+            else:
+                # 托盘图标没有可靠几何：固定在 overlay 右下角，向左上展开。
+                rect = QRect(max(0, pet.width() - 24), max(0, pet.height() - 24), 1, 1)
+                sides = ("above", "left", "right", "below")
+            RainCard.open_for(
+                rain_timer,
+                dial,
+                rect,
+                sides,
+                parent=pet,
+                embedded=True,
+            )
+            return
         if anchor is not None:
             rect = QRect(anchor.mapToGlobal(QPoint(0, 0)), anchor.size())
             RainCard.open_for(rain_timer, dial, rect, ("left", "right"))
@@ -455,7 +497,7 @@ def main():
         t("app_title"), t("already_running"), QSystemTrayIcon.MessageIcon.Information, 4000
     )
 
-    hotkey = HotkeyFilter()
+    hotkey = HotkeyFilter(pet.desktop_backend)
     hotkey.install(app)
     for hk_id, (mods, vk, _) in GLOBAL_KEYS.items():
         hotkey.register(hk_id, mods, vk)
@@ -487,9 +529,14 @@ def main():
 
     from .platform.envwatch import EnvironmentWatcher
 
+    backend = pet.desktop_backend
+    fullscreen_provider = getattr(backend, "foreground_fullscreen", None) if pet._wayland else None
     envwatch = EnvironmentWatcher(
-        [pet, tab, hud, dial], pet, plain=[settings, music]
-    )  # 先下后上：界面盖在桌宠层上
+        [pet] if embedded_ui else [pet, tab, hud, dial],
+        pet,
+        fullscreen_provider=fullscreen_provider,
+        plain=[settings, music] + ([tab, hud, dial] if embedded_ui else []),
+    )  # 先下后上：界面盖在桌宠层上；Wayland 下子控件和 overlay 是同一表面
     envwatch.start()
     pet._refresh_top_cb = envwatch.force_top
     app._envwatch = envwatch

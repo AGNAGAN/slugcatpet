@@ -289,8 +289,12 @@ class PetUnit:
             return None
         w = self.window
         try:
-            g = btn.mapToGlobal(btn.rect().center())
-            local = w.mapFromGlobal(g)
+            dlg = self._kill_dialog
+            if getattr(w, "is_overlay", False) and dlg is not None and dlg.parentWidget() is w:
+                local = btn.mapTo(w, btn.rect().center())
+            else:
+                g = btn.mapToGlobal(btn.rect().center())
+                local = w.mapFromGlobal(g)
             return w.to_logical(local.x(), local.y())
         except Exception:
             return None

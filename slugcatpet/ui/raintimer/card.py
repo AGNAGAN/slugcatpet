@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QRect, Qt, QTimer
+from PySide6.QtCore import QEvent, QRect, Qt, QTimer
 from PySide6.QtGui import QColor, QGuiApplication, QPalette
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 
 from ...i18n import t
 from ...world.raintimer import DRY, DRY_MAX, IDLE, RAIN, RAIN_MAX
+from ..overlay import clamp_local
 from ..theme import palette, qss
 from ..widgets.tips import install as install_tip
 from .text import fmt_at, fmt_span, parse_input, status_line
@@ -63,26 +64,49 @@ class RainCard(QWidget):
     _live = None
 
     @classmethod
-    def open_for(cls, timer, dial, anchor: QRect, sides=("left", "right", "above", "below"), on_close=None):
+    def open_for(
+        cls,
+        timer,
+        dial,
+        anchor: QRect,
+        sides=("left", "right", "above", "below"),
+        on_close=None,
+        parent=None,
+        embedded=False,
+    ):
         """在锚点旁边打开卡片，按 sides 的顺序找放得下的一侧。"""
         if cls._live is not None:
             cls._live.close()
-        card = cls(timer, dial, anchor, sides, on_close)
+        card = cls(timer, dial, anchor, sides, on_close, parent=parent, embedded=embedded)
         cls._live = card
         card.show()
-        card.activateWindow()
+        if card._embedded:
+            card.window().activateWindow()
+            card.setFocus()
+        else:
+            card.activateWindow()
         return card
 
-    def __init__(self, timer, dial, anchor, sides, on_close):
-        super().__init__(None, Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+    def __init__(self, timer, dial, anchor, sides, on_close, parent=None, embedded=False):
+        self._embedded = bool(embedded and parent is not None)
+        self._host = parent if self._embedded else None
+        if self._embedded:
+            super().__init__(parent)
+            self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        else:
+            super().__init__(None, Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         self.setStyleSheet(qss.RAIN_CARD)
         self._timer = timer
         self._dial = dial
-        self._anchor = anchor
+        self._anchor = QRect(anchor)
         self._sides = sides
         self._on_close = on_close
+        if self._embedded:
+            app = QGuiApplication.instance()
+            if app is not None:
+                app.installEventFilter(self)
         self._outer = QVBoxLayout(self)
         self._outer.setContentsMargins(0, 0, 0, 0)
         self._box = None
@@ -328,8 +352,11 @@ class RainCard(QWidget):
         self._box.adjustSize()
         self.adjustSize()
         a, w, h = self._anchor, self.width(), self.height()
-        scr = QGuiApplication.screenAt(a.center()) or QGuiApplication.primaryScreen()
-        area = scr.availableGeometry()
+        if self._embedded:
+            area = self._host.rect()
+        else:
+            scr = QGuiApplication.screenAt(a.center()) or QGuiApplication.primaryScreen()
+            area = scr.availableGeometry()
         spots = {
             "left": (a.left() - GAP - w, a.center().y() - h // 2),
             "right": (a.right() + GAP, a.center().y() - h // 2),
@@ -345,9 +372,46 @@ class RainCard(QWidget):
                 pick = (x, y)
                 break
         x, y = pick or spots[self._sides[0]]
-        x = max(area.left(), min(x, area.right() - w))
-        y = max(area.top(), min(y, area.bottom() - h))
-        self.move(x, y)
+        if self._embedded:
+            p = clamp_local(self._host, QRect(x, y, w, h).topLeft(), w, h)
+            self.move(p)
+            self._host.refresh_input_region(force=True)
+        else:
+            x = max(area.left(), min(x, area.right() - w))
+            y = max(area.top(), min(y, area.bottom() - h))
+            self.move(x, y)
+
+    def eventFilter(self, obj, ev):
+        """嵌入时由 overlay 内的卡片自己处理点外面和 Esc 关闭。"""
+        if not self._embedded or not self.isVisible():
+            return super().eventFilter(obj, ev)
+        try:
+            et = ev.type()
+        except AttributeError:
+            return super().eventFilter(obj, ev)
+        if et == QEvent.Type.KeyPress and ev.key() == Qt.Key.Key_Escape:
+            self.close()
+            return True
+        if et == QEvent.Type.MouseButtonPress:
+            try:
+                local = self._host.mapFromGlobal(ev.globalPosition().toPoint())
+            except (AttributeError, RuntimeError):
+                return super().eventFilter(obj, ev)
+            if not self.geometry().contains(local):
+                self.close()
+                return True  # 弹层外的这一下由卡片消费
+        return super().eventFilter(obj, ev)
+
+    def showEvent(self, ev):
+        super().showEvent(ev)
+        if self._embedded:
+            self.raise_()
+            self._host.register_overlay_widget(self)
+
+    def hideEvent(self, ev):
+        super().hideEvent(ev)
+        if self._embedded:
+            self._host.unregister_overlay_widget(self)
 
     def closeEvent(self, ev):
         if self._on_event in self._timer.listeners:
@@ -356,4 +420,8 @@ class RainCard(QWidget):
             RainCard._live = None
         if self._on_close is not None:
             self._on_close()
+        if self._embedded:
+            app = QGuiApplication.instance()
+            if app is not None:
+                app.removeEventFilter(self)
         super().closeEvent(ev)
