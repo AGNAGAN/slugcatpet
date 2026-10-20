@@ -9,8 +9,8 @@
 - Phase 1 状态：**已完成**；主表面、KWin 几何/置顶、输入区域和光标桥实测见 `ai-docs/PHASE1_RESULTS.md`
 - Phase 2 状态：**已完成（第一版）**；UI 嵌入、局部坐标、卡片/菜单/提示与坐标迁移见 `ai-docs/PHASE2_RESULTS.md`
 - Phase 3 状态：**已完成（开发期）**；全屏、窗口快照、全局热键、冲突提示和设置页状态已实测，脚本安装/启用留到 Phase 5；见 `ai-docs/PHASE3_RESULTS.md`
-- Phase 4 状态：**已完成（开发期）**；XDG 自启、输出选择、光标功能降级、托盘锚点与 transient 设置/音乐窗已实测，desktop/图标安装留到 Phase 5；见 `ai-docs/PHASE4_RESULTS.md`
-- Phase 5 状态：**未开始**；Linux 打包、完整测试、README/故障排查和 CI 待做
+- Phase 4 状态：**已完成（开发期）**；XDG 自启、输出选择、光标只读/写入能力、托盘锚点与 transient 设置/音乐窗已实测，desktop/图标安装留到 Phase 5；见 `ai-docs/PHASE4_RESULTS.md`
+- Phase 5 状态：**进行中**；Wayland/KWin 光标写入已实现并通过本机验收，Linux 打包、KWin 脚本安装、完整测试、README/故障排查和 CI 待做；见 `ai-docs/PHASE5_CURSOR_WRITE.md`
 - 剩余工作清单：`ai-docs/REMAINING_WORK.md`
 
 ---
@@ -29,8 +29,8 @@
 | 问题 | 方案 |
 | --- | --- |
 | 主表面定位、置顶、全屏尺寸 | **KWin 脚本**设置 `frameGeometry`、`keepAbove`、`skipTaskbar` |
-| 输入穿透 | **单个主表面 + `QWindow.setMask()` 动态输入区域** |
-| 全局光标 | **KWin 脚本 `workspace.cursorPos` → DBus → Python** |
+| 输入穿透 | **单个主表面 + `QWindow.setMask()` 动态输入区域**；光标劫持期间临时显示全屏捕获面 |
+| 全局光标 | 读取：**KWin 脚本 `workspace.cursorPos` → DBus → Python**；写入：Qt 6.12 `QCursor.setPos()` + `wp_pointer_warp_v1` |
 | 全部浮动 UI | **嵌入主表面**，不再使用多个可自由定位的 `Qt.Tool` 顶层窗口 |
 | 全屏检测、挡雨窗口 | KWin 脚本推送活动窗口和窗口矩形快照 |
 | 全局热键 | KWin `registerShortcut`；不可用时降级或后续接 GlobalShortcuts portal |
@@ -109,7 +109,7 @@
 核心原则：
 
 1. **主表面只有一个**，所有需要精确位置的东西都画进这个表面。
-2. **输入区域由主表面统一管理**，不再每个面板单独切换穿透。
+2. **输入区域由主表面统一管理**，不再每个面板单独切换穿透。唯一的例外是光标劫持期间的临时全屏捕获面：它不绘制、只取得指针焦点，劫持结束立即隐藏；详见 `PHASE5_CURSOR_WRITE.md`。
 3. **物理、行为、渲染核心不改**；改的是窗口、输入、平台适配和面板父子关系。
 4. **KWin 不可用时显式降级**，不能静默假装“已置顶/已跟随光标”。
 

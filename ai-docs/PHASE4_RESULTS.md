@@ -1,6 +1,7 @@
 # Phase 4 结果：平台功能补齐
 
 - 日期：2026-10-20
+- 后续更新：Wayland 光标写入已通过“临时全屏捕获面 + Qt 6.12 pointer-warp”实现，本文 1.4 节的“Wayland 直接禁用”和“已知限制”中的相应条目已被 `PHASE5_CURSOR_WRITE.md` 取代。
 - 环境：KDE Plasma 6.8 / KWin 6.8 / Qt 6.12 / PySide6 6.12
 - 测试配置：`SLUGCATPET_HOME=/tmp/opencode/phase3-home`
 - 测试 XDG 配置：`XDG_CONFIG_HOME=/tmp/opencode/phase4-config`
@@ -57,7 +58,7 @@
   - 每个 `QScreen` 的名称和分辨率
 - 选择后立即写盘并切换 overlay。
 
-### 1.4 光标能力降级
+### 1.4 光标能力降级（历史记录；Wayland 写入已在 Phase 5 实现）
 
 - `PetWindow.cursor_hijack_available` 明确表示能否移动/替换系统光标；Wayland 返回 `False`。
 - Wayland 启动时强制关闭本会话的 `cfg_cursor_hijack` / `cfg_cursor_shape`，保留持久化值给 Windows。
@@ -140,7 +141,7 @@ ai-docs/PARAMS.md 是最新的
 
 - `.desktop` 应用条目和图标尚未安装，源码运行时 KWin 仍显示 `resourceClass python`；这是 Phase 5 打包工作。
 - 自启的“注销/重新登录后实际拉起”需要在 Phase 5 的完整桌面会话验收中再确认；当前已验证文件内容、路径和开关行为。
-- Wayland 仍不能移动/替换系统光标；这是协议限制，不是本次遗漏。
+- Wayland 光标写入已在 Phase 5 通过临时捕获面和 Qt pointer-warp 实现；仍不是系统级锁定，见 `PHASE5_CURSOR_WRITE.md`。
 - overlay 首次显示抢焦点、QtWayland 退出偶发段错误、内部 `Qt.Popup` 层仍是 Phase 2 遗留，未在 Phase 4 解决。
 - Phase 3 的跨输出全屏结论继续有效；Phase 4 另外验证了切换目标屏到 eDP-1 后的全屏收起/恢复。HDMI-A-1 全屏未在切换输出后重复验收，留 Phase 5 最终回归。
 

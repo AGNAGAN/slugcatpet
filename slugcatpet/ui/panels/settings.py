@@ -442,7 +442,9 @@ class SettingsWindow(QWidget):
         )
         if not w.cursor_hijack_available:
             hijack.setEnabled(False)
+        if not w.cursor_shape_available:
             shape.setEnabled(False)
+        if not (w.cursor_hijack_available and w.cursor_shape_available):
             hint = QLabel(t("settings_cursor_unavailable"))
             hint.setWordWrap(True)
             hint.setStyleSheet("color: palette(mid);")

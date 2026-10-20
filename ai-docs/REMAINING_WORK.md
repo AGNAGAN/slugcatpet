@@ -1,9 +1,9 @@
 # 原生 Wayland 迁移剩余工作
 
 - 日期：2026-10-20
-- 依据：`PHASE0_RESULTS.md`、`PHASE1_RESULTS.md`、`PHASE2_RESULTS.md`、`PHASE3_RESULTS.md`、`PHASE4_RESULTS.md` 与当前代码审计
+- 依据：`PHASE0_RESULTS.md`、`PHASE1_RESULTS.md`、`PHASE2_RESULTS.md`、`PHASE3_RESULTS.md`、`PHASE4_RESULTS.md`、`PHASE5_CURSOR_WRITE.md` 与当前代码审计
 - 用途：记录 Phase 0–4 之后仍未完成的工作，作为 Phase 5 的执行清单
-- 结论：**Phase 0–4 已完成（Phase 3 的脚本安装/启用、Phase 4 的 desktop/图标安装留到 Phase 5）；Phase 5 尚未开始。**
+- 结论：**Phase 0–4 已完成（Phase 3 的脚本安装/启用、Phase 4 的 desktop/图标安装留到 Phase 5）；Phase 5 已开始，Wayland/KWin 光标写入已实现并通过本机验收，打包/CI/最终验收仍待完成。**
 
 ---
 
@@ -15,8 +15,8 @@
 | Phase 1 | 已完成 | 单主表面、输入区域、KWin 几何/置顶、光标桥 |
 | Phase 2 | 已完成（第一版） | UI 嵌入 overlay、局部坐标、菜单/卡片/提示 |
 | Phase 3 | 已完成（开发期） | 全屏、窗口快照、热键、冲突提示、设置页状态与重载；脚本安装/启用留到 Phase 5 |
-| Phase 4 | 已完成（开发期） | XDG 自启、输出选择、光标功能降级、托盘锚点、transient 设置/音乐窗；desktop/图标安装留到 Phase 5 |
-| Phase 5 | 未开始 | Linux 打包、KWin 脚本安装、完整测试、README/故障排查、CI |
+| Phase 4 | 已完成（开发期） | XDG 自启、输出选择、光标只读/写入能力、托盘锚点、transient 设置/音乐窗；desktop/图标安装留到 Phase 5 |
+| Phase 5 | 进行中 | Wayland 光标写入已完成；Linux 打包、KWin 脚本安装、完整测试、README/故障排查、CI 待做 |
 
 ---
 
@@ -109,9 +109,11 @@
   - 持久化 `output` 参数
   - 设置页下拉框列出主屏/各输出
   - `EnvironmentWatcher` 跟随目标输出
-- [x] 光标劫持/形状降级
-  - Wayland 下禁用抢光标和忙碌样式
-  - 设置页灰显并说明“仍可跟随真实光标”
+- [x] 光标劫持/形状
+  - Wayland 下通过临时全屏捕获面取得指针焦点，再用 Qt 6.12 `QCursor.setPos()` / `wp_pointer_warp_v1` 写入
+  - 能移动、按住期间持续重定位、显示应用级忙碌样式
+  - 不支持写入时设置页灰显并说明“仍可跟随真实光标”
+  - 详细记录见 `PHASE5_CURSOR_WRITE.md`；真实锁光标仍不可用
 - [x] 托盘雨循环卡片锚点
   - 标签栏 → KWin 光标 → 表盘 → overlay 右下角
 - [x] 置顶与从属窗口收尾
@@ -157,7 +159,20 @@
 - [ ] 手动验收：点击穿透、拖猫、右键菜单、HUD/标签栏、托盘、全屏隐藏、音频。
 - [ ] Windows 行为回归。
 
-### 4.3 文档与 CI
+### 4.3 光标写入（已完成本机验证）
+
+- [x] `CursorHijack` 可插拔驱动：clip/setpos/busy/restore/release。
+- [x] 临时全屏捕获面 `SlugcatPet Cursor Capture`；KWin 脚本保持置顶并排除窗口快照。
+- [x] 坐标换算：内部物理坐标 → 全局逻辑 → 捕获面本地 → Qt frame 原点补偿。
+- [x] `QApplication` override cursor 忙碌样式。
+- [x] 能力门控：KWin 服务/脚本 + Qt 6.12 pointer-warp。
+- [x] 单元测试：`tests/test_cursor_write.py`、KWin 脚本占位符测试。
+- [x] 本机 KWin 验证：从桌面空白处启动 hold，KWin 探测到 `moved 569 1256`。
+- [ ] 用真实猫行为（石头命中、升天、矛、Pyro/Riv 抓取）逐项验收。
+- [ ] 多输出逃逸验收：指针移到另一输出后确认降级不崩溃、不把光标拉回。
+- [ ] Rain World 全屏 + 光标劫持组合验收。
+
+### 4.4 文档与 CI
 
 - [ ] README 增加 Linux 安装、KWin 集成、降级模式、已知限制。
 - [ ] 更新 `PORTABILITY_ANALYSIS.md` 的最终结论。
@@ -189,8 +204,8 @@
 
 ## 6. 建议执行顺序
 
-1. Phase 4 已完成（开发期）：XDG 自启、输出选择、光标设置降级、托盘锚点。
-2. Phase 5：KWin 脚本安装/启用、desktop 文件、图标、Linux CI、README/故障排查。
+1. Phase 4 已完成（开发期）：XDG 自启、输出选择、光标只读/写入能力、托盘锚点。
+2. Phase 5：光标写入已完成本机验证；继续 KWin 脚本安装/启用、desktop 文件、图标、Linux CI、README/故障排查。
 3. 清理 Phase 2 遗留的 `Qt.Popup` 弹层、overlay 首次焦点和退出段错误。
 4. 用 Rain World 实际全屏窗口做最终验收。
 5. 按阶段提交，`pyproject.toml` / `uv.lock` 的用户改动单独处理。
@@ -199,10 +214,11 @@
 
 ## 7. 当前仓库状态
 
-- 测试应用仍在运行（隔离配置 `/tmp/opencode/phase3-home`、`XDG_CONFIG_HOME=/tmp/opencode/phase4-config`），KWin 脚本已加载。
-- Phase 0–4 已提交；`pyproject.toml`、`uv.lock` 的用户改动仍未提交。
+- 测试应用使用隔离配置 `/tmp/opencode/phase3-home`、`XDG_CONFIG_HOME=/tmp/opencode/phase4-config`；验收脚本会临时加载/卸载 KWin 脚本。
+- Phase 0–4 已提交；Wayland 光标写入的源码、测试和文档已作为 Phase 5 的一部分提交；`pyproject.toml`、`uv.lock` 的用户改动仍未提交。
 - 最近一次自动检查结果：
   - `uv run ruff check .`：通过
-  - `uv run ruff format --check .`：通过，286 个文件
-  - `uv run python -m unittest discover -s tests`：26 个测试通过
+  - `uv run ruff format --check .`：通过
+  - `uv run python -m unittest discover -s tests`：34 个测试通过
   - `uv run python tools/params_doc.py --check`：通过
+- 本机 KWin 验收：临时捕获面 + `QCursor.setPos()` 已能把光标从 `(700,1500)` 移到 `(569,1256)`；忙碌样式状态为 true，释放后恢复。

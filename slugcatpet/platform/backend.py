@@ -13,6 +13,7 @@ from PySide6.QtGui import QRegion
 from PySide6.QtWidgets import QWidget
 
 OVERLAY_TITLE = "SlugcatPet Overlay"
+CURSOR_CAPTURE_TITLE = "SlugcatPet Cursor Capture"
 
 
 class DesktopBackend:
@@ -27,6 +28,7 @@ class DesktopBackend:
     supports_geometry = False
     supports_topmost = False
     supports_cursor = False
+    supports_cursor_write = False
     supports_fullscreen = False
     supports_shelters = False
     supports_hotkeys = False
@@ -105,6 +107,7 @@ class Win32Backend(DesktopBackend):
     supports_geometry = True
     supports_topmost = True
     supports_cursor = True
+    supports_cursor_write = True
     supports_hotkeys = True
 
     def __init__(self):

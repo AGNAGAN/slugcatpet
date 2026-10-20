@@ -25,7 +25,7 @@ from .rendering.display_list import FrameRecorder, replay
 from .rendering.layout import Layout
 from .rendering.pacer import FramePacer
 from .platform import vsync
-from .platform.backend import OVERLAY_TITLE, create_backend
+from .platform.backend import CURSOR_CAPTURE_TITLE, OVERLAY_TITLE, create_backend
 from .platform.wayland import is_wayland
 from .platform.wayland.regions import interaction_region
 from .rendering.primitives import blit
@@ -104,6 +104,10 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self._last_local_pointer: tuple[float, float] | None = None
         self._last_input_region = None
         self._last_input_ns = 0
+        self._cursor_capture = False
+        self._cursor_capture_owner = None
+        self._cursor_capture_window = None
+        self._wayland_busy = False
         self._seed = self._params.get("seed")
         self.atlas = AtlasSet()
         self.layout_data = layout or Layout.load()
@@ -227,11 +231,6 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self.follow_cursor = True
         self.cfg_cursor_hijack = bool(self._params.get("cursor_hijack", True))
         self.cfg_cursor_shape = bool(self._params.get("cursor_shape", True))
-        if self._wayland:
-            # Wayland 不允许普通客户端移动/替换系统光标；保留存档值给 Windows，
-            # 但本会话不启用抢光标逻辑。
-            self.cfg_cursor_hijack = False
-            self.cfg_cursor_shape = False
         self.cfg_freeze_hide_ui = bool(self._params.get("freeze_hide_ui", True))
         self.cfg_friendly_fire = bool(self._params.get("friendly_fire", False))
         self.cfg_keep_items = bool(self._params.get("keep_items", False))
@@ -392,6 +391,61 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         if name:
             self._backend.configure_overlay(name, self.overlay_rect())
 
+    def _show_cursor_capture(self):
+        """临时铺一张全屏输入面，让合成器把指针焦点交给本进程。
+
+        Wayland 下 ``QCursor.setPos`` 依赖 pointer-warp 协议，而协议要求当前表面
+        已拥有指针焦点。仅把已有 overlay 的输入区域改大，KWin 不会重新分配焦点；
+        新映射一个全屏表面则会。这个表面只在抢光标期间存在，不参与绘制。
+        """
+        if not self._wayland or self._shutting_down:
+            return None
+        scr = self.target_screen()
+        if scr is None:
+            return None
+        win = self._cursor_capture_window
+        if win is None:
+            win = QWidget()
+            win.setWindowFlags(
+                Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint
+            )
+            win.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+            win.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+            win.setWindowTitle(CURSOR_CAPTURE_TITLE)
+            self._cursor_capture_window = win
+        try:
+            win.setScreen(scr)
+        except (AttributeError, RuntimeError):
+            pass
+        rect = self.overlay_rect()
+        win.setGeometry(rect)
+        win.show()
+        win.raise_()
+        handle = win.windowHandle()
+        if handle is not None:
+            handle.setScreen(scr)
+            from .platform.wayland.input import set_input_region
+
+            set_input_region(win, QRegion(0, 0, max(1, win.width()), max(1, win.height())))
+        return win
+
+    def _hide_cursor_capture(self) -> None:
+        win = getattr(self, "_cursor_capture_window", None)
+        if win is not None and win.isVisible():
+            win.hide()
+
+    def _dispose_cursor_capture(self) -> None:
+        win = getattr(self, "_cursor_capture_window", None)
+        if win is None:
+            return
+        try:
+            win.hide()
+            win.close()
+            win.deleteLater()
+        except RuntimeError:
+            pass
+        self._cursor_capture_window = None
+
     @property
     def desktop_backend(self):
         """当前桌面后端；设置页用它显示 KWin 集成状态。"""
@@ -404,8 +458,13 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
 
     @property
     def cursor_hijack_available(self) -> bool:
-        """能否移动/替换系统光标；Wayland 下不可用。"""
-        return not self._wayland
+        """当前后端能否移动光标；Wayland 需要 KWin + Qt pointer-warp 支持。"""
+        return bool(getattr(self._backend, "supports_cursor_write", False))
+
+    @property
+    def cursor_shape_available(self) -> bool:
+        """能否在抢光标时显示忙碌样式；目前与光标写入能力一致。"""
+        return self.cursor_hijack_available
 
     def cursor_logical(self):
         """光标在宠物世界里的逻辑坐标；Wayland 桥不可用时返回本地最后位置。"""
@@ -533,6 +592,10 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             self._backend_attached = bool(self._backend.attach_overlay(self))
         self._last_input_region = None
         self.refresh_input_region(force=True)
+
+    def hideEvent(self, e):
+        self._hide_cursor_capture()
+        super().hideEvent(e)
 
     def resizeEvent(self, e):
         super().resizeEvent(e)
@@ -793,7 +856,9 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             self._vsync.stop()
         QCoreApplication.removePostedEvents(self, QEvent.Type.Paint)
         self.setUpdatesEnabled(False)
+        self._hide_cursor_capture()
         self.hide()
+        self._dispose_cursor_capture()
         self._backend.shutdown()
 
     def display_hz(self):
@@ -877,7 +942,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self._restart_timer()
 
     def set_cursor_hijack(self, on):
-        if self._wayland:
+        if not self.cursor_hijack_available:
             return
         self.cfg_cursor_hijack = self._params["cursor_hijack"] = bool(on)
         if not on:
@@ -897,15 +962,22 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         return v
 
     def set_cursor_shape(self, on):
-        if self._wayland:
+        if not self.cursor_shape_available:
             return
-        self.cfg_cursor_shape = self._params["cursor_shape"] = bool(on)
+        on = bool(on)
+        self.cfg_cursor_shape = self._params["cursor_shape"] = on
         if not on:
             if self.cursor_hijack is not None:
                 self.cursor_hijack.replace_cursor = False
-            from .platform.cursorfx import restore_cursors
+            if self._wayland:
+                self._wayland_busy_cursor(False)
+            else:
+                from .platform.cursorfx import restore_cursors
 
-            restore_cursors()
+                restore_cursors()
+        elif self._wayland and self.cursor_hijack is not None:
+            self.cursor_hijack.replace_cursor = True
+            self._wayland_busy_cursor(True)
 
     def apply_workspace(self, area, geo):
         if self._shutting_down:
@@ -934,6 +1006,9 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self.update()
         if self._wayland:
             self._sync_backend_geometry()
+            win = getattr(self, "_cursor_capture_window", None)
+            if win is not None and win.isVisible():
+                self._show_cursor_capture()
             self.refresh_input_region(force=True)
 
     def set_fullscreen_mode(self, mode):

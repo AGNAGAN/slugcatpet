@@ -18,7 +18,7 @@ from PySide6.QtGui import QGuiApplication, QRegion
 from ..._paths import user_dir
 from ...control.hotkey import FROZEN_KEYS, GLOBAL_KEYS, qt_key_code, shortcut_sequence
 from ..appid import DESKTOP_FILE_NAME
-from ..backend import DesktopBackend, OVERLAY_TITLE
+from ..backend import CURSOR_CAPTURE_TITLE, DesktopBackend, OVERLAY_TITLE
 
 log = logging.getLogger(__name__)
 
@@ -41,6 +41,17 @@ _HOTKEY_NAMES = {
     6: "step",
     7: "step x10",
 }
+
+
+def _qt_supports_pointer_warp() -> bool:
+    """Qt 6.12 的 Wayland 插件实现了 wp_pointer_warp_v1，QCursor.setPos 可用。"""
+    try:
+        from PySide6.QtCore import qVersion
+
+        major, minor = (int(part) for part in qVersion().split(".")[:2])
+    except (ImportError, TypeError, ValueError):
+        return False
+    return (major, minor) >= (6, 12)
 
 
 def _shortcut_specs() -> list[dict]:
@@ -157,6 +168,11 @@ class WaylandKWinBackend(QObject, DesktopBackend):
     @property
     def supports_cursor(self) -> bool:
         return self._service_registered and self._script_loaded
+
+    @property
+    def supports_cursor_write(self) -> bool:
+        """Wayland 写光标依赖 Qt pointer-warp；KWin 6.8 已提供该协议。"""
+        return self._service_registered and self._script_loaded and _qt_supports_pointer_warp()
 
     @property
     def supports_fullscreen(self) -> bool:
@@ -401,6 +417,7 @@ class WaylandKWinBackend(QObject, DesktopBackend):
         values = {
             "@APP_ID@": DESKTOP_FILE_NAME,
             "@OVERLAY_CAPTION@": OVERLAY_TITLE,
+            "@CAPTURE_CAPTION@": CURSOR_CAPTURE_TITLE,
             "@TARGET_SCREEN@": self._target_screen,
             "@OVERLAY_X@": str(rect.x()),
             "@OVERLAY_Y@": str(rect.y()),

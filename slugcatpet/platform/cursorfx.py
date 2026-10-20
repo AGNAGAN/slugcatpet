@@ -94,7 +94,12 @@ def restore_cursors():
 
 
 class CursorHijack:
-    """一次光标劫持；坐标是全屏幕的 Win32 物理像素，由 window 按 dpr 换算好。"""
+    """一次光标劫持；坐标由 window 按 dpr 换算成各平台的原生单位。
+
+    默认走 Win32 的 ``ClipCursor`` / ``SetCursorPos``。Wayland 下由调用方传入
+    ``setpos`` 等回调，使用 Qt 的 pointer-warp 实现；此时 ``clip`` 返回 False，
+    状态机自动退化为逐 tick 重新定位。
+    """
 
     def __init__(
         self,
@@ -110,8 +115,22 @@ class CursorHijack:
         watchdog_max=WATCHDOG_MAX,
         replace_cursor=True,
         knock_v=(0.0, 0.0),
+        *,
+        clip=None,
+        unclip=None,
+        setpos=None,
+        busy_cursor=None,
+        restore_cursor=None,
+        on_release=None,
     ):
-        self.mock = mock or not _IS_WIN
+        custom_write = setpos is not None
+        self._clip = clip or _clip
+        self._unclip = unclip or _unclip
+        self._setpos = setpos or _setpos
+        self._busy_cursor = busy_cursor or _set_busy_cursor
+        self._restore_cursor = restore_cursor or _restore_cursors
+        self._on_release = on_release
+        self.mock = bool(mock) or (not _IS_WIN and not custom_write)
         self.x = float(dev_x)
         self.y = float(dev_y)
         self.vx = float(knock_v[0])
@@ -137,7 +156,10 @@ class CursorHijack:
         self.active = True
         _ACTIVE.append(self)
         if not self.mock and self.replace_cursor:
-            _set_busy_cursor()
+            try:
+                self._busy_cursor()
+            except Exception:
+                pass
 
     def hold_at(self, dev_x, dev_y):
         self.x = float(dev_x)
@@ -185,18 +207,18 @@ class CursorHijack:
         if not self.use_setpos:
             ok = False
             try:
-                ok = _clip(x, y)
+                ok = self._clip(x, y)
             except Exception:
                 ok = False
             if not ok:
                 try:
-                    _unclip()
+                    self._unclip()
                 except Exception:
                     pass
                 self.use_setpos = True
         if self.use_setpos:
             try:
-                _setpos(x, y)
+                self._setpos(x, y)
             except Exception:
                 pass
 
@@ -207,11 +229,19 @@ class CursorHijack:
         self.phase = "done"
         if not self.mock:
             try:
-                _unclip()
+                self._unclip()
             except Exception:
                 pass
             if self.replace_cursor:
-                restore_cursors()
+                try:
+                    self._restore_cursor()
+                except Exception:
+                    pass
+        if self._on_release is not None:
+            try:
+                self._on_release()
+            except Exception:
+                pass
         try:
             _ACTIVE.remove(self)
         except ValueError:

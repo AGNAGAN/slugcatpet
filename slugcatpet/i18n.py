@@ -273,8 +273,8 @@ _STR = {
     "settings_cursor_hijack": {"zh": "猫可以抢光标", "en": "Cats can grab the cursor"},
     "settings_cursor_shape": {"zh": "光标被抢时换成忙碌样式", "en": "Busy cursor while grabbed"},
     "settings_cursor_unavailable": {
-        "zh": "当前桌面不允许程序移动或替换系统光标。猫仍会跟随真实光标，但不会抢光标或换忙碌样式。",
-        "en": "This desktop does not allow apps to move or replace the system cursor. Cats can still follow the real cursor, but cannot grab it or change its style.",
+        "zh": "当前环境不支持光标写入（需要 KWin 6.8+、Qt 6.12+ 的 pointer-warp，且 KWin 脚本已加载）。猫仍会跟随真实光标，但不会抢光标或换忙碌样式。",
+        "en": "Cursor writing is unavailable here (requires KWin 6.8+, Qt 6.12+ pointer-warp, and the loaded KWin script). Cats can still follow the real cursor, but cannot grab it or change its style.",
     },
     "settings_output": {"zh": "输出屏幕", "en": "Output screen"},
     "settings_output_default": {"zh": "跟随主屏", "en": "Follow primary"},

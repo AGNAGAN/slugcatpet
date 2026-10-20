@@ -44,12 +44,20 @@ class ScriptRenderTests(unittest.TestCase):
             _rect=QRect(0, 0, 1440, 932),
         )
         text = WaylandKWinBackend._render_script(backend)
-        for token in ("@APP_ID@", "@TARGET_SCREEN@", "@OVERLAY_W@", "@DBUS_SERVICE@"):
+        for token in (
+            "@APP_ID@",
+            "@CAPTURE_CAPTION@",
+            "@TARGET_SCREEN@",
+            "@OVERLAY_W@",
+            "@DBUS_SERVICE@",
+        ):
             self.assertNotIn(token, text)
         self.assertIn('var TARGET_SCREEN = "eDP-1";', text)
+        self.assertIn('var CAPTURE_CAPTION = "SlugcatPet Cursor Capture";', text)
         self.assertIn("var OVERLAY_W = 1440;", text)
         self.assertIn("var OVERLAY_H = 932;", text)
         self.assertIn('var SERVICE = "org.slugcatpet.Bridge";', text)
+        self.assertIn("function applyCapture(w)", text)
 
 
 class CursorTests(unittest.TestCase):

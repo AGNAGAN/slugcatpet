@@ -10,6 +10,7 @@
 
 var APP_ID = "@APP_ID@";
 var OVERLAY_CAPTION = "@OVERLAY_CAPTION@";
+var CAPTURE_CAPTION = "@CAPTURE_CAPTION@";
 var TARGET_SCREEN = "@TARGET_SCREEN@";
 var OVERLAY_X = @OVERLAY_X@;
 var OVERLAY_Y = @OVERLAY_Y@;
@@ -41,6 +42,10 @@ function isOverlay(w) {
     return w.desktopFileName === APP_ID && w.caption === OVERLAY_CAPTION;
 }
 
+function isCapture(w) {
+    return !!w && w.caption === CAPTURE_CAPTION;
+}
+
 function rememberOverlay(w) {
     if (!overlay) {
         overlay = w;
@@ -52,7 +57,7 @@ function isOwnWindow(w) {
     if (!w) {
         return true;
     }
-    if (w === overlay || isOverlay(w)) {
+    if (w === overlay || isOverlay(w) || isCapture(w)) {
         return true;
     }
     return overlayPid !== 0 && w.pid === overlayPid;
@@ -83,6 +88,21 @@ function applyOverlay(w) {
     w.skipTaskbar = true;
     w.skipSwitcher = true;
     sendGeometry(w);
+}
+
+function applyCapture(w) {
+    if (!isCapture(w)) {
+        return;
+    }
+    var g = Object.assign({}, w.frameGeometry);
+    g.x = OVERLAY_X;
+    g.y = OVERLAY_Y;
+    g.width = OVERLAY_W;
+    g.height = OVERLAY_H;
+    w.frameGeometry = g;
+    w.keepAbove = true;
+    w.skipTaskbar = true;
+    w.skipSwitcher = true;
 }
 
 function windowKey(w) {
@@ -260,6 +280,7 @@ function scan() {
     for (var i = 0; i < order.length; i++) {
         var w = order[i];
         applyOverlay(w);
+        applyCapture(w);
         monitorWindow(w);
     }
     sendWindowList();
@@ -291,6 +312,7 @@ function registerHotkeys() {
 
 workspace.windowAdded.connect(function (w) {
     applyOverlay(w);
+    applyCapture(w);
     monitorWindow(w);
     sendWindowList();
     sendFullscreen();
@@ -309,6 +331,7 @@ workspace.windowRemoved.connect(function (w) {
 });
 workspace.windowActivated.connect(function (w) {
     applyOverlay(w);
+    applyCapture(w);
     sendFullscreen();
 });
 workspace.currentDesktopChanged.connect(function () {
