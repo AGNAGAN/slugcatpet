@@ -1,9 +1,9 @@
 # 原生 Wayland 迁移剩余工作
 
 - 日期：2026-10-20
-- 依据：`PHASE0_RESULTS.md`、`PHASE1_RESULTS.md`、`PHASE2_RESULTS.md`、`PHASE3_RESULTS.md` 与当前代码审计
-- 用途：记录 Phase 0–3 之后仍未完成的工作，作为 Phase 4–5 的执行清单
-- 结论：**Phase 0–3 已完成（Phase 3 的脚本安装/启用留到 Phase 5）；Phase 4、Phase 5 尚未开始。**
+- 依据：`PHASE0_RESULTS.md`、`PHASE1_RESULTS.md`、`PHASE2_RESULTS.md`、`PHASE3_RESULTS.md`、`PHASE4_RESULTS.md` 与当前代码审计
+- 用途：记录 Phase 0–4 之后仍未完成的工作，作为 Phase 5 的执行清单
+- 结论：**Phase 0–4 已完成（Phase 3 的脚本安装/启用、Phase 4 的 desktop/图标安装留到 Phase 5）；Phase 5 尚未开始。**
 
 ---
 
@@ -15,7 +15,7 @@
 | Phase 1 | 已完成 | 单主表面、输入区域、KWin 几何/置顶、光标桥 |
 | Phase 2 | 已完成（第一版） | UI 嵌入 overlay、局部坐标、菜单/卡片/提示 |
 | Phase 3 | 已完成（开发期） | 全屏、窗口快照、热键、冲突提示、设置页状态与重载；脚本安装/启用留到 Phase 5 |
-| Phase 4 | 未开始 | XDG 自启、输出选择、光标功能降级、托盘锚点等 |
+| Phase 4 | 已完成（开发期） | XDG 自启、输出选择、光标功能降级、托盘锚点、transient 设置/音乐窗；desktop/图标安装留到 Phase 5 |
 | Phase 5 | 未开始 | Linux 打包、KWin 脚本安装、完整测试、README/故障排查、CI |
 
 ---
@@ -82,7 +82,7 @@
   - 写 `kwinrc`，调用 `org.kde.KWin.reconfigure`
   - 设置页增加“启用 KWin 集成”开关
   - 必须由用户明确启用，不能静默修改系统窗口行为
-- [ ] 输出选择设置项（Phase 4）
+- [x] 输出选择设置项（Phase 4）
 - [ ] 用 Rain World 实际全屏窗口做一次最终验收（Phase 5）
 
 ### 2.4 Phase 3 退出标准
@@ -95,37 +95,39 @@
 
 ---
 
-## 3. Phase 4：平台功能
+## 3. Phase 4：平台功能（已完成开发期）
 
-- [ ] XDG 开机自启
-  - `platform/autostart.py` 目前只支持 Windows 注册表
+- [x] XDG 开机自启
   - 写/删 `~/.config/autostart/org.slugcatpet.SlugcatPet.desktop`
-  - 当前 Linux 上设置页的“开机自动启动”实际无效
-- [ ] 应用标识与桌面文件
-  - `set_desktop_file_name()` 已有，但只有安装 `.desktop` 后才设置
-  - 安装 `org.slugcatpet.SlugcatPet.desktop` 和图标
-- [ ] 光标劫持/形状降级
-  - Wayland 下 `cursorfx` 已是 mock
-  - 设置页两个勾选框仍可操作，仅有一行说明
-  - 应灰显或明确禁用，避免用户误以为生效
-- [ ] 托盘雨循环卡片锚点
-  - 当前：表盘可见 → 表盘；否则 overlay 右下角
-  - 计划：标签栏可见 → 标签栏旁；KWin 光标可用 → 光标附近；最后才是右下角
-  - 修改 `main.py` 的 `_open_rain()`
-- [ ] 置顶与从属窗口收尾
-  - Wayland 下 `TopmostKeeper` 是 no-op，属预期
-  - 清理旧顶层窗口假设，确认设置/音乐只作为 transient 顶层存在
-- [ ] 帧同步
+  - 源码运行指向 `.venv/bin/python` + `run_slugcatpet.py`
+  - `sync_path()` 启动时更新旧路径
+- [x] 应用标识
+  - 非 Windows 设置 `SlugcatPet` 应用名（不设置 `applicationDisplayName`，避免改 overlay 标题）
+  - `setDesktopFileName()` 仅在 `.desktop` 已安装时启用
+- [ ] 应用桌面文件与图标安装（转入 Phase 5 打包）
+- [x] 输出选择
+  - 持久化 `output` 参数
+  - 设置页下拉框列出主屏/各输出
+  - `EnvironmentWatcher` 跟随目标输出
+- [x] 光标劫持/形状降级
+  - Wayland 下禁用抢光标和忙碌样式
+  - 设置页灰显并说明“仍可跟随真实光标”
+- [x] 托盘雨循环卡片锚点
+  - 标签栏 → KWin 光标 → 表盘 → overlay 右下角
+- [x] 置顶与从属窗口收尾
+  - 设置/音乐保留顶层，使用 overlay transient parent
+- [x] 帧同步
   - 第一版继续使用定时器降级
-  - 只有实测性能不足时再考虑 frame callback / `frameSwapped`
 
 ### Phase 4 退出标准
 
-- 自启开关可写/删 `.desktop`，重启后生效。
-- 全屏程序能隐藏/沉底，退出后恢复。
-- 挡雨窗口近似正确。
-- 托盘可用；雨循环卡片出现在合理位置。
-- 不支持的功能在设置页有明确说明，不静默失败。
+- [x] 自启开关可写/删 `.desktop`；文件内容和路径已测试，注销后实际拉起留 Phase 5 最终验收。
+- [x] 全屏程序能隐藏/沉底，退出后恢复（Phase 3 已验收）。
+- [x] 挡雨窗口近似正确（Phase 3 已验收）。
+- [x] 托盘可用；雨循环卡片出现在标签栏旁或其他合理位置。
+- [x] 不支持的功能在设置页有明确说明，不静默失败。
+
+详细记录见 `ai-docs/PHASE4_RESULTS.md`。
 
 ---
 
@@ -177,32 +179,30 @@
 - [ ] 设置/音乐内部的皮肤、尾巴、音量弹层仍是 `Qt.Popup + mapToGlobal`。
 - [ ] 首次启动 `SetupPanel` 在 overlay 创建之前运行，没有 transient parent。
 - [ ] overlay 首次显示抢焦点问题仍未解决。
-- [ ] 托盘雨卡片仍是右下角降级锚点。
+- [x] 托盘雨卡片已改为标签栏/光标/表盘/右下角锚点。
 - [ ] 偶发 QtWayland 退出段错误（`QWaylandWindow::decoration`），尚未稳定复现。
-- [ ] 整理提交：
-  - 当前源码改动未提交；
-  - `ai-docs` 新文档为 untracked；
-  - `pyproject.toml`、`uv.lock` 含原有用户改动，需要分开处理。
+- [x] 提交流程：
+  - Phase 4 源码、测试和文档已单独提交；
+  - `pyproject.toml`、`uv.lock` 的用户改动仍保持未提交。
 
 ---
 
 ## 6. 建议执行顺序
 
-1. Phase 4：XDG 自启、输出选择、光标设置降级、托盘锚点。
-2. 清理 Phase 2 遗留的 `Qt.Popup` 弹层、overlay 首次焦点和退出段错误。
-3. Phase 5：KWin 脚本安装/启用、desktop 文件、图标、Linux CI。
+1. Phase 4 已完成（开发期）：XDG 自启、输出选择、光标设置降级、托盘锚点。
+2. Phase 5：KWin 脚本安装/启用、desktop 文件、图标、Linux CI、README/故障排查。
+3. 清理 Phase 2 遗留的 `Qt.Popup` 弹层、overlay 首次焦点和退出段错误。
 4. 用 Rain World 实际全屏窗口做最终验收。
-5. 最后统一分阶段提交。
+5. 按阶段提交，`pyproject.toml` / `uv.lock` 的用户改动单独处理。
 
 ---
 
 ## 7. 当前仓库状态
 
-- 测试应用仍在运行（隔离配置 `/tmp/opencode/phase3-home`），KWin 脚本已加载。
-- Phase 0–3 的源码改动尚未提交。
-- `ai-docs/` 下新增文档尚未纳入版本控制。
+- 测试应用仍在运行（隔离配置 `/tmp/opencode/phase3-home`、`XDG_CONFIG_HOME=/tmp/opencode/phase4-config`），KWin 脚本已加载。
+- Phase 0–4 已提交；`pyproject.toml`、`uv.lock` 的用户改动仍未提交。
 - 最近一次自动检查结果：
   - `uv run ruff check .`：通过
-  - `uv run ruff format --check .`：通过，283 个文件
-  - `uv run python -m unittest discover -s tests`：23 个测试通过
+  - `uv run ruff format --check .`：通过，286 个文件
+  - `uv run python -m unittest discover -s tests`：26 个测试通过
   - `uv run python tools/params_doc.py --check`：通过

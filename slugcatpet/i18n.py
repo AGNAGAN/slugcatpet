@@ -273,9 +273,11 @@ _STR = {
     "settings_cursor_hijack": {"zh": "猫可以抢光标", "en": "Cats can grab the cursor"},
     "settings_cursor_shape": {"zh": "光标被抢时换成忙碌样式", "en": "Busy cursor while grabbed"},
     "settings_cursor_unavailable": {
-        "zh": "当前桌面环境不提供全局光标，猫不会跟随或舔光标。",
-        "en": "This desktop does not expose a global cursor; cats cannot follow or lick it.",
+        "zh": "当前桌面不允许程序移动或替换系统光标。猫仍会跟随真实光标，但不会抢光标或换忙碌样式。",
+        "en": "This desktop does not allow apps to move or replace the system cursor. Cats can still follow the real cursor, but cannot grab it or change its style.",
     },
+    "settings_output": {"zh": "输出屏幕", "en": "Output screen"},
+    "settings_output_default": {"zh": "跟随主屏", "en": "Follow primary"},
     "settings_friendly_fire": {
         "zh": "友伤：猫之间的矛和招架会伤到彼此",
         "en": "Friendly fire: spears and parries hurt other cats",

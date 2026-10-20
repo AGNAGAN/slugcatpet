@@ -34,16 +34,21 @@ def _desktop_file_installed() -> bool:
 
 
 def set_desktop_file_name() -> None:
-    """Wayland app_id；只有 .desktop 已安装时才设置，避免 portal 报 app 不存在。
+    """设置 Wayland 应用名与 app_id。
 
-    KWin 脚本始终以窗口标题作为主识别条件，所以源码运行（没有 desktop 文件）
-    也能正常工作。
+    ``.desktop`` 未安装时不设置 app_id，避免 portal 找不到应用；KWin 脚本始终
+    以窗口标题作为主识别条件，所以源码运行仍能正常工作。打包安装后会自动
+    启用 app_id。
     """
-    if sys.platform == "win32" or not _desktop_file_installed():
+    if sys.platform == "win32":
         return
     try:
         from PySide6.QtGui import QGuiApplication
 
-        QGuiApplication.setDesktopFileName(DESKTOP_FILE_NAME)
+        QGuiApplication.setApplicationName("SlugcatPet")
+        # 不设置 applicationDisplayName：Qt 会把它追加到窗口标题，
+        # KWin 脚本按精确标题识别 overlay。
+        if _desktop_file_installed():
+            QGuiApplication.setDesktopFileName(DESKTOP_FILE_NAME)
     except Exception:
         pass

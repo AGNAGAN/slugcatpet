@@ -98,6 +98,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         super().__init__()
         self._params = params or {}
         self._wayland = is_wayland()
+        self._output_pref = str(self._params.get("output", "") or "")
         self._backend = create_backend()
         self._backend_attached = False
         self._last_local_pointer: tuple[float, float] | None = None
@@ -126,9 +127,9 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
         s = self.layout_data.canvas_scale
-        screen = QGuiApplication.primaryScreen()
-        area = screen.availableGeometry()
-        geo = screen.geometry()
+        screen = self._desired_screen()
+        area = screen.availableGeometry() if screen is not None else QRect()
+        geo = screen.geometry() if screen is not None else QRect()
         geom = compute_geometry(area, geo, s)
         self._area = area  # 不含下延带
         self._geo = geo
@@ -142,7 +143,8 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         if self._wayland:
             # Wayland 客户端不能自己设置全局位置；先绑定目标输出，位置交给 KWin。
             # 必须在 show() 前绑定，否则窗口会沿用旧输出的 DPR。
-            self.setScreen(screen)
+            if screen is not None:
+                self.setScreen(screen)
         else:
             self.move(area.x(), area.y())
 
@@ -225,6 +227,11 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self.follow_cursor = True
         self.cfg_cursor_hijack = bool(self._params.get("cursor_hijack", True))
         self.cfg_cursor_shape = bool(self._params.get("cursor_shape", True))
+        if self._wayland:
+            # Wayland 不允许普通客户端移动/替换系统光标；保留存档值给 Windows，
+            # 但本会话不启用抢光标逻辑。
+            self.cfg_cursor_hijack = False
+            self.cfg_cursor_shape = False
         self.cfg_freeze_hide_ui = bool(self._params.get("freeze_hide_ui", True))
         self.cfg_friendly_fire = bool(self._params.get("friendly_fire", False))
         self.cfg_keep_items = bool(self._params.get("keep_items", False))
@@ -264,6 +271,8 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self.anim.timeout.connect(self._on_timer)
         self.anim.start()
         QGuiApplication.instance().primaryScreenChanged.connect(self._watch_screen)
+        QGuiApplication.instance().screenAdded.connect(self._watch_screen)
+        QGuiApplication.instance().screenRemoved.connect(self._watch_screen)
         self._watch_screen()
         if self.cfg_keep_items:
             from .items import scene
@@ -341,14 +350,40 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         """overlay 在合成器逻辑坐标中的全局矩形（含地板下延带）。"""
         return QRect(self._area.x(), self._area.y(), self.width(), self.height())
 
+    def _desired_screen(self):
+        """按持久化输出名选屏；空或找不到时回退主屏。"""
+        if self._output_pref:
+            for scr in QGuiApplication.screens():
+                if scr.name() == self._output_pref:
+                    return scr
+        return QGuiApplication.primaryScreen()
+
+    def target_screen(self):
+        """当前绑定输出；KWin 桥、envwatch 和设置页都以它为准。"""
+        return getattr(self, "_screen", None) or self._desired_screen()
+
+    def output_preference(self) -> str:
+        return self._output_pref
+
     def _output_name(self) -> str:
         # 不能用 self.screen()：KWin 初次放置可能先把窗口挪到光标所在输出，
-        # 但目标输出是初始化时 setScreen() 绑定的主屏。
-        scr = self._screen or QGuiApplication.primaryScreen()
+        # 但目标输出是初始化时 setScreen() 绑定的。
+        scr = self.target_screen()
         return scr.name() if scr is not None else ""
 
     def target_output_name(self) -> str:
         return self._output_name()
+
+    def set_output(self, name) -> bool:
+        """切换目标输出；name 为空表示跟随主屏。"""
+        name = str(name or "")
+        self._output_pref = self._params["output"] = name
+        scr = self._desired_screen()
+        if scr is None:
+            return False
+        self._bind_screen(scr)
+        self.apply_workspace(scr.availableGeometry(), scr.geometry())
+        return True
 
     def _sync_backend_geometry(self) -> None:
         if not self._wayland:
@@ -366,6 +401,11 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
     def cursor_available(self) -> bool:
         """当前后端能否提供全局光标；设置页可据此显示降级提示。"""
         return not self._wayland or bool(self._backend.supports_cursor)
+
+    @property
+    def cursor_hijack_available(self) -> bool:
+        """能否移动/替换系统光标；Wayland 下不可用。"""
+        return not self._wayland
 
     def cursor_logical(self):
         """光标在宠物世界里的逻辑坐标；Wayland 桥不可用时返回本地最后位置。"""
@@ -629,9 +669,8 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             self._mode = None
             self._set_mode(True)
 
-    @staticmethod
-    def _screen_name():
-        scr = QGuiApplication.primaryScreen()
+    def _screen_name(self):
+        scr = self.target_screen()
         return scr.name() if scr is not None else ""
 
     def _pace(self, dt, t0):
@@ -757,11 +796,10 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self.hide()
         self._backend.shutdown()
 
-    @classmethod
-    def display_hz(cls):
-        scr = QGuiApplication.primaryScreen()
+    def display_hz(self):
+        scr = self.target_screen()
         hz = scr.refreshRate() if scr is not None else 0.0
-        return hz if hz > 1.0 else cls._FPS_FALLBACK
+        return hz if hz > 1.0 else self._FPS_FALLBACK
 
     def auto_fps(self):
         """自动帧率当前档：刷新率或其整数分频。"""
@@ -796,20 +834,27 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             self._mode = None
             self._set_mode(fast, self._ambient_kind())
 
-    def _watch_screen(self, *_):
-        """主屏或其刷新率变了就重算帧间隔、换 vblank 来源。"""
-        scr = QGuiApplication.primaryScreen()
-        if scr is not self._screen:
-            if self._screen is not None:
-                try:
-                    self._screen.refreshRateChanged.disconnect(self._watch_screen)
-                except (RuntimeError, TypeError):
-                    pass
-            self._screen = scr
-            if scr is not None:
+    def _bind_screen(self, scr):
+        """切换当前 QScreen，并只保留新屏幕的刷新率信号。"""
+        if scr is self._screen:
+            return
+        if self._screen is not None:
+            try:
+                self._screen.refreshRateChanged.disconnect(self._watch_screen)
+            except (RuntimeError, TypeError):
+                pass
+        self._screen = scr
+        if scr is not None:
+            try:
                 scr.refreshRateChanged.connect(self._watch_screen)
-                if self._wayland:
-                    self.setScreen(scr)
+            except (RuntimeError, TypeError):
+                pass
+            if self._wayland:
+                self.setScreen(scr)
+
+    def _watch_screen(self, *_):
+        """目标输出或其刷新率变了就重算帧间隔、换 vblank 来源。"""
+        self._bind_screen(self._desired_screen())
         self._restart_timer()
         if self._wayland:
             self._sync_backend_geometry()
@@ -832,6 +877,8 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self._restart_timer()
 
     def set_cursor_hijack(self, on):
+        if self._wayland:
+            return
         self.cfg_cursor_hijack = self._params["cursor_hijack"] = bool(on)
         if not on:
             self.stop_cursor_hijack()
@@ -850,6 +897,8 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         return v
 
     def set_cursor_shape(self, on):
+        if self._wayland:
+            return
         self.cfg_cursor_shape = self._params["cursor_shape"] = bool(on)
         if not on:
             if self.cursor_hijack is not None:

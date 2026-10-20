@@ -9,7 +9,7 @@
 - Phase 1 状态：**已完成**；主表面、KWin 几何/置顶、输入区域和光标桥实测见 `ai-docs/PHASE1_RESULTS.md`
 - Phase 2 状态：**已完成（第一版）**；UI 嵌入、局部坐标、卡片/菜单/提示与坐标迁移见 `ai-docs/PHASE2_RESULTS.md`
 - Phase 3 状态：**已完成（开发期）**；全屏、窗口快照、全局热键、冲突提示和设置页状态已实测，脚本安装/启用留到 Phase 5；见 `ai-docs/PHASE3_RESULTS.md`
-- Phase 4 状态：**未开始**；XDG 自启、输出选择、光标功能降级和托盘锚点待做
+- Phase 4 状态：**已完成（开发期）**；XDG 自启、输出选择、光标功能降级、托盘锚点与 transient 设置/音乐窗已实测，desktop/图标安装留到 Phase 5；见 `ai-docs/PHASE4_RESULTS.md`
 - Phase 5 状态：**未开始**；Linux 打包、完整测试、README/故障排查和 CI 待做
 - 剩余工作清单：`ai-docs/REMAINING_WORK.md`
 
@@ -497,7 +497,7 @@ canvas_local = overlay_local / canvas_scale
 
 ---
 
-### Phase 4：平台功能补齐（3–5 人日）
+### Phase 4：平台功能补齐（3–5 人日，已完成开发期）
 
 #### 4.1 开机自启
 

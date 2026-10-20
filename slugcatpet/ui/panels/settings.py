@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QSlider,
 )
 from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtGui import QGuiApplication
 
 from ...characters import REGISTRY, all_variants
 from ... import i18n
@@ -427,19 +428,21 @@ class SettingsWindow(QWidget):
     def _section_interact(self, v):
         v.addWidget(self._header(t("settings_interact_section")))
         w = self._window
-        self._check(
+        hijack = self._check(
             v,
             "settings_cursor_hijack",
             w.cfg_cursor_hijack,
             lambda on: (w.set_cursor_hijack(on), self._write_state()),
         )
-        self._check(
+        shape = self._check(
             v,
             "settings_cursor_shape",
             w.cfg_cursor_shape,
             lambda on: (w.set_cursor_shape(on), self._write_state()),
         )
-        if not w.cursor_available:
+        if not w.cursor_hijack_available:
+            hijack.setEnabled(False)
+            shape.setEnabled(False)
             hint = QLabel(t("settings_cursor_unavailable"))
             hint.setWordWrap(True)
             hint.setStyleSheet("color: palette(mid);")
@@ -495,6 +498,17 @@ class SettingsWindow(QWidget):
         lang.setCurrentIndex(max(0, lang.findData(i18n.LANG)))
         lang.currentIndexChanged.connect(lambda _i: w.set_lang(lang.currentData()))
         self._row(v, "settings_lang", lang)
+        output = _Combo()
+        output.addItem(t("settings_output_default"), "")
+        for scr in QGuiApplication.screens():
+            geo = scr.geometry()
+            output.addItem(f"{scr.name()}  {geo.width()}x{geo.height()}", scr.name())
+        idx = output.findData(w.output_preference())
+        output.setCurrentIndex(max(0, idx))
+        output.currentIndexChanged.connect(
+            lambda _i: (w.set_output(output.currentData()), self._write_state())
+        )
+        self._row(v, "settings_output", output)
         auto = self._check(v, "settings_autostart", autostart.is_enabled(), None)
         auto.toggled.connect(lambda on: self._on_autostart(auto, on))
         self._check(v, "settings_show_hud", self._hud.isVisible(), self._on_hud_toggled)

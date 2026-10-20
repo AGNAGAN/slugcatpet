@@ -106,6 +106,7 @@ class EnvironmentWatcher(QObject):
         self._streak = 0
         self._topmost = topmost or TopmostKeeper(windows, is_suspended=lambda: self._fullscreen)
         self._vis_snapshot: list[bool] | None = None
+        self._screen = None
         self._area = None
         self._geo = None
         self._primary_conn = None
@@ -114,8 +115,20 @@ class EnvironmentWatcher(QObject):
         self._timer.setInterval(min(interval_ms, 2000))
         self._timer.timeout.connect(self._on_poll)
 
+    def _target_screen(self):
+        getter = getattr(self._pet, "target_screen", None)
+        if callable(getter):
+            try:
+                scr = getter()
+            except Exception:
+                scr = None
+            if scr is not None:
+                return scr
+        return QGuiApplication.primaryScreen()
+
     def start(self):
-        screen = QGuiApplication.primaryScreen()
+        screen = self._target_screen()
+        self._screen = screen
         if screen is not None:
             self._area = screen.availableGeometry()
             self._geo = screen.geometry()
@@ -267,9 +280,12 @@ class EnvironmentWatcher(QObject):
             return True
 
     def _check_workspace(self):
-        screen = QGuiApplication.primaryScreen()
+        screen = self._target_screen()
         if screen is None:
             return
+        if screen is not self._screen:
+            self._screen = screen
+            self._connect_screen(screen)
         area = screen.availableGeometry()
         geo = screen.geometry()
         if self._area is not None and area == self._area and geo == self._geo:
@@ -293,5 +309,4 @@ class EnvironmentWatcher(QObject):
         self._check_workspace()
 
     def _on_primary_changed(self, screen):
-        self._connect_screen(screen)
         self._check_workspace()

@@ -188,6 +188,18 @@ def _extract_rain_later():
     threading.Thread(target=run, name="rain-assets", daemon=True).start()
 
 
+def _set_transient_parent(child, parent) -> None:
+    """让设置/音乐成为 overlay 的 Wayland transient 顶层窗口。"""
+    try:
+        child.winId()  # 先创建原生 surface，再设置 transient parent
+        cw = child.windowHandle()
+        pw = parent.windowHandle()
+        if cw is not None and pw is not None:
+            cw.setTransientParent(pw)
+    except (RuntimeError, TypeError):
+        pass
+
+
 def _freeze_heap():
     """把启动时建好的对象移出分代回收。"""
     import gc
@@ -291,6 +303,9 @@ def main():
         _save_params(params)
 
     settings = SettingsWindow(pet, hud, _write_state)
+    if embedded_ui:
+        # Wayland 顶层窗口只保留 transient 关系，不再自己移动/置顶。
+        _set_transient_parent(settings, pet)
     pet._hud = hud  # 供增删猫后 rebuild_rows
     pet._pets_changed_cb = _write_state
     pet._open_settings_cb = settings.open
@@ -344,6 +359,8 @@ def main():
     pet.env_listeners.append(director.on_env)
     settings.visible_changed.connect(director.on_settings)
     music = MusicPanel(player, _write_state)
+    if embedded_ui:
+        _set_transient_parent(music, pet)
     pet._open_music_cb = music.open
     pet._music_player = player
     pet._music_director = director
@@ -372,20 +389,30 @@ def main():
     dial.on_wanted.append(settings.refresh_dial)
 
     def _open_rain(anchor=None):
-        """侧边栏按钮旁或托盘旁打开雨循环卡片。"""
+        """标签栏、全局光标或右下角附近打开雨循环卡片。"""
         if embedded_ui:
             if anchor is not None:
                 rect = QRect(anchor.mapTo(pet, QPoint(0, 0)), anchor.size())
                 sides = ("left", "right", "above", "below")
-            elif dial.isVisible():
-                c = dial._center_local()
-                r = int(dial.height() // 2)
-                rect = QRect(c - QPoint(r, r), QSize(2 * r, 2 * r))
-                sides = ("above", "below", "left", "right")
+            elif tab.isVisible() and not tab.geometry().isEmpty():
+                rect = QRect(tab.geometry())
+                sides = ("left", "right", "above", "below")
             else:
-                # 托盘图标没有可靠几何：固定在 overlay 右下角，向左上展开。
-                rect = QRect(max(0, pet.width() - 24), max(0, pet.height() - 24), 1, 1)
-                sides = ("above", "left", "right", "below")
+                rect = None
+                sides = ("above", "below", "left", "right")
+                backend = pet.desktop_backend
+                if getattr(backend, "supports_cursor", False):
+                    pos = backend.cursor_overlay_pos()
+                    if pos is not None and 0 <= pos[0] < pet.width() and 0 <= pos[1] < pet.height():
+                        rect = QRect(int(pos[0]), int(pos[1]), 1, 1)
+                if rect is None and dial.isVisible():
+                    c = dial._center_local()
+                    r = int(dial.height() // 2)
+                    rect = QRect(c - QPoint(r, r), QSize(2 * r, 2 * r))
+                if rect is None:
+                    # 托盘图标没有可靠几何：固定在 overlay 右下角，向左上展开。
+                    rect = QRect(max(0, pet.width() - 24), max(0, pet.height() - 24), 1, 1)
+                    sides = ("above", "left", "right", "below")
             RainCard.open_for(
                 rain_timer,
                 dial,
