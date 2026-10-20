@@ -3,7 +3,7 @@
 - 日期：2026-10-20
 - 环境：KDE Plasma 6.8 / KWin 6.8 / Qt 6.12.0 / PySide6 6.12.0
 - 测试输出：HDMI-A-1 `1707x1067`，逻辑坐标 `0,900`；eDP-1 `1440x900`
-- 结论：**已实现 best-effort 光标写入**。能移动光标、按住期间持续重定位、显示应用级忙碌样式；**不是系统级光标锁定**，指针一旦离开目标输出就会失去焦点。
+- 结论：**已实现 best-effort 光标写入**。能移动光标、按住期间持续重定位、显示应用级忙碌样式；左/右键单击会解除劫持，且不改变原有键盘焦点。**不是系统级光标锁定**，指针一旦离开目标输出就会失去焦点。
 
 ---
 
@@ -81,6 +81,7 @@ QCursor.setPos(...)
   - `setpos(x, y)`
   - `busy_cursor()`
   - `restore_cursor()`
+  - `button_down() -> bool`（Windows 用于轮询左/右键；Wayland 由捕获面事件处理）
   - `on_release()`
 - 默认仍使用 Win32 的 `ClipCursor` / `SetCursorPos` / 系统忙光标；
 - Wayland 传入 `clip=lambda: False`，状态机自动从“先尝试约束”退化为“逐 tick 重新定位”；
@@ -92,7 +93,7 @@ QCursor.setPos(...)
 
 - 新增 `CURSOR_CAPTURE_TITLE = "SlugcatPet Cursor Capture"`；
 - `_show_cursor_capture()`：
-  - 创建/复用 `Qt.Tool + FramelessWindowHint + WindowStaysOnTopHint`；
+  - 创建/复用 `CursorCaptureWindow`（`Qt.Tool + FramelessWindowHint + WindowStaysOnTopHint`）；
   - `WA_TranslucentBackground`、`WA_ShowWithoutActivating`；
   - 放到目标输出的 overlay 几何；
   - 显示后把输入区域设为整个表面，确保指针落在捕获面内；
@@ -148,6 +149,17 @@ Wayland 不再强制关闭 `cursor_shape`：
 - 设置页只在能力可用时启用两个勾选框；不可用时灰显并显示更新后的说明。
 - Windows 的 `ClipCursor` 优先路径不变。
 
+### 2.6 焦点保持与点击解除
+
+Wayland/xdg-shell 没有“只接收指针、不接受键盘焦点”的顶层窗口标志。临时捕获面映射时，KWin 仍会把它设为活动窗口；仅设置 `WA_ShowWithoutActivating` 不够。因此分两层处理：
+
+1. **捕获面吞掉解除点击**：`window.py` 新增 `CursorCaptureWindow`，在 `mousePressEvent()` 中拦截左键/右键，发出 `clicked` 后 `accept()`，不把事件传给下层窗口；`clicked` 连接到 `stop_cursor_hijack()`。释放流程会恢复忙碌光标、隐藏捕获面并清空 `cursor_hijack`。
+2. **KWin 脚本恢复原焦点**：脚本维护 `lastActive` 与 `lastExternalActive`。捕获面激活时把 `workspace.activeWindow` 设回激活前的窗口；overlay 首次映射时也把焦点还给原来的外部窗口。overlay 映射后 1 秒内视为“映射抢焦点”，超过宽限期后的激活（例如用户打开 ControlHud）则按正常焦点处理，不会被脚本抢走。
+
+Windows 路径没有捕获面，`CursorHijack.update()` 用 `GetAsyncKeyState()` 轮询左/右键；如果劫持开始时触发点击还没有松开，会先等按键释放，避免刚抢到就立即解除。
+
+残余限制：KWin 仍可能先短暂激活捕获面，再由脚本在同一个激活信号中恢复焦点；最终活动窗口不变，但理论上存在极短的焦点过渡窗口。
+
 ---
 
 ## 3. 验证
@@ -163,10 +175,11 @@ uv run python -m unittest discover -s tests -v
 结果：
 
 - ruff / format 通过；
-- 34 个测试通过；
+- 35 个测试通过；
 - 新增 `tests/test_cursor_write.py`：
   - 自定义驱动替代 `ClipCursor`；
   - 释放回调与忙碌光标恢复；
+  - 左/右键按下解除劫持，且触发劫持的那次按键不会立即自解除；
   - 物理坐标 → 目标表面坐标；
   - Qt frame 原点补偿；
   - Qt 6.11/6.12 能力门控；
@@ -201,15 +214,64 @@ KWin probe: CURSORPROBE2 moved 569 1256
 
 截图验证没有完成：当前会话的 `grim` 报 `compositor doesn't support the screen capture protocol`。忙碌样式通过 `QApplication.overrideCursor()` 状态确认，未做像素级截图验收。
 
-### 3.3 复现命令
+### 3.3 焦点保持与真实点击验收
+
+用 `evdev`/`uinput` 模拟真实指针移动和按键；用独立 KWin 脚本记录活动窗口。先把 Alacritty 设为活动窗口，再启动测试实例：
+
+```text
+FOCUSPROBE activated SlugcatPet Overlay
+FOCUSPROBE activated OC | 仓库分析
+slugcatpet restored focus overlay OC | 仓库分析
+FOCUSPROBE activated SlugcatPet Cursor Capture
+FOCUSPROBE activated OC | 仓库分析
+slugcatpet restored focus capture OC | 仓库分析
+```
+
+说明：
+
+- overlay 首次映射抢走的焦点被脚本还给原窗口；
+- 捕获面激活后，键盘焦点同样恢复为 `OC | 仓库分析`；
+- 整个 hold 期间，最终活动窗口没有停留在 `SlugcatPet Overlay` 或捕获面。
+
+真实左键验收：
+
+```text
+T2500 capture True  busy True  hijack True
+T4000 capture True  busy True  hijack True
+T6000 capture False busy False hijack False
+wl_pointer.button(... 272, 1)  # BTN_LEFT
+wl_pointer.leave(capture_surface)
+```
+
+真实右键验收：
+
+```text
+T4000 capture True
+T6000 capture False busy False hijack False
+wl_pointer.button(... 273, 1)  # BTN_RIGHT
+wl_pointer.leave(capture_surface)
+```
+
+两次都在按键按下后立即结束劫持、隐藏捕获面并恢复忙碌光标；这次点击不会继续传给下面的窗口。
+
+同轮验收中，hold 目标仍能把光标移动到 `(569,1256)`，第二次 hold 移动到 `(427,1434)`；说明恢复键盘焦点不会破坏指针焦点和 `QCursor.setPos()`。
+
+### 3.4 复现命令
 
 ```bash
 SLUGCATPET_HOME=/tmp/opencode/phase3-home \
 XDG_CONFIG_HOME=/tmp/opencode/phase4-config \
 uv run python /tmp/opencode/test_pet_cursor.py
+
+SLUGCATPET_HOME=/tmp/opencode/phase3-home \
+XDG_CONFIG_HOME=/tmp/opencode/phase4-config \
+uv run python /tmp/opencode/test_cursor_focus_click.py
+
+# 真实按键验收（另开终端，需可写 /dev/uinput）
+python /tmp/opencode/mouse_click.py
 ```
 
-该脚本只用于本地验收，不属于仓库测试。
+这些脚本只用于本地验收，不属于仓库测试。
 
 ---
 
@@ -220,9 +282,10 @@ uv run python /tmp/opencode/test_pet_cursor.py
 3. **依赖临时捕获面**：如果 KWin 脚本没有把捕获面设为 `keepAbove`，或捕获面创建失败，写入会失效。当前脚本已处理 `SlugcatPet Cursor Capture`。
 4. **需要 Qt 6.12+ 和合成器支持**：Qt 6.11 及以下、没有 `wp_pointer_warp_v1` 的合成器会关闭设置项。
 5. **忙碌样式不是系统级替换**：只在指针位于本应用捕获面时显示；离开应用表面后恢复系统光标。
-6. **捕获期间拦截点击**：这是抢光标的预期行为；释放后捕获面隐藏，点击穿透恢复。
-7. **KWin 脚本安装尚未完成**：目前仍由应用运行时加载；Phase 5 的安装/启用流程完成后，才能保证登录后自动可用。
-8. **全屏隐藏时**：主窗口隐藏会一并隐藏捕获面，避免全屏程序被透明输入面挡住。
+6. **解除点击会被吞掉**：捕获期间左/右键只用于解除劫持，不会继续传给下层窗口；解除后捕获面隐藏，点击穿透恢复。
+7. **焦点恢复有极短过渡**：KWin 仍会短暂把捕获面设为活动窗口，脚本随后在同一个激活信号内恢复原焦点；最终活动窗口不变。
+8. **KWin 脚本安装尚未完成**：目前仍由应用运行时加载；Phase 5 的安装/启用流程完成后，才能保证登录后自动可用。
+9. **全屏隐藏时**：主窗口隐藏会一并隐藏捕获面，避免全屏程序被透明输入面挡住。
 
 ---
 

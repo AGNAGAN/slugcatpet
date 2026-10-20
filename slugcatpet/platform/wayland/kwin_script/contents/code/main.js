@@ -24,6 +24,7 @@ var IFACE = "@DBUS_INTERFACE@";
 
 var MIN_SIDE = 24;
 var MIN_CURSOR_MS = 33;  // ~30 Hz
+var OVERLAY_FOCUS_GRACE_MS = 1000;
 
 var overlay = null;
 var overlayPid = 0;
@@ -31,6 +32,9 @@ var monitored = {};
 var lastFullscreen = "";
 var lastWindowList = null;
 var lastCursorMs = 0;
+var lastActive = null;
+var lastExternalActive = null;
+var overlayMappedAt = 0;
 
 function isOverlay(w) {
     if (!w) {
@@ -61,6 +65,81 @@ function isOwnWindow(w) {
         return true;
     }
     return overlayPid !== 0 && w.pid === overlayPid;
+}
+
+function isRestorableWindow(w) {
+    // overlay 本身也可能持有键盘焦点（例如 ControlHud），不能一概排除。
+    return (
+        !!w &&
+        !isCapture(w) &&
+        !w.dock &&
+        !w.desktopWindow &&
+        !w.notification &&
+        !w.tooltip &&
+        !w.hidden &&
+        !w.minimized
+    );
+}
+
+function findRestorableWindow(excludeOverlay) {
+    var order = workspace.stackingOrder;
+    for (var i = order.length - 1; i >= 0; i--) {
+        var w = order[i];
+        if (isRestorableWindow(w) && !(excludeOverlay && isOverlay(w))) {
+            return w;
+        }
+    }
+    return null;
+}
+
+function rememberActive(w) {
+    if (isRestorableWindow(w)) {
+        lastActive = w;
+        if (!isOverlay(w)) {
+            lastExternalActive = w;
+        }
+    }
+}
+
+function restoreFocusTo(target, reason) {
+    if (!target || workspace.activeWindow === target) {
+        return;
+    }
+    try {
+        workspace.activeWindow = target;
+        print("slugcatpet restored focus", reason, target.caption);
+    } catch (e) {
+        print("slugcatpet restore focus failed", reason, String(e));
+    }
+}
+
+function restoreUserFocus(w) {
+    // 捕获面只是为了拿指针焦点，不能把键盘焦点从原窗口抢走。
+    if (!isCapture(w)) {
+        return;
+    }
+    var target = lastActive;
+    if (!isRestorableWindow(target)) {
+        target = findRestorableWindow(false);
+    }
+    restoreFocusTo(target, "capture");
+}
+
+function overlayJustMapped() {
+    return overlayMappedAt > 0 && Date.now() - overlayMappedAt < OVERLAY_FOCUS_GRACE_MS;
+}
+
+function restoreOverlayFocus(w) {
+    // 主 overlay 首次映射时不应抢走用户窗口的键盘焦点；ControlHud 打开后的
+    // overlay 激活已经超出映射宽限期，会按正常焦点处理。
+    if (!isOverlay(w)) {
+        return;
+    }
+    var target = lastExternalActive;
+    if (!isRestorableWindow(target) || isOverlay(target)) {
+        target = findRestorableWindow(true);
+    }
+    restoreFocusTo(target, "overlay");
 }
 
 function sendGeometry(w) {
@@ -313,6 +392,16 @@ function registerHotkeys() {
 workspace.windowAdded.connect(function (w) {
     applyOverlay(w);
     applyCapture(w);
+    if (isOverlay(w)) {
+        overlayMappedAt = Date.now();
+        if (workspace.activeWindow === w) {
+            restoreOverlayFocus(w);
+        }
+        if (lastActive === w) {
+            lastActive = lastExternalActive;
+        }
+    }
+    restoreUserFocus(w);
     monitorWindow(w);
     sendWindowList();
     sendFullscreen();
@@ -325,13 +414,30 @@ workspace.windowRemoved.connect(function (w) {
     if (w === overlay) {
         overlay = null;
         overlayPid = 0;
+        overlayMappedAt = 0;
+    }
+    if (w === lastExternalActive) {
+        lastExternalActive = null;
+    }
+    if (w === lastActive) {
+        lastActive = lastExternalActive;
     }
     sendWindowList();
     sendFullscreen();
 });
 workspace.windowActivated.connect(function (w) {
+    var overlayMapping = isOverlay(w) && overlayJustMapped();
     applyOverlay(w);
     applyCapture(w);
+    if (overlayMapping) {
+        if (lastActive === w) {
+            lastActive = lastExternalActive;
+        }
+        restoreOverlayFocus(w);
+    } else {
+        rememberActive(w);
+    }
+    restoreUserFocus(w);
     sendFullscreen();
 });
 workspace.currentDesktopChanged.connect(function () {
@@ -350,6 +456,13 @@ workspace.virtualScreenGeometryChanged.connect(function () {
 });
 workspace.cursorPosChanged.connect(sendCursor);
 
+lastActive = workspace.activeWindow;
+if (!isRestorableWindow(lastActive)) {
+    lastActive = findRestorableWindow(false);
+}
+lastExternalActive = isRestorableWindow(lastActive) && !isOverlay(lastActive)
+    ? lastActive
+    : findRestorableWindow(true);
 scan();
 registerHotkeys();
 print("slugcatpet target", TARGET_SCREEN, "overlay", OVERLAY_W + "x" + OVERLAY_H);

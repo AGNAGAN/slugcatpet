@@ -41,6 +41,13 @@ if _IS_WIN:
     def _setpos(x, y):
         _user32.SetCursorPos(int(x), int(y))
 
+    _user32.GetAsyncKeyState.restype = ctypes.c_short
+    _user32.GetAsyncKeyState.argtypes = (ctypes.c_int,)
+
+    def _button_down():
+        """左键或右键当前是否按下（虚拟键 VK_LBUTTON=1, VK_RBUTTON=2）。"""
+        return bool((_user32.GetAsyncKeyState(0x01) & 0x8000) or (_user32.GetAsyncKeyState(0x02) & 0x8000))
+
     _OCR_IDS = (32512, 32513, 32649)  # OCR_NORMAL/IBEAM/HAND
     _IDC_APPSTARTING = 32650
     _SPI_SETCURSORS = 0x0057
@@ -78,6 +85,9 @@ else:
 
     def _setpos(x, y):
         pass
+
+    def _button_down():
+        return False
 
     def _set_busy_cursor():
         return False
@@ -121,6 +131,7 @@ class CursorHijack:
         setpos=None,
         busy_cursor=None,
         restore_cursor=None,
+        button_down=None,
         on_release=None,
     ):
         custom_write = setpos is not None
@@ -129,6 +140,7 @@ class CursorHijack:
         self._setpos = setpos or _setpos
         self._busy_cursor = busy_cursor or _set_busy_cursor
         self._restore_cursor = restore_cursor or _restore_cursors
+        self._button_down = button_down or _button_down
         self._on_release = on_release
         self.mock = bool(mock) or (not _IS_WIN and not custom_write)
         self.x = float(dev_x)
@@ -153,6 +165,8 @@ class CursorHijack:
         self.watchdog_max = int(watchdog_max)
         self.use_setpos = False  # ClipCursor 失败后改用 SetCursorPos
         self.replace_cursor = bool(replace_cursor)
+        # 触发劫持的那次点击可能还没松手；先等按键释放，避免刚抢到就解除。
+        self._wait_buttons = bool(self._button_down())
         self.active = True
         _ACTIVE.append(self)
         if not self.mock and self.replace_cursor:
@@ -167,6 +181,12 @@ class CursorHijack:
 
     def update(self) -> bool:
         if not self.active:
+            return False
+        if self._wait_buttons:
+            if not self._button_down():
+                self._wait_buttons = False
+        elif self._button_down():
+            self.release()
             return False
         self.watchdog += 1
         if self.watchdog >= self.watchdog_max:

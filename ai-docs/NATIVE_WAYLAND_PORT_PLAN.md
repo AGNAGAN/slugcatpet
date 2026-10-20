@@ -10,7 +10,7 @@
 - Phase 2 状态：**已完成（第一版）**；UI 嵌入、局部坐标、卡片/菜单/提示与坐标迁移见 `ai-docs/PHASE2_RESULTS.md`
 - Phase 3 状态：**已完成（开发期）**；全屏、窗口快照、全局热键、冲突提示和设置页状态已实测，脚本安装/启用留到 Phase 5；见 `ai-docs/PHASE3_RESULTS.md`
 - Phase 4 状态：**已完成（开发期）**；XDG 自启、输出选择、光标只读/写入能力、托盘锚点与 transient 设置/音乐窗已实测，desktop/图标安装留到 Phase 5；见 `ai-docs/PHASE4_RESULTS.md`
-- Phase 5 状态：**进行中**；Wayland/KWin 光标写入已实现并通过本机验收，Linux 打包、KWin 脚本安装、完整测试、README/故障排查和 CI 待做；见 `ai-docs/PHASE5_CURSOR_WRITE.md`
+- Phase 5 状态：**进行中**；Wayland/KWin 光标写入、焦点保持和左/右键解除已实现并通过本机验收，Linux 打包、KWin 脚本安装、完整测试、README/故障排查和 CI 待做；见 `ai-docs/PHASE5_CURSOR_WRITE.md`
 - 剩余工作清单：`ai-docs/REMAINING_WORK.md`
 
 ---
@@ -672,6 +672,7 @@ self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, not self.debug)
 - 不在每帧调用 `move()`/`raise_()`。
 - KWin 脚本负责几何和层级。
 - 控制模式需要键盘时，由用户点击触发 `activateWindow()`，避免焦点抢占。
+- overlay 首次映射时 KWin 仍可能自动激活它；脚本在映射后的宽限期内把键盘焦点还给原外部窗口，宽限期后的 ControlHud 激活按正常焦点处理。光标捕获面同样在激活后立即恢复原焦点。
 
 ### 4.2 输入区域算法
 

@@ -3,7 +3,7 @@
 - 日期：2026-10-20
 - 依据：`PHASE0_RESULTS.md`、`PHASE1_RESULTS.md`、`PHASE2_RESULTS.md`、`PHASE3_RESULTS.md`、`PHASE4_RESULTS.md`、`PHASE5_CURSOR_WRITE.md` 与当前代码审计
 - 用途：记录 Phase 0–4 之后仍未完成的工作，作为 Phase 5 的执行清单
-- 结论：**Phase 0–4 已完成（Phase 3 的脚本安装/启用、Phase 4 的 desktop/图标安装留到 Phase 5）；Phase 5 已开始，Wayland/KWin 光标写入已实现并通过本机验收，打包/CI/最终验收仍待完成。**
+- 结论：**Phase 0–4 已完成（Phase 3 的脚本安装/启用、Phase 4 的 desktop/图标安装留到 Phase 5）；Phase 5 已开始，Wayland/KWin 光标写入、焦点保持和左/右键解除已实现并通过本机验收，打包/CI/最终验收仍待完成。**
 
 ---
 
@@ -112,6 +112,9 @@
 - [x] 光标劫持/形状
   - Wayland 下通过临时全屏捕获面取得指针焦点，再用 Qt 6.12 `QCursor.setPos()` / `wp_pointer_warp_v1` 写入
   - 能移动、按住期间持续重定位、显示应用级忙碌样式
+  - 左/右键单击解除劫持；捕获面吞掉解除点击，不传给下层窗口
+  - KWin 脚本在捕获面和 overlay 首次映射后恢复原键盘焦点；ControlHud 在宽限期外的激活不受影响
+  - Windows 用 `GetAsyncKeyState()` 轮询左/右键解除
   - 不支持写入时设置页灰显并说明“仍可跟随真实光标”
   - 详细记录见 `PHASE5_CURSOR_WRITE.md`；真实锁光标仍不可用
 - [x] 托盘雨循环卡片锚点
@@ -168,6 +171,8 @@
 - [x] 能力门控：KWin 服务/脚本 + Qt 6.12 pointer-warp。
 - [x] 单元测试：`tests/test_cursor_write.py`、KWin 脚本占位符测试。
 - [x] 本机 KWin 验证：从桌面空白处启动 hold，KWin 探测到 `moved 569 1256`。
+- [x] 焦点保持：overlay 首次映射和捕获面激活后，KWin 最终活动窗口恢复为原窗口。
+- [x] 真实左/右键解除：uinput 注入 `BTN_LEFT`/`BTN_RIGHT`，按下后捕获面隐藏、忙碌光标恢复、劫持清空。
 - [ ] 用真实猫行为（石头命中、升天、矛、Pyro/Riv 抓取）逐项验收。
 - [ ] 多输出逃逸验收：指针移到另一输出后确认降级不崩溃、不把光标拉回。
 - [ ] Rain World 全屏 + 光标劫持组合验收。
@@ -193,7 +198,7 @@
 
 - [ ] 设置/音乐内部的皮肤、尾巴、音量弹层仍是 `Qt.Popup + mapToGlobal`。
 - [ ] 首次启动 `SetupPanel` 在 overlay 创建之前运行，没有 transient parent。
-- [ ] overlay 首次显示抢焦点问题仍未解决。
+- [x] overlay 首次显示抢焦点问题：KWin 脚本在 overlay 首次映射时把焦点还给原外部窗口；映射后 1 秒内的激活按映射处理，ControlHud 的后续激活仍保留。其他合成器未验证。
 - [x] 托盘雨卡片已改为标签栏/光标/表盘/右下角锚点。
 - [ ] 偶发 QtWayland 退出段错误（`QWaylandWindow::decoration`），尚未稳定复现。
 - [x] 提交流程：
@@ -206,7 +211,7 @@
 
 1. Phase 4 已完成（开发期）：XDG 自启、输出选择、光标只读/写入能力、托盘锚点。
 2. Phase 5：光标写入已完成本机验证；继续 KWin 脚本安装/启用、desktop 文件、图标、Linux CI、README/故障排查。
-3. 清理 Phase 2 遗留的 `Qt.Popup` 弹层、overlay 首次焦点和退出段错误。
+3. 清理 Phase 2 遗留的 `Qt.Popup` 弹层和退出段错误；overlay 首次焦点已由 KWin 脚本处理。
 4. 用 Rain World 实际全屏窗口做最终验收。
 5. 按阶段提交，`pyproject.toml` / `uv.lock` 的用户改动单独处理。
 
@@ -219,6 +224,6 @@
 - 最近一次自动检查结果：
   - `uv run ruff check .`：通过
   - `uv run ruff format --check .`：通过
-  - `uv run python -m unittest discover -s tests`：34 个测试通过
+  - `uv run python -m unittest discover -s tests`：35 个测试通过
   - `uv run python tools/params_doc.py --check`：通过
 - 本机 KWin 验收：临时捕获面 + `QCursor.setPos()` 已能把光标从 `(700,1500)` 移到 `(569,1256)`；忙碌样式状态为 true，释放后恢复。

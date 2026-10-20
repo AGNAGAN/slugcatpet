@@ -142,7 +142,7 @@ ai-docs/PARAMS.md 是最新的
 - `.desktop` 应用条目和图标尚未安装，源码运行时 KWin 仍显示 `resourceClass python`；这是 Phase 5 打包工作。
 - 自启的“注销/重新登录后实际拉起”需要在 Phase 5 的完整桌面会话验收中再确认；当前已验证文件内容、路径和开关行为。
 - Wayland 光标写入已在 Phase 5 通过临时捕获面和 Qt pointer-warp 实现；仍不是系统级锁定，见 `PHASE5_CURSOR_WRITE.md`。
-- overlay 首次显示抢焦点、QtWayland 退出偶发段错误、内部 `Qt.Popup` 层仍是 Phase 2 遗留，未在 Phase 4 解决。
+- overlay 首次显示抢焦点已在 Phase 5 由 KWin 焦点恢复处理（其他合成器未验证）；QtWayland 退出偶发段错误、内部 `Qt.Popup` 层仍是遗留问题。
 - Phase 3 的跨输出全屏结论继续有效；Phase 4 另外验证了切换目标屏到 eDP-1 后的全屏收起/恢复。HDMI-A-1 全屏未在切换输出后重复验收，留 Phase 5 最终回归。
 
 ## 4. 涉及文件

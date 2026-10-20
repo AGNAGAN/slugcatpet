@@ -78,6 +78,29 @@ class CursorHijackDriverTests(unittest.TestCase):
         hijack.release()
         self.assertFalse(hijack.active)
 
+    def test_left_or_right_click_releases_after_initial_release(self):
+        state = {"down": True}
+        hijack = CursorHijack(
+            1,
+            2,
+            10,
+            10,
+            mode="hold",
+            button_down=lambda: state["down"],
+            setpos=lambda x, y: None,
+            clip=lambda x, y: False,
+            unclip=lambda: None,
+            busy_cursor=lambda: None,
+            restore_cursor=lambda: None,
+        )
+        # 触发劫持的点击还没松开时，不能立刻自解除。
+        self.assertTrue(hijack.update())
+        state["down"] = False
+        self.assertTrue(hijack.update())
+        state["down"] = True
+        self.assertFalse(hijack.update())
+        self.assertFalse(hijack.active)
+
 
 class _FakeOverlay:
     def __init__(self, area, frame):

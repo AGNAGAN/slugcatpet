@@ -14,6 +14,7 @@ from PySide6.QtCore import (
     QRect,
     QPoint,
     QPointF,
+    Signal,
 )
 from PySide6.QtGui import QPainter, QColor, QGuiApplication, QCursor, QTransform, QRegion
 
@@ -77,6 +78,24 @@ def compute_geometry(area: QRect, geo: QRect, canvas_scale: int) -> dict:
 
 
 FLOOR_EASE = 4.0  # 逻辑 px/tick
+
+
+class CursorCaptureWindow(QWidget):
+    """抢光标时临时获取指针焦点的透明表面。
+
+    Wayland 没有“只接收指针、不接受键盘焦点”的顶层窗口标志，KWin 仍会短暂
+    激活新表面；KWin 脚本会把键盘焦点还给激活前的窗口。左/右键按下时只发出
+    ``clicked`` 并吞掉事件，由主窗口结束劫持。
+    """
+
+    clicked = Signal()
+
+    def mousePressEvent(self, ev):
+        if ev.button() in (Qt.MouseButton.LeftButton, Qt.MouseButton.RightButton):
+            ev.accept()
+            self.clicked.emit()
+            return
+        super().mousePressEvent(ev)
 
 
 def _clamp_to_bounds(o, WL, HL, min_rad=0.0):
@@ -405,13 +424,14 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             return None
         win = self._cursor_capture_window
         if win is None:
-            win = QWidget()
+            win = CursorCaptureWindow()
             win.setWindowFlags(
                 Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint
             )
             win.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
             win.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
             win.setWindowTitle(CURSOR_CAPTURE_TITLE)
+            win.clicked.connect(self.stop_cursor_hijack)
             self._cursor_capture_window = win
         try:
             win.setScreen(scr)
