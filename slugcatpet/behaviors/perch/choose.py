@@ -1,10 +1,12 @@
-"""选落脚点：在走得到、不用挤过别的猫、杆底没被趴着的猫盖住的杆上位置里随机挑，偏向靠近想亲近的猫、远离想躲的猫。"""
+"""选落脚点：在走得到、不用挤过别的猫、杆底走得过去的杆上位置里随机挑，偏向靠近想亲近的猫、远离想躲的猫。"""
 
 from __future__ import annotations
 
 import math
 
 from ... import tuning
+from ...planning.climb_reach import keepout_for
+from ...planning.climbmoves import GRAB_V_REACH
 
 
 class Mark:
@@ -35,26 +37,25 @@ def crowd_pull(fsm):
 
 def pick(fsm, cm, start, bar=None, exclude=None):
     """从 start 挑一个落脚点：(位置, 路线)；bar 给定时只在这根杆上挑；没有能去的 None。"""
-    dist, came = cm.reach_costs(start, tuning.PERCH_COST_LIMIT, rain=fsm.win.rain)
+    dist, came = cm.reach_costs(start, tuning.PERCH_COST_LIMIT, keepout=keepout_for(fsm.win))
     pulls = crowd_pull(fsm)
     crowd = [(x, y) for x, y, _ in pulls]
     r2 = tuning.PERCH_CROWD_R**2
-    pad = fsm.win.body.chunk1.rad
-    spans = [(lo - pad, hi + pad) for lo, hi in fsm.social.floor_spans(fsm.win, yielding=False)]
     cands = []
     rain = fsm.win.rain
+    sx, sy = cm.head(start)
     for s in dist:
         if s[0] == "F" or s == start or s == exclude or (bar is not None and s[1] != bar):
             continue
         hx, hy = cm.head(s)
-        if rain.keeps_out(hx, hy):
+        if math.hypot(hx - sx, hy - sy) < tuning.MIN_MOVE or rain.keeps_out(hx, hy):
             continue
         if any((hx - ox) ** 2 + (hy - oy) ** 2 < r2 for ox, oy in crowd):
             continue
         path = cm.path_to(came, start, s)
         if crowd and _squeezes(cm, start, path, crowd, r2):
             continue
-        if spans and _base_covered(cm, path, spans):
+        if _base_blocked(fsm, cm, path):
             continue
         cands.append(s)
     if not cands:
@@ -72,14 +73,11 @@ def pick(fsm, cm, start, bar=None, exclude=None):
     return spot, cm.path_to(came, start, spot)
 
 
-def _base_covered(cm, path, spans):
-    """路线要从地面抓的杆，杆底被别的猫占着。"""
-    for _, act in path:
-        if act[0] == "grab_v":
-            x = cm.bars[act[1]].x
-            if any(lo < x < hi for lo, hi in spans):
-                return True
-    return False
+def _base_blocked(fsm, cm, path):
+    """路线要从地面抓的杆，杆底走不到（被别的猫占着或路上过不去）。"""
+    return any(
+        act[0] == "grab_v" and fsm.body.reach(cm.bars[act[1]].x, GRAB_V_REACH) is None for _, act in path
+    )
 
 
 def _squeezes(cm, start, path, crowd, r2):

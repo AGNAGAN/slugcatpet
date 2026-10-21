@@ -14,8 +14,9 @@ from ..base import Behavior
 T_SHARE_CHECK = 30  # 每隔几 tick 看一次要不要分享
 OFFER_TICKS = 24  # 走到后伸手递的时长
 TIMEOUT = 900
-SIDE_DX = 30.0  # 走到离对方这么远
+SIDE_DX = 40.0  # 走到对方身边，臀离它这么近以内
 NEAR_DX = 80.0  # 停下时离对方臀部这么近以内才递，否则对方挪开了，重新走
+RECIPIENT_STATES = ("IdleStand", "LieDown", "Sleep")  # 对方在做这些时才递
 
 
 def pick_recipient(fsm, food, p):
@@ -23,18 +24,17 @@ def pick_recipient(fsm, food, p):
     b = fsm.body
     rain = fsm.win.rain
     best = None
-    for o in fsm.social.others(fsm.win):
+    for oc in fsm.social.space.mates(fsm.win, RECIPIENT_STATES):
+        o = oc.pet
         ob = o.body
         w = fsm.social.pull(fsm.win, o)
         if (
             w < p.min_pull
-            or not ob.on_floor()
-            or not b.same_floor(ob)
             or abs(ob.chunk1.x - b.chunk1.x) > p.reach
-            or fsm.social.state_of(o) not in ("IdleStand", "LieDown", "Sleep")
             or (rain.dangerous() and rain.keeps_out(ob.chunk1.x, ob.chunk1.y))
             or not fsm.social.wants_food(o, food)
             or fsm.social.held(o, "gift") is not None
+            or b.reach(ob.chunk1.x, SIDE_DX) is None
         ):
             continue
         if best is None or w > best[0]:
@@ -57,22 +57,17 @@ class Share(State):
         self.offer = 0
         self.fsm.social.claim(self.to, "gift", self.food, ttl=tuning.SHARE_HOLD)
         self.fsm.body.set_posture(True)
-        self._go()
+        self._go()  # 挑的时候已判过走得到
 
     def _go(self):
-        """走到对方靠我这一侧的身边。"""
-        b = self.fsm.body
-        ob = self.to.body
-        side = 1.0 if b.chunk1.x >= ob.chunk1.x else -1.0
-        b.walk_to(ob.chunk1.x + side * SIDE_DX)
+        """走到对方身边；走不到返回 False。"""
+        return self.fsm.body.walk_to(self.to.body.chunk1.x, SIDE_DX)
 
     def _valid(self):
         fsm = self.fsm
         return (
             fsm.body.hand_of(self.food) is not None
-            and self.to in fsm.social.others(fsm.win)
-            and self.to.body.on_floor()
-            and fsm.body.same_floor(self.to.body)
+            and any(oc.pet is self.to for oc in fsm.social.space.mates(fsm.win))
             and fsm.social.wants_food(self.to, self.food)
         )
 
@@ -88,7 +83,8 @@ class Share(State):
             if b.is_moving():
                 return
             if abs(b.chunk1.x - ob.chunk1.x) > NEAR_DX:  # 走到了，对方却挪开了
-                self._go()
+                if not self._go():
+                    self._end()
                 return
         b.stop_walk()
         b.facing = 1 if ob.chunk1.x > b.chunk1.x else -1

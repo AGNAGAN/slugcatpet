@@ -22,14 +22,14 @@ class TongueControl:
         self.pet = pet
 
     def update(self, body, inp0, inp1, can_jump):
-        """操控移动开头、抓杆之前调：空中按跳射舌，粘住时收放绳和松舌；都不消耗跳跃预输入。"""
+        """操控移动开头、抓杆之前调：空中（贴墙除外）按跳射舌，粘住时收放绳和松舌；都不消耗跳跃预输入。"""
         t = tongue_of(self.pet)
         if t is None:
             return
         press = inp0.jmp and not inp1.jmp
         if t.attached:
             self._attached(body, t, inp0, press)
-        elif press and not inp0.pckp and can_jump <= 0 and t.is_idle():
+        elif press and not inp0.pckp and can_jump <= 0 and body.bodyMode != "WallClimb" and t.is_idle():
             self._shoot(body, t, inp0)
 
     def _shoot(self, body, t, inp0):

@@ -9,6 +9,7 @@ from ...brain import maneuver
 from ...planning.backflip_reach import SETTLE_MAX, SETTLE_VX, TOP_CLEAR, takeoff_c0_h
 from ...planning.jump_arc import get_backflip_arc
 from ...brain.skills.hpole import GRIP_DIST
+from ...brain.skills.motor import arc_blocked, rain_blocks
 from ...items.base import CLIMBABLE
 from ...brain.state import T_ACTIVITY, VIGOROUS
 from ..base import Behavior, mood_candidate, mood_params
@@ -51,7 +52,7 @@ def _pole_reachable(fsm):
 
 
 def _pole_plan(fsm):
-    """挑一根后空翻够得着的横杆：返回 (杆, 方向, 起跳 x)，没有返回 None。"""
+    """挑一根后空翻够得着、大雨时不出遮挡、起跳点走得到的横杆：返回 (杆, 方向, 起跳 x)，没有返回 None。"""
     stats = fsm.win.cat.stats
     launch_y = fsm.HL - takeoff_c0_h(stats)
     b = fsm.body
@@ -64,19 +65,23 @@ def _pole_plan(fsm):
             continue
         lo = min(pole.ax, pole.bx) + POLE_X_MARGIN
         hi = max(pole.ax, pole.bx) - POLE_X_MARGIN
-        if hi <= lo:
+        if hi <= lo or rain_blocks(fsm, (lo, pole.ay), (hi, pole.ay)):
             continue
         for ax_t in (max(lo, min(hi, b.chunk1.x)), (lo + hi) * 0.5):
             for d in (1, -1) if ax_t >= b.chunk1.x else (-1, 1):
                 arc = get_backflip_arc(stats, d)
                 if arc.apex + GRIP_DIST < rise:
                     continue
-                for px, py in arc.points:
+                for i, (px, py) in enumerate(arc.points):
                     if launch_y + py < TOP_CLEAR:  # 弧线越过窗顶后会被截住、不准，这条弧不用
                         break
                     if abs(launch_y + py - pole.ay) <= AIM_BAND:
                         lx = ax_t - px
-                        if xmin <= lx <= xmax:
+                        if xmin <= lx <= xmax and b.reach(lx, ARRIVE_X) is not None:
+                            if rain_blocks(fsm, (lx, fsm.HL - 1.0)) or arc_blocked(
+                                fsm, lx, launch_y, arc.points[: i + 1]
+                            ):
+                                break
                             return (pole, d, lx)
     return None
 
@@ -107,7 +112,7 @@ def _mount(fsm, p):
         flip.settle = 0
         flip.launch_t = 0
         flip.airborne = False
-        fsm.body.walk_to(flip.x)
+        fsm.body.walk_to(flip.x, ARRIVE_X)  # 挑的时候已判过走得到
 
     def finish(b):
         brk()
@@ -126,7 +131,7 @@ def _mount(fsm, p):
             finish(b)
             return
         if ph == "walk":
-            if b.on_floor() and (not b.is_moving() or abs(b.chunk1.x - flip.x) < ARRIVE_X):
+            if b.on_floor() and not b.is_moving():
                 b.stop_walk()
                 flip.phase = "settle"
             return
@@ -178,6 +183,7 @@ def _mount(fsm, p):
             and not getattr(fsm.body, "zerog", False)
             and ctx.energy >= fsm.traits.play_gate
             and _pole_reachable(fsm)
+            and (not fsm.win.rain.dangerous() or _pole_plan(fsm) is not None)
         )
 
     mood_candidate(fsm, "riv_flip", p, gate)

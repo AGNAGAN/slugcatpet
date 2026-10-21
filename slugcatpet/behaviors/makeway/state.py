@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
-from ...brain.social.traffic import CONTACT
 from ...brain.state import LIGHT, T_ACTIVITY, State
 from ...planning.climbmap import locate, map_for
 from ...planning.climbmoves import PullUpMotion, SwingUnderMotion, climb_tick, release, tip_up_tick
 
 LIE_MIN = 36  # 趴下至少趴这么久
 LIE_HASTE = 2.0  # 让路时趴下比平时快这么多倍
-TIMEOUT = 300
+TIMEOUT = 300  # 兜底：让这么久还没完，说明对方的过路没有收尾（设计上不该发生）
 STEP_OFF_H = 34.0  # 竖杆上臀离地这么近就下到地上
 CALM = 15  # 竖杆上对方这么久不再逼近才算让完
-CROSS_VX = 0.5  # 对方横向速度超过此值才算正从身上跨过
 
 
 class MakeWay(State):
@@ -28,20 +26,25 @@ class MakeWay(State):
         self.bar = None
         self.motion = None
         self.calm = 0
+        self.resume = None  # 让之前在待机里要走去的地方 (x, tol)
 
     def enter(self):
         fsm = self.fsm
         b = fsm.body
         o = fsm.social.order(fsm.win)
-        self.kind, self.by, self.dir = o.kind, o.by, o.dir
+        self.kind, self.by, self.dir = ("stop", None, 0) if o is None else (o.kind, o.by, o.dir)
         self.bar = self.motion = None
         self.calm = 0
+        idle = fsm.prev_state == "IdleStand" and b.walk_target_x is not None
+        self.resume = (b.walk_target_x, b.walk_tol) if idle else None  # 让完接着走，走不到了待机自己再挑
         if self.kind == "lie":
             b.stop_walk()
+            b.facing = self.dir
             b.set_posture(False)
             b.lie_haste = LIE_HASTE
             return
         if self.kind == "stop":
+            b.stop_walk()
             self._done()
             return
         cm = map_for(fsm.win)
@@ -63,25 +66,25 @@ class MakeWay(State):
             self.by, self.dir = o.by, o.dir
         ob = self.by.body
         fsm.gfx.look_at = (ob.chunk0.x, ob.chunk0.y)
+        if fsm.timer > TIMEOUT:
+            fsm.social.traffic.fallback(fsm.win, "让路超时")
         if self.kind is None or fsm.timer > TIMEOUT:
             self._done()
         elif self.kind == "lie":
-            self._lie(o, ob)
+            self._lie(o)
         elif self.kind == "swap":
             if self.motion.step() is not False:
                 self._done()
         else:
             self._clear(o)
 
-    def _lie(self, o, ob):
-        """趴着等对方走过去；对方正从身上跨过时不起来。"""
+    def _lie(self, o):
+        """趴着等对方过完这一排：没有指令了、也趴够了才起来。"""
         b = self.fsm.body
         b.move_dir = 0
-        if self.dir:
-            b.facing = self.dir
-        crossing = not ob.on_pole and abs(ob.chunk1.vx) > CROSS_VX
-        over = crossing and abs(ob.chunk1.x - b.chunk1.x) < CONTACT["F"]
-        if o is None and not over and self.fsm.timer >= LIE_MIN:
+        if o is not None and o.dir:
+            b.facing = o.dir
+        if o is None and self.fsm.timer >= LIE_MIN:
             self._done()
 
     def _clear(self, o):
@@ -109,6 +112,8 @@ class MakeWay(State):
 
     def _done(self):
         self.fsm.settle()
+        if self.resume is not None and self.fsm.state == "IdleStand":
+            self.fsm.body.walk_to(*self.resume)
 
     def brk(self):
         b = self.fsm.body

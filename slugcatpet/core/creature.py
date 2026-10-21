@@ -39,6 +39,9 @@ CONN_CRAWL = cp.DIST_CRAWL
 HIP_SINK_EASE = 0.06
 
 WALK_STOP_EPS = 2.0
+ARRIVED, BLOCKED = "arrived", "blocked"  # 走路的结果
+FLAT_TOL = 4.0  # 头和臀的下沿高低差这么多以内算趴平
+FOOT_TICKS = 5  # 碰到别的猫后这么多 tick 内还算踩着；踩着跳完也冷却这么久
 WALK_SLOW_DIST = 24.0  # 离走路目标这么近时开始减速
 
 ZEROG_KICK = 5.4 * K_VEL
@@ -117,7 +120,12 @@ class SlugcatBody:
 
         self.standing = True
         self.move_dir = 0
-        self.walk_target_x = None
+        self.walk_target_x = None  # 行为要去的地方（意图）
+        self.target_x = None  # 腿实际走向的落脚处：离意图最近、走得到的站位
+        self.walk_tol = WALK_STOP_EPS  # 落脚处离意图多远以内算到；None 为不限
+        self.walk_result = None  # 这次走路的结果：arrived 到了 / blocked 走到一半路断了
+        self.holding = False  # 这一 tick 腿因为 lane_hold 停着
+        self.reach = lambda x, tol: x  # 走去 x 能落脚的位置，到不了 None；没有别的猫时都走得到
         self.walk_speed_target = None
         self.dead = False
         self._jump_pending = None  # None/"stand"/"protest"
@@ -146,8 +154,17 @@ class SlugcatBody:
         self.pole_y = 0.0
         self.pole_frame = 0  # 杆上动画帧
         self.pole_input = (0, 0)  # 杆上这一 tick 想按的方向
-        self.lane_hold = 0  # 杆上被前面的猫挡住、不许按的方向
+        self.lane_hold = 0  # 被前面的猫挡住、不许走的方向（杆上、地上），由通行写
+        self.lane_blocked = False  # 这一 tick 杆上被挡住、谁都让不开
         self.ghost = 0  # 还要穿过别的猫多少 tick（被顶下杆尖后落下）
+        self.foot_chunk = None  # 臀踩着的别的猫的那一节
+        self.foot_mass = 0.0  # 踩着的那只猫的总质量
+        self.foot_n = 0  # >0：还算踩着几 tick；<0：踩着跳完的冷却
+        self.ride = None  # 被别的猫带着：hand 拉在手里 / back 背在背上
+        self.ride_with = None  # 带着我的那只猫的身体
+        self.hand_cat = None  # 拉着别的猫的那只手
+        self.hand_load = 0.0  # 拉着的猫的质量，跑得慢一些
+        self.stride = None  # 通行插进走路里的小动作，走路时自己执行
         self.beam_span = (-1e9, 1e9)  # 吊着的横杆两端
 
         self.facing = 1  # +1 右 / -1 左
@@ -207,7 +224,6 @@ class SlugcatBody:
 
         self.walk_min = None
         self.walk_max = None
-        self.floor_spans = None  # 返回别的猫在地上占的 [(左, 右)]，挑目的地时绕开
 
         self.suspended = False
         self.hover = False
@@ -283,8 +299,12 @@ class SlugcatBody:
         return (self.chunk0, self.chunk1)
 
     def collides_with(self, other):
-        """穿行期间不和别的猫相撞。"""
-        return not (isinstance(other, SlugcatBody) and (self.ghost or other.ghost))
+        """穿行期间、背在背上时不和别的猫相撞；拉着的一对之间也不撞。"""
+        if not isinstance(other, SlugcatBody):
+            return True
+        if self.ghost or other.ghost or self.ride == "back" or other.ride == "back":
+            return False
+        return self.ride_with is not other and other.ride_with is not self
 
     @property
     def steady(self):
@@ -305,16 +325,69 @@ class SlugcatBody:
     def on_floor(self):
         return self.chunk0.on_floor or self.chunk1.on_floor
 
-    def is_moving(self):
-        return self.walk_target_x is not None and abs(self.walk_target_x - self.chunk1.x) > WALK_STOP_EPS
+    def note_foot(self, mine, other, ch):
+        """空中臀碰到别的猫、且不低于它那一节中心偏下半个半径时，记下踩着的那一节。"""
+        if not isinstance(other, SlugcatBody) or mine is not self.chunk1 or self.foot_n < 0:
+            return
+        if self.on_floor() or self.on_pole or self.swimming or self.zerog:
+            return
+        if mine.y < ch.y + ch.rad * 0.5:
+            self.foot_n, self.foot_chunk, self.foot_mass = FOOT_TICKS, ch, other.total_mass
 
-    def walk_to(self, x):
+    def on_support(self):
+        """悬空但踩着别的猫。"""
+        return self.foot_n > 0 and not self.on_floor()
+
+    def afoot(self):
+        """在地上走着：着地，或正在走路里插的跨越中。走路阶段的判断用它，别把跨越当成离地。"""
+        return self.on_floor() or self.stride is not None
+
+    def jump_on_chunk(self):
+        """踩着别的猫起跳：下面的猫越轻跳得越低，并把它往下压。"""
+        c0, c1, ch = self.chunk0, self.chunk1, self.foot_chunk
+        f = min(max(self.foot_mass / self.total_mass, 0.0), 1.0) ** 0.7
+        for c in (c0, c1):
+            c.vy *= 1.0 - f * 0.9
+        c0.vy -= 4.0 * f * K_VEL
+        c1.vy -= 3.0 * f * K_VEL
+        self.jump_boost = 7.0
+        ch.vy += 7.0 * f * self.total_mass / ch.mass * K_VEL
+        self.foot_n, self.foot_chunk = -FOOT_TICKS, None
+        self.feet_stuck = self.crawl_anchor = None
+
+    def walking(self):
+        """看起来在走：有走路目标或方向，且没晕、没停在等别的猫让路。"""
+        st = self.stride
+        if self.stun > 0 or self.holding or (st is not None and (st.waiting or st.braking)):
+            return False
+        return self.is_moving() or self.move_dir != 0
+
+    def is_moving(self):
+        return self.walk_target_x is not None and abs(self.target_x - self.chunk1.x) > WALK_STOP_EPS
+
+    def set_walk_band(self, world_w):
+        """横向能到的范围按身子定：两节中心离左右屏幕边至少较大的那个半径，正好碰到边。"""
+        m = max(self.chunk0.rad, self.chunk1.rad)
+        self.walk_min = m
+        self.walk_max = world_w - m
+
+    def walk_to(self, x, tol=WALK_STOP_EPS):
+        """走去 x，落脚处离 x 不超过 tol（None 为不限）；到不了当场返回 False，不改现在的走路。"""
         x = float(x)
         if self.walk_min is not None:
             x = min(max(x, self.walk_min), self.walk_max)
-        if self.floor_spans is not None:
-            x = self._beside_lying(x)
-        self.walk_target_x = x
+        if self.walk_target_x is not None and abs(x - self.walk_target_x) < 0.5 and tol == self.walk_tol:
+            return True
+        t = self.reach(x, tol)
+        if t is None:
+            return False
+        self.walk_target_x, self.target_x, self.walk_tol, self.walk_result = x, t, tol, None
+        return True
+
+    def walk_blocked(self):
+        """走到一半路断了：停下，结果记为 blocked，交回行为。"""
+        self.stop_walk()
+        self.walk_result = BLOCKED
 
     def lying_span(self):
         """趴在地上时身体占的横向范围（含半径）；没趴着为 None。"""
@@ -323,31 +396,18 @@ class SlugcatBody:
         c0, c1 = self.chunk0, self.chunk1
         return min(c0.x - c0.rad, c1.x - c1.rad), max(c0.x + c0.rad, c1.x + c1.rad)
 
-    def same_floor(self, other):
-        """两只猫是否在同一层地面（臀部高度相近）。"""
-        return abs(self.chunk1.y - other.chunk1.y) <= tuning.FLOOR_SAME_DY
-
-    def _beside_lying(self, x):
-        """目的地落在别的猫占的地方上时，改到我这一侧的边上挨着站，够不着再换另一边；怎么过去由通行决定。"""
-        pad = self.chunk1.rad
-        spans = sorted((lo - pad, hi + pad) for lo, hi in self.floor_spans())
-        merged = []
-        for lo, hi in spans:
-            if merged and lo <= merged[-1][1]:
-                merged[-1][1] = max(merged[-1][1], hi)
-            else:
-                merged.append([lo, hi])
-        for lo, hi in merged:
-            if lo < x < hi:
-                near, far = (lo, hi) if self.chunk1.x < (lo + hi) / 2 else (hi, lo)
-                if self.walk_min is None or self.walk_min <= near <= self.walk_max:
-                    return near
-                return far
-        return x
+    def lying_flat(self):
+        """已经趴平（头和臀一样贴地），别的猫能踩上来、跳过去。"""
+        if self.lying_span() is None:
+            return False
+        c0, c1 = self.chunk0, self.chunk1
+        return abs((c0.y + c0.rad) - (c1.y + c1.rad)) < FLAT_TOL
 
     def stop_walk(self):
-        self.walk_target_x = None
+        self.walk_target_x = self.target_x = None
+        self.walk_result = None
         self.move_dir = 0
+        self.stride = None
 
     def set_posture(self, standing: bool):
         self.standing = bool(standing)
@@ -372,7 +432,7 @@ class SlugcatBody:
         c0.vy = self.stats.jump_head
         c1.vy = self.stats.jump_feet
         self.jump_boost = self.stats.jump_boost
-        self.walk_target_x = None
+        self.stop_walk()
         self.move_dir = int(move_dir)
         self.aerobic_increase(self.stats.jump_aerobic)
 
@@ -393,7 +453,7 @@ class SlugcatBody:
         c0.vy = s.pole_jump_head_vy
         c1.vx = s.pole_jump_feet_vx * d
         c1.vy = s.pole_jump_feet_vy
-        self.walk_target_x = None
+        self.stop_walk()
         self.move_dir = int(d if move_dir is None else move_dir)
         self.aerobic_increase(s.jump_aerobic)
 
@@ -419,7 +479,7 @@ class SlugcatBody:
         self.animation = "Flip"
         self._flip_spin = -d  # 力矩方向=飞行反向
         self._flip_mult = 2.5  # 滑铲源翻跳
-        self.walk_target_x = None
+        self.stop_walk()
         self.move_dir = d
         self.facing = -d
         self.aerobic_increase(s.jump_aerobic)
@@ -457,14 +517,14 @@ class SlugcatBody:
         self.feet_stuck = None
         self.crawl_anchor = None
         self.standing = True
-        self.walk_target_x = None
+        self.stop_walk()
         self.move_dir = int(move_dir)
 
     def die(self):
         self.dead = True
         self.bodyMode = "Dead"
         self.standing = False
-        self.walk_target_x = None
+        self.stop_walk()
         self.feet_stuck = None
         self.crawl_anchor = None
         self.crawl_pose = 0.0
@@ -513,6 +573,10 @@ class SlugcatBody:
     def step(self):
         self._prev_end_x1, self._end_x1 = self._end_x1, None
         self.ghost = max(0, self.ghost - 1)
+        if self.foot_n:
+            self.foot_n += -1 if self.foot_n > 0 else 1
+            if self.foot_n == 0:
+                self.foot_chunk = None
         self._temper_update()
         self._drag_impacts()
         if self._input_provider is not None:
@@ -524,6 +588,10 @@ class SlugcatBody:
                 pkg = InputPackage()
             if pkg is not None:
                 self.set_control_input(pkg)
+        if self._ctrl_on:
+            from ..control.moves_wall import tick_counters
+
+            tick_counters(self)  # 杆上、水里、晕着时也要倒计时
         if self.dead:
             self._step_dead()
             return
@@ -531,6 +599,9 @@ class SlugcatBody:
         self._switch_update()
         self._update_submersion()
         self._lung_update()
+        if self.ride == "back":
+            self._step_ride()
+            return
         swimming = self._should_swim()
         self.swimming = swimming
         if not swimming:
@@ -584,6 +655,21 @@ class SlugcatBody:
         self._breath_update()
         self._apply_carry()
 
+    def _step_ride(self):
+        """背在别的猫背上：站着、不走，照常受重力；背猫随后把它拉回背上。"""
+        self.swimming = False
+        self.bodyMode = "Default"
+        self.animation = None
+        self.standing = True
+        self.feet_stuck = self.crawl_anchor = None
+        self.chunk0.vy += DEF_STAND_HEAD
+        self.chunk1.vy += DEF_STAND_FEET
+        for c in (self.chunk0, self.chunk1):
+            c.update(self.W, self._floor_h, room_gravity=self.room_gravity)
+        self.conn_rest = CONN_STAND
+        solve_conn(self.chunk0, self.chunk1, CONN_STAND, ctype=self.conn_type)
+        self._breath_update()
+
     def _step_hover(self):
         ws = self.water_surface
         for c, wy, wx in ((self.chunk0, self._wy0, self._wyx0), (self.chunk1, self._wy1, self._wyx1)):
@@ -636,6 +722,8 @@ class SlugcatBody:
         if self.submersion <= tuning.SWIM_ENTER:
             return False
         if self.on_floor() and self.head_sub < tuning.SWIM_ENTER:
+            return False
+        if self.bodyMode == "WallClimb" and self.head_sub < 1.0:  # 贴墙时头没全没进水不游
             return False
         return True
 
@@ -1232,21 +1320,32 @@ class SlugcatBody:
                 self.standing = c0.y < c1.y
                 self._flip_spin = 0
         move_x = 0
-        if self.walk_target_x is not None and self.floor_spans is not None:
-            self.walk_target_x = self._beside_lying(self.walk_target_x)  # 定下目标后才有猫躺在那
+        self.holding = False
         if self.walk_target_x is not None:
-            dx = self.walk_target_x - c1.x
+            dx = self.target_x - c1.x
             if abs(dx) > WALK_STOP_EPS:
                 move_x = 1 if dx > 0 else -1
                 self.facing = move_x
-            elif self.on_floor():  # 空中经过不算到，落地偏了接着走
-                self.walk_target_x = None
+                if move_x == self.lane_hold:
+                    move_x = 0  # 跟在前面的猫后面、或在等对方过去
+                    self.holding = True
+            elif self.on_floor() or self.on_support():  # 空中经过不算到，落地偏了接着走
+                self.walk_target_x = self.target_x = self.stride = None
+                self.walk_result = ARRIVED
         else:
             move_x = self.move_dir
             if move_x > 0:
                 self.facing = 1
             elif move_x < 0:
                 self.facing = -1
+        if self.stride is not None and self.walk_target_x is not None and not self._ctrl_on:
+            m = self.stride.move(self)
+            if m is not None:
+                move_x = m
+                if m:
+                    self.facing = m
+            if self.stride.done:
+                self.stride = None
 
         target_sink = 1.0 if not self.standing else 0.0
         self.hip_sink += (target_sink - self.hip_sink) * HIP_SINK_EASE
@@ -1290,8 +1389,9 @@ class SlugcatBody:
             if move_x == 0 and c1.on_floor and not c0.pinned and not c1.pinned and self._jump_pending is None:
                 self._crawl_pose()
 
-        if self.walk_target_x is not None:
-            dist = abs(self.walk_target_x - c1.x)
+        stop_x = self.target_x if self.stride is None else self.stride.stop_x
+        if self.walk_target_x is not None and stop_x is not None:
+            dist = abs(stop_x - c1.x)
             if dist < WALK_SLOW_DIST:
                 scale = max(CRAWL_SPEED / max(dyn1, 1.0), dist / WALK_SLOW_DIST)
                 dyn0 *= scale
@@ -1319,7 +1419,8 @@ class SlugcatBody:
             if grounded:
                 target = max(-dyn, min(dyn, c.vx)) if move_x != 0 else 0.0
                 c.vx += (target - c.vx) * SKID_DAMP
-        if self._jump_pending is not None and on_ground:
+        # 踩着别的猫也按平地跳，和规划时的弧一致
+        if self._jump_pending is not None and (on_ground or self.on_support()):
             self._do_jump(self._jump_pending, move_x, self._jump_hold)
             self._jump_pending = None
             self._jump_hold = None
@@ -1588,12 +1689,14 @@ class SlugcatBody:
         return HANDS[: self.stats.hands]
 
     def free_hand(self, prefer=None):
-        """空手：优先 prefer，否则按主手顺序；能用的手都满时返回 None。"""
+        """空手：优先 prefer，否则按主手顺序；能用的手都满、或拉着成年猫时返回 None。"""
+        if self.hand_load > 0.0:
+            return None
         hands = self.usable_hands()
-        if prefer in hands and self.grasps[prefer] is None:
+        if prefer in hands and self.grasps[prefer] is None and prefer != self.hand_cat:
             return prefer
         for side in hands:
-            if self.grasps[side] is None:
+            if self.grasps[side] is None and side != self.hand_cat:
                 return side
         return None
 

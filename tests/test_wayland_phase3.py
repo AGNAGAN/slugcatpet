@@ -146,10 +146,11 @@ class ShortcutSpecTests(unittest.TestCase):
     def test_specs_cover_global_and_frozen_keys(self):
         specs = _shortcut_specs()
         ids = {spec["id"] for spec in specs}
-        self.assertEqual(ids, {1, 2, 3, 5, 6, 7})
+        self.assertEqual(ids, {1, 2, 3, 5, 6, 7, 8})
         keys = {spec["id"]: spec["key"] for spec in specs}
         self.assertEqual(keys[5], "Ctrl+Alt+P")
         self.assertEqual(keys[7], "Ctrl+Alt+Shift+Right")
+        self.assertEqual(keys[8], "Ctrl+Alt+R")
         codes = {spec["id"]: spec["code"] for spec in specs}
         self.assertEqual(codes[5], 201326672)
         self.assertEqual(codes[7], 251658260)

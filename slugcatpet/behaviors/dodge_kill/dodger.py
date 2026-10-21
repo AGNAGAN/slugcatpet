@@ -53,8 +53,8 @@ class KillDodger:
         if self.phase == "approach":
             lo = b.walk_min if b.walk_min is not None else 20.0
             hi = b.walk_max if b.walk_max is not None else self.win._WL - 20.0
-            b.walk_to(clampf(tx, lo, hi))
-            if (b.on_floor() and not b.is_moving()) or self.timer > APPROACH_TIMEOUT:
+            moving = b.walk_to(clampf(tx, lo, hi), None)
+            if not moving or (b.on_floor() and not b.is_moving()) or self.timer > APPROACH_TIMEOUT:
                 b.stop_walk()
                 self.phase = "work"
                 self.timer = 0
@@ -85,9 +85,11 @@ class KillDodger:
             if wall_x is None:
                 wall_x = self.win._WL if self._climb_side > 0 else 0.0
             if self._climber is None:
-                if b.on_floor() and abs(c0.x - wall_x) > 12.0:
-                    b.walk_to(wall_x)
-                    return False
+                if b.afoot() and abs(c0.x - wall_x) > 12.0:
+                    if b.walk_to(wall_x, 12.0):
+                        return False
+                    self.giveup = True  # 墙脚走不过去
+                    return True
                 b.stop_walk()
                 from ...abilities.tongue.climb import TongueClimber
 

@@ -206,9 +206,11 @@ class GraphicsDrawMixin:
 
             rotation = _ang_from_up(sx - hx, sy - hy) + 90.0
 
-            # scale_y：Crawl 取偏侧号，否则叉积符号
+            # scale_y：Crawl 取偏侧号，WallClimb 取朝向，否则叉积符号
             if self.bodyMode == "Crawl":
                 scale_y = -1.0 if d0x < d1x else 1.0
+            elif self.bodyMode == "WallClimb":
+                scale_y = -1.0 if self.facing < 0 else 1.0
             else:
                 denom = math.hypot(d0y - d1y, d0x - d1x) or 1.0
                 dtl = ((d0y - d1y) * hx - (d0x - d1x) * hy + d0x * d1y - d0y * d1x) / denom
@@ -378,6 +380,9 @@ class GraphicsDrawMixin:
             else:
                 element = self._leg_crawl_frames[0]
             self._legs_scale_x = facing_sx
+        elif self.bodyMode == "WallClimb":
+            element = "LegsAWall"
+            self._legs_scale_x = facing_sx
         else:
             element = self._leg_air_frame
 
@@ -460,7 +465,7 @@ class GraphicsDrawMixin:
                 idx = int(clampf(int(_lerp(drowsy_idx, 1.0, self.sleep_curl)), 0, 8))
             elif b.bodyMode == "ZeroG":
                 idx = 0
-            elif b.bodyMode == "Crawl" or (b.bodyMode == "Stand" and (b.is_moving() or b.move_dir != 0)):
+            elif b.bodyMode == "Crawl" or (b.bodyMode == "Stand" and b.walking()):
                 idx = 4
             else:
                 idx = self._face_angle_index(ts)

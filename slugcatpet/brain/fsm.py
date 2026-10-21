@@ -13,6 +13,7 @@ from .intent import IntentPicker
 from .hands import HandKeeper
 from .objectlooker import ObjectLooker
 from .state import (
+    CARRY,
     DRAG,
     REST,
     RULE_TIER,
@@ -59,6 +60,7 @@ class BehaviorFSM:
         self.looker = ObjectLooker(self.rng, self.traits)
 
         self.state = "IdleStand"
+        self.prev_state = None  # 切到当前状态之前的状态
         self.timer = 0
         self.phase = 0
         self.point_side = 0
@@ -355,6 +357,10 @@ class BehaviorFSM:
                 self.interrupt(DRAG, "Dragged")
             self.grab.drag(cursor) if cursor is not None else None
 
+        if self.social.carry.link_of(self.win) is not None and self.state != "Carried":
+            if not self.interrupt(CARRY, "Carried"):
+                self.social.carry.drop(self.win)
+
         if self.body.drown_burst and self.state != "Dead":
             self.kill_drown_burst()
         elif self.body.drown >= 1.0 and self.state != "Dead":
@@ -399,6 +405,7 @@ class BehaviorFSM:
     def _transition(self, new):
         if new == self.state:
             return
+        self.prev_state = self.state
         self.state = new
         self.timer = 0
         self.phase = 0

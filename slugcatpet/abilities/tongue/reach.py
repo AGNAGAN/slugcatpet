@@ -96,9 +96,8 @@ class TongueApproachController:
                 return GIVEUP
             if not (in_range and under):
                 if body.on_floor():
-                    if under and not in_range:
+                    if (under and not in_range) or not body.walk_to(fx, TONGUE_UNDER_TOL):
                         return GIVEUP
-                    body.walk_to(fx)
                 self.timer = 0
                 return RUNNING
             body.stop_walk()

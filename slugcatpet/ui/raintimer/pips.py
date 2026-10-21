@@ -11,11 +11,11 @@ PLOP_RATE = 0.05
 BLINK_TICKS = 220  # 半程闪烁时长
 RING_GAP = 8.5  # pip 环在业力符号外的距离
 
-DRAIN, HOLLOW, REFILL = "drain", "hollow", "refill"
+DRAIN, HOLLOW = "drain", "hollow"
 
 
 class PipRing:
-    """mode：drain 晴天逐个熄灭，hollow 空闲时全空心，refill 下雨时空心逐个出现。"""
+    """mode：drain 晴天逐个熄灭，hollow 空闲时全空心。"""
 
     def __init__(self):
         self.fade = 0.0
@@ -34,7 +34,7 @@ class PipRing:
         self.blink = BLINK_TICKS
 
     def circles(self, n, frac, mode, radius):
-        """各 pip 的 (x, y, 半径, 线宽)，y 向上为正，线宽 -1 为实心；frac 是剩余比例（refill 时为已出现比例）。"""
+        """各 pip 的 (x, y, 半径, 线宽)，y 向上为正，线宽 -1 为实心；frac 是剩余比例。"""
         out = []
         fade = self.fade
         if fade <= 0.0 or n <= 0:
@@ -52,10 +52,7 @@ class PipRing:
                 thick = -1.0 if hollow == 0.0 else lerp(3.5, 1.0, hollow)
             else:
                 hollow = 1.0
-                grow = 1.0
-                if mode == REFILL:
-                    grow = inv_lerp((n - 1 - i) / n, (n - i) / n, frac)
-                rad = (3.0 * fade**2 + bulge) * grow
+                rad = 3.0 * fade**2 + bulge
                 thick = 1.0
             if rad <= 0.05:
                 continue

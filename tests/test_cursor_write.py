@@ -195,8 +195,12 @@ class WaylandCursorWriterTests(unittest.TestCase):
 
     def test_window_capability_follows_backend(self):
         available = PetWindow.cursor_hijack_available.fget
-        self.assertTrue(available(SimpleNamespace(_backend=SimpleNamespace(supports_cursor_write=True))))
-        self.assertFalse(available(SimpleNamespace(_backend=SimpleNamespace(supports_cursor_write=False))))
+        off_wayland = SimpleNamespace(_wayland=False, _backend=SimpleNamespace(supports_cursor_write=False))
+        supported = SimpleNamespace(_wayland=True, _backend=SimpleNamespace(supports_cursor_write=True))
+        unsupported = SimpleNamespace(_wayland=True, _backend=SimpleNamespace(supports_cursor_write=False))
+        self.assertTrue(available(off_wayland))
+        self.assertTrue(available(supported))
+        self.assertFalse(available(unsupported))
 
 
 if __name__ == "__main__":

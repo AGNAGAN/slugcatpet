@@ -14,6 +14,10 @@ CROSS = 10.0  # 头或臀在交叉横杆那格里
 SLIDE_UP = 17  # 竖杆上按上加跳往上窜的 tick 数
 TIP_RUN_CAP = 3.6  # 站杆尖时按左右的跑速上限
 NO_GRAB_TICKS = 5  # 离杆后这么多 tick 内不再抓杆
+SKIP_TOL = (7.5, 22.5)  # 踩杆再跳：臀离横杆这么近才算卡准（普通 / 宽松）
+SKIP_CD = (6, 3)  # 踩杆再跳后这么多 tick 内不能再踩
+SKIP_MISS = (12, 6)  # 没卡准时的罚时：普通累加，宽松直接设为该值
+SKIP_MISS_MAX = 30
 
 
 def _bars(body):
@@ -29,6 +33,7 @@ def _take_jump(body):
     """跳跃预输入还在就消耗掉并返回 True。"""
     if body._ctrl_want_jump > 0:
         body._ctrl_want_jump = 0
+        body._ctrl_jump_taken = True
         return True
     return False
 
@@ -38,6 +43,7 @@ def _leave(body):
     body._ctrl_bar = None
     body._ctrl_pull = None
     body._ctrl_nograb = NO_GRAB_TICKS
+    body._ctrl_can_jump = 0
     body.standing = True
 
 
@@ -56,7 +62,7 @@ def try_grab(body, inp0, inp1):
         return False
     if inp0.y <= 0 or body.room_gravity <= 0.0 or body.swimming:
         return False
-    if body.bodyMode not in ("Default", "Stand"):
+    if body.bodyMode not in ("Default", "Stand", "WallClimb"):
         return False
     c0, c1 = body.chunk0, body.chunk1
     bars = _bars(body)
@@ -105,11 +111,48 @@ def _attach(body, bar, anim):
     body.feet_stuck = None
     body.crawl_anchor = None
     body.jump_boost = 0.0
+    body._ctrl_can_jump = 0
     body._ctrl_bar = bar
     body._ctrl_pull = None
     body._ctrl_slide_up = 0
     M.grip(body, bar)
     body.animation = anim
+
+
+def pole_skip(body, inp0):
+    """空中臀经过横杆时按住左右再按跳：踩着杆再跳一次，没卡准加罚时；跳了返回 True。"""
+    c0, c1 = body.chunk0, body.chunk1
+    s = body.stats
+    loose = 1 if s.pole_skip_loose else 0
+    fall = abs(c1.last_y - c1.y)
+    if loose:
+        ok = fall < 50.0 and c1.vy > -15.0 and body.animation in (None, "Flip", "RocketJump", "Roll")
+    else:
+        ok = body.standing and body.animation is None and fall < 20.0 and c1.vy > -5.0 and c0.y < c1.y - 5.0
+    if not ok or body.on_floor() or body.room_gravity <= 0.0 or body.swimming:
+        return False
+    hit = None
+    for bar in _bars(body):
+        if bar.vertical or not bar.x0 <= c1.x <= bar.x1:
+            continue
+        near = abs(c1.y - bar.y) < M.TILE / 2 or (loose and abs(c1.y + M.TILE / 2 - bar.y) < M.TILE / 2)
+        if near and min(abs(bar.y - c1.y), abs(bar.y - c1.last_y)) < SKIP_TOL[loose]:
+            hit = bar
+            break
+    if hit is None or inp0.x == 0 or inp0.y > 0 or body._ctrl_pole_skip > 0:
+        miss = SKIP_MISS[loose]
+        body._ctrl_pole_skip = miss if loose else min(SKIP_MISS_MAX, body._ctrl_pole_skip + miss)
+        return False
+    c0.vy = s.pole_skip_head
+    c1.vy = s.pole_skip_feet
+    dy = hit.y - M.STAND_HOVER - c1.y
+    c0.y += dy
+    c1.y += dy
+    body.jump_boost = s.pole_skip_boost
+    body._ctrl_pole_skip = SKIP_CD[loose]
+    body._ctrl_want_jump = 0
+    body._ctrl_can_jump = 0
+    return True
 
 
 def from_zerog(body):
@@ -283,10 +326,8 @@ def _hang(body, bar, inp0, inp1):
                 M.attach_vertical(body, o, 1 if c0.x >= o.x else -1)
                 return
     if up or _press(inp0, inp1, "jmp", True):
-        face = body.facing or 1
-        if not bar.x0 <= c0.x + face * 20.0 <= bar.x1:
-            face = -face
-        body._ctrl_pull = M.PullUpMotion(body, bar, face)
+        body._ctrl_pull = M.PullUpMotion(body, bar, body.facing or 1)
+        body.facing = body._ctrl_pull.facing
         body.animation = "GetUpOnBeam"
         body._ctrl_pull.step()
         return

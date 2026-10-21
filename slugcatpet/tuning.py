@@ -246,8 +246,8 @@ SHARE_TOSS_VX = 1.5  # 放下时朝对方轻推的速度
 HUDDLE_TOUCH = 12.0  # 两只趴着的猫身子相隔这么近算挨着
 HUDDLE_COLD = (1.0, 0.75, 0.6)  # 挨着 0 / 1 / 2 只以上时变冷速度的倍数
 
-# 待机兜底：踱步
-PACE_PROB = 0.0016
+# 踱步
+PACE_PROB = 0.0016  # 闲着时每 tick 换个地方站的概率（再乘活跃度），地上待机和杆上待着共用
 # 待机走位：往想靠近的猫身边走、离想躲的远一点，都不明显时随机
 SOCIAL_SYM_PULL = 2.0  # 亲和 0 / 1 对应想靠近 -1 / 1
 SOCIAL_BOND_PULL = 1.0  # 关系 -1 / 1 再加这么多
@@ -257,6 +257,7 @@ SOCIAL_WANDER_MOVE_W = 0.6
 SOCIAL_WANDER_CROSS_W = 0.8
 SOCIAL_WANDER_NOISE = 0.5  # 随机扰动幅度；想靠近的程度远小于它时等于随便走
 SOCIAL_WANDER_JITTER_FRAC = 0.06  # 原地附近候选点的范围
+MIN_MOVE = 30.0  # 闲着换地方时离现在不到这么远（约一个身长；地上按臀、杆上按头）的地方不选，免得原地挪一小步
 # 待机对视：两只发呆的猫靠近时偶尔对视
 STARE_DIST_MAX = 220.0
 STARE_DIST_NEAR = 70.0

@@ -60,6 +60,7 @@ class Fruit:
         "state",
         "rotation",
         "stalk",
+        "home",
         "held_by_hand",
         "collide_with_objects",
         "_id",
@@ -88,6 +89,7 @@ class Fruit:
         a = _random.Random(seed).uniform(0.0, math.tau)
         self.rotation = (math.sin(a), -math.cos(a))
         self.stalk: "Stalk | None" = None
+        self.home = None  # 吊着时挂的位置 (x, y)；摘下或碰掉后清掉
         self.held_by_hand: "str | None" = None
         self.collide_with_objects = True
         self._id = int(seed)
@@ -276,4 +278,5 @@ def make_fruit(x: float, y: float, HL: float, seed: int = 0, zerog: bool = False
     else:
         f.state = ItemState.HANGING
         f.stalk = Stalk(f)
+        f.home = (f.x, f.y)
     return f

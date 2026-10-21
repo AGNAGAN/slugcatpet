@@ -261,6 +261,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self.cfg_freeze_hide_ui = bool(self._params.get("freeze_hide_ui", True))
         self.cfg_friendly_fire = bool(self._params.get("friendly_fire", False))
         self.cfg_keep_items = bool(self._params.get("keep_items", False))
+        self.cfg_fruit_regrow = bool(self._params.get("fruit_regrow", False))
         self.cfg_fps = self._params.get("fps", "auto")  # "auto"=跟显示器刷新率
         self.cfg_power_save = bool(self._params.get("power_save", True))
         self.cfg_water_depth = clampf(
@@ -522,8 +523,10 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
 
     @property
     def cursor_hijack_available(self) -> bool:
-        """当前后端能否移动光标；Wayland 需要 KWin + Qt pointer-warp 支持。"""
-        return bool(getattr(self._backend, "supports_cursor_write", False))
+        """当前后端能否移动光标；非 Wayland 沿用旧路径，Wayland 需要 KWin + Qt pointer-warp 支持。"""
+        return not getattr(self, "_wayland", False) or bool(
+            getattr(self._backend, "supports_cursor_write", False)
+        )
 
     @property
     def cursor_shape_available(self) -> bool:
@@ -1018,6 +1021,9 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
     def set_keep_items(self, on):
         self.cfg_keep_items = self._params["keep_items"] = bool(on)
 
+    def set_fruit_regrow(self, on):
+        self.cfg_fruit_regrow = self._params["fruit_regrow"] = bool(on)
+
     def blueprints(self):
         """存着的布局蓝图 [{name, size, items}]，就地增删。"""
         v = self._params.get("blueprints")
@@ -1108,7 +1114,6 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
 
     def _reground(self, WL, HL):
         for pet in self.pets:
-            margin = pet.layout_data.canvas_w / 2.0
             b = pet.body
             dy = HL - b.H
             if dy and b.on_floor():  # 站在地上的跟着地面平移，不被拽下去
@@ -1119,8 +1124,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             b.W = WL
             b.H = HL
             b._floor_h = HL
-            b.walk_min = margin
-            b.walk_max = WL - margin
+            b.set_walk_band(WL)
             b.visual_floor_y = HL
             _clamp_to_bounds(b.chunk0, WL, HL, 1.0)
             _clamp_to_bounds(b.chunk1, WL, HL, 1.0)
@@ -1154,6 +1158,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self.social.tick()
         for pet in self.pets:
             pet.step(cur, cycle_prog)
+        self.social.carry.sync(self.pets)
         self._plan_budget.run(self.pets)
 
         self._tick_items()
@@ -1508,6 +1513,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
     def _take_off_stage(self, pet):
         if getattr(pet, "controlled", False):
             self.stop_control()
+        self.social.carry.release_all(pet)
         pet.body.drop_carried()
         pet.dismiss_kill_dialog()
         if pet.behavior is not None:
@@ -1736,14 +1742,15 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self._draw_items_behind(p)
 
         self._draw_click_pads(p)
-        for pet in self.pets:
+        order = self.social.carry.draw_order(self.pets)
+        for pet in order:
             fx = pet.behavior.exclusive_fx() if pet.behavior is not None else None
             if fx is not None:
                 fx.draw_under(p, self._ts)
             pet.gfx.draw_sprites(p, pet.atlas, timeStacker=self._ts)
 
         self._draw_items(p, "mid")
-        for pet in self.pets:
+        for pet in order:
             pet.gfx._draw_hand_grips(p, pet.atlas, self._ts)
 
         self._draw_items(p, "front")

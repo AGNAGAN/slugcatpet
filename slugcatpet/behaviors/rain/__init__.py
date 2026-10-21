@@ -47,11 +47,10 @@ class RainBehavior(Behavior):
         def rule(cursor):
             if st.cooldown > 0:
                 st.cooldown -= 1
-                return
             if not fsm.win.rain.dangerous() or fsm.grab.active or fsm._zerog():
                 return
             self.check = (self.check + 1) % T_CHECK
-            if self.check == 0 and exposed(fsm) and shelter_x(fsm) is not None:
+            if self.check == 0 and st.cooldown <= 0 and exposed(fsm) and shelter_x(fsm) is not None:
                 fsm.interrupt(RAIN, "SeekShelter")
 
         fsm.register_ticker(push)

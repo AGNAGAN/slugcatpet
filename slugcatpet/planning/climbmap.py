@@ -547,12 +547,12 @@ class ClimbMap:
             return None
         return abs(c - v) / speed, ("reach",)
 
-    def _wet(self, rain, spot):
-        """大雨时这个位置露天。"""
-        return rain.keeps_out(*self.head(spot))
+    def _kept_out(self, keepout, spot):
+        """这个位置不经过（大雨时露天、挪不开的猫占着）。"""
+        return keepout.keeps_out(*self.head(spot))
 
-    def reach_costs(self, start, limit, target=None, rain=None):
-        """耗时 limit 内能到的位置：({位置: 耗时}, {位置: (上一位置, 动作)})；到 target 就停；给了 rain 时大雨里不经过露天的位置。"""
+    def reach_costs(self, start, limit, target=None, keepout=None):
+        """耗时 limit 内能到的位置：({位置: 耗时}, {位置: (上一位置, 动作)})；到 target 就停；不经过 keepout 挡着的位置。"""
         dist = {start: 0.0}
         came = {}
         heap = [(0.0, start)]
@@ -568,7 +568,7 @@ class ClimbMap:
             for dst, cost, act in self.edges(s):
                 ng = g + cost
                 if ng <= limit and ng < dist.get(dst, math.inf):
-                    if rain is not None and self._wet(rain, dst):
+                    if keepout is not None and self._kept_out(keepout, dst):
                         continue
                     dist[dst] = ng
                     came[dst] = (s, act)
@@ -589,9 +589,9 @@ class ClimbMap:
         path.reverse()
         return path
 
-    def route_to(self, start, target, limit=math.inf):
+    def route_to(self, start, target, limit=math.inf, keepout=None):
         """到 target 的路线；到不了 None。"""
-        dist, came = self.reach_costs(start, limit, target)
+        dist, came = self.reach_costs(start, limit, target, keepout)
         if target[0] == "F" and target[2] is None:
             floors = [s for s in dist if s[0] == "F" and s != start]
             if not floors:
@@ -599,8 +599,8 @@ class ClimbMap:
             target = min(floors, key=lambda s: dist[s])
         return self.path_to(came, start, target)
 
-    def search(self, start, gx, gy, rain=None):
-        """A*：够着 (gx, gy) 的路线和总耗时；找不到 None；给了 rain 时大雨里不经过露天的位置。"""
+    def search(self, start, gx, gy, keepout=None):
+        """A*：够着 (gx, gy) 的路线和总耗时；找不到 None；不经过 keepout 挡着的位置。"""
         if start is None:
             return None
         if start[0] == "F" and not self._maybe_touchable(gx, gy):
@@ -634,7 +634,7 @@ class ClimbMap:
             for dst, cost, act in self.edges(s):
                 ng = g + cost
                 if ng < best_g.get(dst, math.inf):
-                    if rain is not None and self._wet(rain, dst):
+                    if keepout is not None and self._kept_out(keepout, dst):
                         continue
                     best_g[dst] = ng
                     came[dst] = (s, act)

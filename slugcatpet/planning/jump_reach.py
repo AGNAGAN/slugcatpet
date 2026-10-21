@@ -102,7 +102,8 @@ class JumpReachController:
                 body.stop_walk()
                 self.phase = "settle"
                 return RUNNING
-            body.walk_to(lx)
+            if not body.walk_to(lx, tuning.PLAN_JUMP_TAKEOFF_EPS):
+                return GIVEUP  # 起跳点走不到
             return RUNNING
         if self.phase == "settle":
             body.stop_walk()

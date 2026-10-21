@@ -1,4 +1,4 @@
-"""多猫协调：互相感知、目标占用、通行让路、猫际关系。行为只经这里了解别的猫。"""
+"""多猫协调：占位、目标占用、通行让路、背猫、猫际关系。行为只经这里了解别的猫。"""
 
 from __future__ import annotations
 
@@ -6,11 +6,12 @@ import math
 
 from ... import tuning
 from ..hands import EAT_LATER
-from .bonds import LYING, Bonds
-from .traffic import CONTACT, Traffic
+from .bonds import Bonds
+from .carry import Carry
+from .space import Space
+from .traffic import Traffic
 
 STEAL_FRAC = 0.5  # 比占用者近到一半以内才抢目标
-SETTLING_REACH = 3.0  # 正要趴下、预约了位置的猫，按臀半径的这么多倍占地
 
 
 class Claim:
@@ -26,18 +27,21 @@ class Claim:
 
 
 class Social:
-    floor_gap = CONTACT["F"]  # 在地面上挨着另一只猫站，中心隔这么远
+    floor_gap = 24.0  # 在地面上挨着另一只猫站，中心隔这么远
 
     def __init__(self, win):
         self.win = win
         self.now = 0
         self._claims = {}  # id(target) → Claim
         self._held = {}  # (owner, slot) → Claim
+        self.space = Space(self)
         self.traffic = Traffic(self)
         self.bonds = Bonds(self)
+        self.carry = Carry(self)
 
     def tick(self):
         self.now += 1
+        self.space.tick()
         self.traffic.update()
         self.bonds.tick()
 
@@ -69,11 +73,8 @@ class Social:
         gap = tuning.HUDDLE_TOUCH
         return sum(
             1
-            for o in self.others(me)
-            if (s := o.body.lying_span()) is not None
-            and me.body.same_floor(o.body)
-            and s[0] - gap < mine[1]
-            and mine[0] < s[1] + gap
+            for o in self.space.mates(me)
+            if o.pet.body.lying_span() is not None and o.lo - gap < mine[1] and mine[0] < o.hi + gap
         )
 
     def wants_food(self, pet, item) -> bool:
@@ -88,14 +89,10 @@ class Social:
             and fsm.hands.held(EAT_LATER) is None
         )
 
-    def floor_mates(self, me):
-        """和我在同一层地面上的别的猫：走在通行的地面通道上、臀高度相近。"""
-        return [o for o in self.others(me) if o in self.traffic.ground and me.body.same_floor(o.body)]
-
     def wander_marks(self, me):
         """同层的猫的 [(位置 x, 想靠近多少)]；它也躲着我时不再想追。"""
         out = []
-        for o in self.floor_mates(me):
+        for o in (oc.pet for oc in self.space.mates(me)):
             w = self.pull(me, o)
             if w > 0.0:
                 w *= 1.0 + min(0.0, self.pull(o, me))
@@ -149,24 +146,6 @@ class Social:
         """me 在 slot 上占着且仍有效的目标；没有 None。"""
         c = self._held.get((me, slot))
         return c.target if c is not None and self._valid(c.target) is c else None
-
-    def floor_spans(self, me, yielding=True):
-        """同一层地面上别的猫占的 [(左, 右)]：趴着的、正要趴下的、预约了挨着睡的位置；yielding 为 False 时让路趴下的不算。"""
-        out = []
-        for o in self.floor_mates(me):
-            if not yielding and self.state_of(o) == "MakeWay":
-                continue
-            ob = o.body
-            reach = SETTLING_REACH * ob.chunk1.rad
-            span = ob.lying_span()
-            if span is None and self.state_of(o) in LYING:
-                span = (ob.chunk1.x - reach, ob.chunk1.x + reach)
-            if span is not None:
-                out.append(span)
-            m = self.held(o, "huddle")
-            if m is not None:
-                out.append((m.x - reach, m.x + reach))
-        return out
 
     def taken(self, me, target) -> bool:
         c = self._valid(target)

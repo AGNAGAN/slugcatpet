@@ -1,16 +1,15 @@
-"""托盘图标：猫色圆点，计时中外圈一道进度弧；晴天白弧顺时针缩短，雨天变暗加雨丝、蓝弧顺时针补满，一直下的雨不画弧。"""
+"""托盘图标：猫色圆点；晴天外圈一道白弧顺时针缩短，雨天变暗加雨丝。"""
 
 from __future__ import annotations
 
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
 
-from ...world.raintimer import DRY, IDLE, RAIN
+from ...world.raintimer import IDLE, RAIN
 
 ICON = 32
 ARC_STEPS = 64  # 弧长量化，变了才重画
 DRY_ARC = QColor(255, 255, 255)
-RAIN_ARC = QColor(120, 175, 255)
 RAIN_BODY = QColor(70, 84, 104)
 RAIN_STREAK = QColor(190, 215, 245)
 
@@ -19,10 +18,9 @@ def arc_key(timer):
     """决定图标长相的量化状态，相同就不用重画。"""
     if timer is None or timer.phase == IDLE:
         return IDLE, 0
-    if timer.phase == RAIN and timer.end_ts is None:
+    if timer.phase == RAIN:
         return RAIN, 0
-    p = timer.progress()
-    return timer.phase, round((1.0 - p if timer.phase == DRY else p) * ARC_STEPS)
+    return timer.phase, round((1.0 - timer.progress()) * ARC_STEPS)
 
 
 def tray_icon(body_rgb, frozen=False, timer=None) -> QIcon:
@@ -44,10 +42,8 @@ def tray_icon(body_rgb, frozen=False, timer=None) -> QIcon:
     if running and steps > 0:
         span = int(360 * 16 * steps / ARC_STEPS)
         p.setBrush(Qt.BrushStyle.NoBrush)
-        p.setPen(
-            QPen(DRY_ARC if phase == DRY else RAIN_ARC, 3.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.FlatCap)
-        )
-        p.drawArc(QRectF(2.5, 2.5, ICON - 5, ICON - 5), 90 * 16, span if phase == DRY else -span)
+        p.setPen(QPen(DRY_ARC, 3.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.FlatCap))
+        p.drawArc(QRectF(2.5, 2.5, ICON - 5, ICON - 5), 90 * 16, span)
     if frozen:
         p.setPen(QColor(255, 255, 255))
         p.setBrush(QColor(60, 110, 200))

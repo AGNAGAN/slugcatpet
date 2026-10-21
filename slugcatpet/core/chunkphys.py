@@ -98,6 +98,13 @@ class BodyChunk:
     def on_floor(self) -> bool:
         return self.cy == 1  # y↓，+1=着地
 
+    def hold_still(self) -> None:
+        """位置由外面定：只推进历史、清掉接触，不积分。"""
+        self.last_last_x, self.last_last_y = self.last_x, self.last_y
+        self.last_x, self.last_y = self.x, self.y
+        self.lcx, self.lcy = self.cx, self.cy
+        self.cx = self.cy = 0
+
     def update(
         self,
         W: float,
@@ -116,10 +123,7 @@ class BodyChunk:
         if self.vy != self.vy:
             self.vy = 0.0
         if self.pinned:
-            self.last_last_x, self.last_last_y = self.last_x, self.last_y
-            self.last_x, self.last_y = self.x, self.y
-            self.lcx, self.lcy = self.cx, self.cy
-            self.cx = self.cy = 0
+            self.hold_still()
             return
         self.vy += gravity * room_gravity
         apply_water(self, water_y, buoyancy, water_friction, room_gravity, air_friction, water_immunity)
@@ -327,11 +331,23 @@ def _grounded(o) -> bool:
     return f is not None and f()
 
 
+def _uncross(a, b):
+    """两只猫都在地上、上身交叉（头的左右和臀相反）时 a 往哪侧挪才解开（±1）；没交叉 None。
+    这时沿连线推开会把交叉越推越深，两只就卡成 X。"""
+    if not (_grounded(a) and _grounded(b)):
+        return None
+    dh, dt = a.chunk0.x - b.chunk0.x, a.chunk1.x - b.chunk1.x
+    if dh * dt >= 0.0:
+        return None
+    return 1.0 if dt > 0.0 else -1.0
+
+
 def _collide_pair(a, b, a_chunks, b_chunks) -> None:
     if not (getattr(a, "collides_with", None) is None or a.collides_with(b)):
         return
     a_fix = getattr(a, "steady", False) and not hasattr(b, "steady")
     b_fix = getattr(b, "steady", False) and not hasattr(a, "steady")
+    side = _uncross(a, b)
     for ca in a_chunks:
         if not ca.collide_with_objects:
             continue
@@ -349,7 +365,9 @@ def _collide_pair(a, b, a_chunks, b_chunks) -> None:
             bp = b_fix or getattr(cb, "pinned", False)
             if ap and bp:
                 continue
-            if dist < 1e-9:  # 完全重合时横着推开
+            if side is not None:  # 交叉着：横着往各自臀那侧推
+                ux, uy = -side, 0.0
+            elif dist < 1e-9:  # 完全重合时横着推开
                 ux, uy = 1.0, 0.0
             else:
                 ux, uy = dx / dist, dy / dist
@@ -382,3 +400,7 @@ def _collide_pair(a, b, a_chunks, b_chunks) -> None:
                     ca.vx += 1e-4
                 if not bp:
                     cb.vx -= 1e-4
+            for o, mine, other, ch in ((a, ca, b, cb), (b, cb, a, ca)):
+                note = getattr(o, "note_foot", None)  # 只有猫的身体有
+                if note is not None:
+                    note(mine, other, ch)

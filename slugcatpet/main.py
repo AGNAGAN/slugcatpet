@@ -28,6 +28,7 @@ from .control.hotkey import (
     HK_HUD,
     HK_PLACE_ESC,
     HK_QUIT,
+    HK_RAIN,
     HK_STEP,
     HK_STEP10,
     HotkeyFilter,
@@ -157,15 +158,15 @@ def _extract_rain_later():
     """缺雨和业力梯的素材且找得到游戏时在后台补提取。"""
     from .gameassets import (
         detect_install,
-        extract_karma_sounds,
+        extract_dial_sounds,
         extract_rain_atlas,
         extract_rain_sounds,
-        karma_sounds_missing,
+        dial_sounds_missing,
         rain_atlas_missing,
         rain_sounds_missing,
     )
 
-    atlas, sounds, karma = rain_atlas_missing(), bool(rain_sounds_missing()), bool(karma_sounds_missing())
+    atlas, sounds, karma = rain_atlas_missing(), bool(rain_sounds_missing()), bool(dial_sounds_missing())
     if not (atlas or sounds or karma):
         return
 
@@ -179,7 +180,7 @@ def _extract_rain_later():
             if sounds:
                 extract_rain_sounds(install)
             if karma:
-                extract_karma_sounds(install)
+                extract_dial_sounds(install)
         except Exception:
             pass
 
@@ -535,6 +536,8 @@ def main():
             app.quit()
         elif hk_id == HK_HUD:
             hud.toggle_visible()
+        elif hk_id == HK_RAIN:
+            dial.peek()
         elif hk_id == HK_PLACE_ESC:
             pet._exit_place_mode()
         elif hk_id == HK_FREEZE:

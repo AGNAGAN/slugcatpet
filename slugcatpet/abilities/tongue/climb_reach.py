@@ -76,9 +76,8 @@ class ClimbAssistController:
             wall_x = pet._WL if self._side > 0 else 0.0
 
         if self._climber is None:
-            if body.on_floor() and abs(c0.x - wall_x) > WALL_ARRIVE:
-                body.walk_to(wall_x)
-                return RUNNING
+            if body.afoot() and abs(c0.x - wall_x) > WALL_ARRIVE:
+                return RUNNING if body.walk_to(wall_x, WALL_ARRIVE) else GIVEUP
             body.stop_walk()
             from .climb import TongueClimber
 

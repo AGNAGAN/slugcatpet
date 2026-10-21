@@ -43,6 +43,7 @@ _HOTKEY_NAMES = {
     5: "freeze",
     6: "step",
     7: "step x10",
+    8: "rain timer",
 }
 
 

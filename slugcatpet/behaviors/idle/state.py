@@ -6,6 +6,7 @@ import math
 
 from ... import tuning
 from ...core.creature import ZEROG_GRAB_DIST, _closest_on_segment
+from ...brain.social.space import FLOOR
 from ...brain.state import State, IDLE
 from ...brain.skills import motor
 from ...brain.skills.motor import WALL_MARGIN
@@ -91,13 +92,9 @@ class IdleStand(State):
         self._stare_cd = fsm.rng.randint(tuning.STARE_COOLDOWN_MIN, tuning.STARE_COOLDOWN_MAX)
 
     def _idle_on_floor(self, o):
-        ob = getattr(o, "body", None)
-        return (
-            ob is not None
-            and self.fsm.social.state_of(o) == "IdleStand"
-            and ob.on_floor()
-            and not ob.is_moving()
-        )
+        """o 站在地上发呆没走动。"""
+        oc = self.fsm.social.space.of(o)
+        return oc is not None and oc.pose == FLOOR and oc.state == "IdleStand" and oc.d == 0
 
     def _update_stare(self):
         fsm = self.fsm
@@ -111,7 +108,8 @@ class IdleStand(State):
             return
         b = fsm.body
         best, bd = None, None
-        for o in fsm.social.others(fsm.win):
+        for oc in fsm.social.space.mates(fsm.win, ("IdleStand",)):
+            o = oc.pet
             ob = o.body
             if not self._idle_on_floor(o):
                 continue

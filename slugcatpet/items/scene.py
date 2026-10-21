@@ -57,7 +57,12 @@ def capture(win, blueprint=False):
             d = k.dump(o)
             if d is not None:
                 items.append({"kind": k.key, **d})
-    return {"size": [win._WL, win._HL], "items": items}
+    out = {"size": [win._WL, win._HL], "items": items}
+    if not blueprint:
+        state = {k.key: s for k in kinds() if (s := k.save_state(win)) is not None}
+        if state:
+            out["state"] = state
+    return out
 
 
 def _entries(data, blueprint):
@@ -100,6 +105,14 @@ def restore(win, data, blueprint=False):
     for k, obj in build(win, data, blueprint):
         if k.can_place(win):
             win.admit_item(k, obj)
+    state = data.get("state") if isinstance(data, dict) and not blueprint else None
+    if isinstance(state, dict):
+        fit = Fit(data.get("size"), win._WL, win._HL)
+        for k in kinds():
+            try:
+                k.load_state(win, state.get(k.key), fit)
+            except (TypeError, ValueError):
+                pass
 
 
 def counts(data):

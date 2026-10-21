@@ -6,6 +6,7 @@ import math
 from ...items.base import THROWABLE
 from ...items.stone.model import GRAVITY as STONE_GRAVITY
 from ..hands import can_wield
+from .motor import rain_blocks
 
 GRAB_REACH = 18.0
 REACH_GATE_K = 2.0
@@ -43,7 +44,7 @@ def aim_vy(body, target, dir_x, base):
 
 
 def wieldable(fsm, s, hunting=False):
-    """地上一件可以捡来当武器的东西：静止、没判 unfetchable、没被占、不是刚放下的、肯用、拿得下。"""
+    """地上一件可以捡来当武器的东西：静止、没判 unfetchable、没被占、不是刚放下的、肯用、拿得下、大雨时不在露天。"""
     return (
         s.state == "free"
         and not s.unfetchable
@@ -52,6 +53,8 @@ def wieldable(fsm, s, hunting=False):
         and not fsm.hands.forbidden(s)
         and can_wield(fsm.body, s, hunting=hunting)
         and fsm.body.can_hold(s)
+        and not rain_blocks(fsm, (s.x, s.y))
+        and fsm.body.reach(s.x, GRAB_REACH) is not None
     )
 
 
@@ -120,7 +123,8 @@ class WeaponPickup:
         self.timer += 1
         b, s = self.body, self.target
         self.grab_side = self._pick_side()
-        b.walk_to(s.x)
+        if not b.walk_to(s.x, GRAB_REACH):
+            return "lost"  # 走不到它跟前
         if self._grab_dist() < b.arm_full_reach * REACH_GATE_K:
             b.reach_for(s, self.grab_side)
         if self._grab_dist() < GRAB_REACH and b.free_hand() is not None:

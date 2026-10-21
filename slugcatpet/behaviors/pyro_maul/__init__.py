@@ -11,6 +11,7 @@ from ...control.mouse import is_over
 from ...planning.jump_reach import SETTLE_MAX, SETTLE_VX
 from ...abilities.base import Param
 from ...abilities.pyro import mechanics as pyro
+from ...brain.skills.motor import rain_blocks
 from ...brain.state import T_ACTIVITY, VIGOROUS
 from ..base import Behavior
 
@@ -95,7 +96,10 @@ def _mount(fsm, p):
 
     def gates_ok():
         b = fsm.body
-        if fsm.cursor is not None and fsm.cursor[1] > fsm.HL - 8.0:  # 光标贴着地面咬不到
+        cur = fsm.cursor
+        if cur is not None and cur[1] > fsm.HL - 8.0:  # 光标贴着地面咬不到
+            return False
+        if cur is not None and rain_blocks(fsm, cur, (cur[0], fsm.HL - 1.0)):
             return False
         return (
             fsm.state == "IdleStand"
@@ -108,6 +112,7 @@ def _mount(fsm, p):
             and not b.holding_any()
             and b.temper <= temper_gate
             and maul.cooldown <= 0
+            and (cur is None or b.reach(cur[0], 14.0) is not None)
         )
 
     def reset_track():
@@ -230,7 +235,8 @@ def _mount(fsm, p):
                     finish(b)
             else:
                 b.walk_speed_target = 2.5 if dx < 28.0 else None
-                b.walk_to(cursor[0])
+                if not b.walk_to(cursor[0], 14.0):  # 光标下面走不过去
+                    finish(b)
             return
         if ph == "settle":
             b.stop_walk()

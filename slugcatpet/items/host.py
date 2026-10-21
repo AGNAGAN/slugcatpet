@@ -257,6 +257,7 @@ class ItemHost:
         for o in objs:
             self._forget(k, o)
             k.discard(self, o)
+        k.cleared(self)
         if objs:
             self.world_version += 1
             if k.geometry:
@@ -426,7 +427,7 @@ class ItemHost:
         for k in _g().late if late else _g().early:
             if d is not None and d[0] is k:
                 self._step_item_drag(k)
-            if getattr(self, k.store):
+            if k.always_tick or getattr(self, k.store):
                 k.tick(self)
 
     def _colliding_items(self):

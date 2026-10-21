@@ -470,6 +470,12 @@ class SettingsWindow(QWidget):
             w.cfg_keep_items,
             lambda on: (w.set_keep_items(on), self._write_state()),
         )
+        self._check(
+            v,
+            "settings_fruit_regrow",
+            w.cfg_fruit_regrow,
+            lambda on: (w.set_fruit_regrow(on), self._write_state()),
+        )
         btn = QPushButton(t("settings_keybinds_btn"))
         btn.clicked.connect(self._on_blueprints)
         self._row(v, "settings_blueprints", btn)

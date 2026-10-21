@@ -8,6 +8,7 @@ from ...abilities.base import Param
 from ...abilities.tongue.aim import tongue_of
 from ... import tuning
 from ...brain.fsm import _lerpmap
+from ...brain.skills.motor import rain_blocks
 from ...brain.state import LIGHT, T_ACTIVITY
 from ...items.base import CLIMBABLE
 from ..base import Behavior
@@ -15,6 +16,11 @@ from .licker import BAND_HI, BAND_LO, CursorLicker
 
 
 HPOLE_NEAR_Y = 20.0
+
+
+def _rained_out(fsm, cursor):
+    """大雨时光标或它下方的地面不该去。"""
+    return cursor is not None and rain_blocks(fsm, cursor, (cursor[0], fsm.HL - 1.0))
 
 
 def _horizontal_pole_near(fsm, cursor):
@@ -63,6 +69,10 @@ def _mount(fsm, p):
 
     def st_cursorlick(cursor, disturbed):
         if lick.licker is None:
+            fsm._transition("IdleStand")
+            return
+        if lick.licker.phase == "walk_under" and _rained_out(fsm, cursor):
+            brk()
             fsm._transition("IdleStand")
             return
         fsm.gfx.look_at = cursor
@@ -119,6 +129,8 @@ def _mount(fsm, p):
             and cursor is not None
             and fsm.HL * BAND_LO <= cursor[1] <= fsm.HL * BAND_HI
             and abs(fsm.body.chunk0.x - cursor[0]) < fsm.WL * p.gate_frac
+            and not _rained_out(fsm, cursor)
+            and fsm.body.reach(cursor[0], None) is not None
         ):
             fsm._transition("CursorLick")
 

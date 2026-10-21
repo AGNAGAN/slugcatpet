@@ -162,7 +162,7 @@ class PyroController:
             and not body._ctrl_pyro_jumped
             and can_pre <= 0
             and (inp0.y >= 0 or low_grav)
-            and body.bodyMode != "Crawl"
+            and body.bodyMode not in ("Crawl", "WallClimb")
             and not body.on_pole
         ):
             self._air_jump(body, inp0)
@@ -177,6 +177,7 @@ class PyroController:
         if (
             body._ctrl_can_jump > 0
             or body.on_pole
+            or body.bodyMode == "WallClimb"
             or body.chunk0.cx != 0
             or body.chunk1.cx != 0
             or (

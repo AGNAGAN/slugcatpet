@@ -59,6 +59,19 @@ class SlugStats:
     # 竖杆上往上窜：起步和每 tick 冲量的倍数、前几 tick 上提距离的倍数
     pole_slide_up_fac: float = 1.0
     pole_slide_up_lift: float = 1.0
+    # 空中经过横杆时踩杆再跳的冲量和续力；loose 时判定更宽、冷却更短
+    pole_skip_head: float = -4.5
+    pole_skip_feet: float = -3.5
+    pole_skip_boost: float = 6.0
+    pole_skip_loose: bool = False
+    # 蹬墙跳：斜着蹬开的冲量和续力；贴着地面时竖直上跳的冲量（y↓，向上为负）
+    wall_jump_head_vx: float = 6.0
+    wall_jump_head_vy: float = -8.0
+    wall_jump_feet_vx: float = 5.0
+    wall_jump_feet_vy: float = -7.0
+    wall_jump_boost: float = 0.0
+    wall_up_head: float = -8.0
+    wall_up_feet: float = -7.0
 
     buoyancy: float = 0.95
     lungs_fac: float = 1.0
