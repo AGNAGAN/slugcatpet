@@ -257,3 +257,4 @@
 - 本机 KWin 验收：临时捕获面 + `QCursor.setPos()` 已能把光标从 `(700,1500)` 移到 `(569,1256)`；忙碌样式状态为 true，释放后恢复。uinput 持续移动到 eDP-1 时捕获面 `leaveEvent` 结束劫持，光标停在 `(569,354)`。
 - 输出切换实测：HDMI-A-1（DPR 1.5）→ eDP-1（DPR 2.0）→ HDMI-A-1（DPR 1.5），持久 KWin 脚本启用时仍能正确切换；自由长矛可在运行场景中生成并下落，不再触发输入区域 traceback。
 - 持久 KWin 脚本：`metadata.json` 的 `KPackageStructure: KWin/Script` 修复后，`reconfigure` 能在 Plasma 6.8 中加载 `slugcatpet`；运行时脚本使用 `slugcatpet-runtime`，停用持久插件不会卸载当前会话。
+- 2026-10-21 已合并上游 v1.3.1（`bd17e9f`，合并提交 `6055565`）：引入交通策略重构、携带/空间系统、果实再生、物品持久化、雨循环表盘提示与 `Ctrl+Alt+R` 快捷键。合并后 56 个单元测试、Ruff、格式检查和参数文档检查均通过；本机 `cursor_play` 的物理状态逐 tick 与上游基线一致，渲染帧哈希仍受平台差异影响。
