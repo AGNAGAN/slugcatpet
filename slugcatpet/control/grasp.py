@@ -208,7 +208,7 @@ class GraspControl:
             if (
                 abs(h.x - c1.x) < MOUNT_DX
                 and 0.0 < h.y - c1.y < MOUNT_DY
-                and carry.can_take(o, self.pet, BACK, pick=False)
+                and carry.can_take(o, self.pet, BACK)
             ):
                 return o
         return None
@@ -259,7 +259,7 @@ class GraspControl:
             return
         if not b.on_floor() and not b.on_pole:
             o = self._mount_target(carry)
-            if o is not None and carry.take(o, self.pet, BACK, pick=False):
+            if o is not None and carry.take(o, self.pet, BACK):
                 self.want_pickup = 0
                 return
         obj = self.candidate

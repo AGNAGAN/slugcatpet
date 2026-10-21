@@ -201,8 +201,8 @@ _STR = {
     "ctrlhud_paused": {"zh": "已暂停 · 点击继续", "en": "Paused · click to resume"},
     "ctrlhud_exit": {"zh": "退出控制 (Esc)", "en": "Exit control (Esc)"},
     "ctrlhud_keys": {
-        "zh": "{move} 移动，{jump} 跳跃\n{grab} 拾取 / 长按吃 / 双击换手，{throw} 投掷\n{grab} 拉住猫崽或趴着的猫、长按背上，空中在它头上按骑上去\n{hold} 原地定身并退出控制",
-        "en": "{move} to move, {jump} to jump\n{grab} to pick up / hold to eat / double-tap to switch hands, {throw} to throw\n{grab} near a pup or a lying cat to grab it, hold to carry it on your back; in the air above one to ride it\n{hold} to hold still here and exit control",
+        "zh": "{move} 移动，{jump} 跳跃\n{grab} 拾取，{throw} 投掷\n{hold} 原地定身并退出控制",
+        "en": "{move} to move, {jump} to jump\n{grab} to pick up, {throw} to throw\n{hold} to hold still here and exit control",
     },
     "settings_keybinds": {"zh": "键位", "en": "Keys"},
     "settings_keybinds_btn": {"zh": "查看 / 修改…", "en": "View / edit…"},
