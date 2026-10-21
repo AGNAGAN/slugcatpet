@@ -177,7 +177,7 @@ uv run python -m unittest discover -s tests -v
 结果：
 
 - ruff / format 通过；
-- 46 个测试通过；
+- 48 个测试通过；
 - 新增 `tests/test_cursor_write.py`：
   - 自定义驱动替代 `ClipCursor`；
   - 释放回调与忙碌光标恢复；

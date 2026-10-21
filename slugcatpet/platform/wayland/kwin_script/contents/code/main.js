@@ -213,6 +213,11 @@ function monitorWindow(w) {
     }
     monitored[key] = true;
     var refresh = function () {
+        if (isOverlay(w)) {
+            // frameGeometry 的写入是异步的；立刻 sendGeometry 可能还是旧值，
+            // 必须等 KWin 真正改完后再推一次，否则 Python 的 origin 会落后一屏。
+            sendGeometry(w);
+        }
         sendWindowList();
         if (workspace.activeWindow === w) {
             sendFullscreen();

@@ -111,6 +111,7 @@
   - 持久化 `output` 参数
   - 设置页下拉框列出主屏/各输出
   - `EnvironmentWatcher` 跟随目标输出
+  - 运行中 HDMI/eDP 往返切换、DPR、KWin origin 和输入区域已在 2026-10-21 修复并实测；持久 KWin 脚本不再覆盖运行时目标
 - [x] 光标劫持/形状
   - Wayland 下通过临时全屏捕获面取得指针焦点，再用 Qt 6.12 `QCursor.setPos()` / `wp_pointer_warp_v1` 写入
   - 能移动、按住期间持续重定位、显示应用级忙碌样式
@@ -163,7 +164,9 @@
 - [x] overlay 布局测试：geometry、持久化迁移、clamp。
 - [x] KWin 持久安装测试：kwinrc 文本、安装/卸载、metadata（`test_kwin_install.py`）。
 - [x] KWin 集成本机脚本：`tools/kwin_integration_check.py`（临时安装/启用、`isScriptLoaded`、恢复配置）。
-- [x] 现有 offscreen 单元回归保持通过（46 个测试）。
+- [x] 现有 offscreen 单元回归保持通过（48 个测试）。
+- [x] 输出切换回归：HDMI 1.5 → eDP 2.0 → HDMI 1.5，overlay/KWin origin/输入区域一致；持久插件启用时同样通过。
+- [x] 物品输入区域回归：自由长矛不再因 `ax` property 触发输入区域异常（`test_wayland_regions.py`）。
 - [ ] 手动验收：点击穿透、拖猫、右键菜单、HUD/标签栏、托盘、全屏隐藏、音频。
 - [ ] Windows 行为回归；`tests/behavior_check.py check` 需要本机 Rain World 素材，CI 只跑单元/静态检查。
 
@@ -230,9 +233,10 @@
 - 最近一次自动检查结果：
   - `uv run ruff check .`：通过
   - `uv run ruff format --check .`：通过
-  - `uv run python -m unittest discover -s tests`：46 个测试通过
+  - `uv run python -m unittest discover -s tests`：48 个测试通过
   - `uv run python tools/params_doc.py --check`：通过
   - `uv run python tools/kwin_integration_check.py`：PASS
-  - GitHub Actions Linux/Windows：`10428d3`、`a640bb6`、`b7b8ef6` 全部 success
+  - GitHub Actions Linux/Windows：此前 `10428d3`、`a640bb6`、`b7b8ef6` 全部 success；本次修复提交后需再确认
 - 本机 KWin 验收：临时捕获面 + `QCursor.setPos()` 已能把光标从 `(700,1500)` 移到 `(569,1256)`；忙碌样式状态为 true，释放后恢复。uinput 持续移动到 eDP-1 时捕获面 `leaveEvent` 结束劫持，光标停在 `(569,354)`。
+- 输出切换实测：HDMI-A-1（DPR 1.5）→ eDP-1（DPR 2.0）→ HDMI-A-1（DPR 1.5），持久 KWin 脚本启用时仍能正确切换；自由长矛可在运行场景中生成并下落，不再触发输入区域 traceback。
 - 持久 KWin 脚本：`metadata.json` 的 `KPackageStructure: KWin/Script` 修复后，`reconfigure` 能在 Plasma 6.8 中加载 `slugcatpet`；运行时脚本使用 `slugcatpet-runtime`，停用持久插件不会卸载当前会话。

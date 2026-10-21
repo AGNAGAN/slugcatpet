@@ -401,6 +401,8 @@ class Spear:
         return self.wall is not None and self.wall[0] == "b"
 
     def _beam(self):
+        if self.wall is None:
+            raise AttributeError("spear is not stuck to a wall")
         side, face, along = self.wall
         ox, oy = self._out()
         if side in ("l", "r"):

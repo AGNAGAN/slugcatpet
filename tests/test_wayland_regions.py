@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 from PySide6.QtCore import QPoint, QRect
 from PySide6.QtGui import QRegion
 
+from slugcatpet.items.spear.model import Spear
 from slugcatpet.platform.wayland.input import set_input_region
 from slugcatpet.platform.wayland.regions import interaction_region, item_rects, pet_rects
 
@@ -59,6 +60,26 @@ class RegionTests(unittest.TestCase):
         rects = item_rects(pole, 2.0)
         self.assertTrue(any(r.contains(QPoint(40, 60)) for r in rects))
         self.assertTrue(any(r.contains(QPoint(40, 260)) for r in rects))
+
+    def test_free_spear_uses_body_position_without_raising(self):
+        spear = Spear(100.0, 200.0)
+        rects = item_rects(spear, 1.0)
+        self.assertTrue(any(r.contains(QPoint(100, 200)) for r in rects))
+        region = interaction_region([], [spear], [], 1.0, 640, 480)
+        self.assertTrue(region.contains(QPoint(100, 200)))
+
+    def test_item_property_error_does_not_break_input_region(self):
+        class BadItem:
+            x = 10.0
+            y = 20.0
+            rad = 5.0
+
+            @property
+            def ax(self):
+                raise TypeError("broken item property")
+
+        rects = item_rects(BadItem(), 1.0)
+        self.assertTrue(any(r.contains(QPoint(10, 20)) for r in rects))
 
     def test_set_input_region_requests_surface_commit(self):
         handle = Mock()

@@ -124,6 +124,9 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self._wayland = is_wayland()
         self._output_pref = str(self._params.get("output", "") or "")
         self._backend = create_backend()
+        geometry_changed = getattr(self._backend, "overlay_geometry_changed", None)
+        if geometry_changed is not None:
+            geometry_changed.connect(self._on_backend_overlay_geometry)
         self._backend_attached = False
         self._last_local_pointer: tuple[float, float] | None = None
         self._last_input_region = None
@@ -406,7 +409,42 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             return False
         self._bind_screen(scr)
         self.apply_workspace(scr.availableGeometry(), scr.geometry())
+        # KWin 改 frameGeometry 是异步的；Qt/KWin 有时会把 Tool 窗口的
+        # QScreen 留在旧输出，导致 DPR 和输入区域还是旧屏。等 KWin 完成后
+        # 再把原生表面重新绑回目标输出。
+        QTimer.singleShot(500, self._sync_native_screen)
+        QTimer.singleShot(1200, self._sync_native_screen)
         return True
+
+    def _on_backend_overlay_geometry(self, *_args) -> None:
+        self._sync_native_screen()
+
+    def _sync_native_screen(self) -> None:
+        """把 Qt 的窗口输出重新绑定到持久化目标输出。
+
+        Wayland 下 Qt.Tool 窗口被 KWin 用 frameGeometry 移到另一输出后，
+        ``QWindow.screen()`` 可能仍指向旧屏；只调用 ``setScreen()`` 一次会被
+        后续的 output 事件覆盖，所以既要监听 KWin 的几何回报，也要在切换后
+        延迟补一次。名称一致时不做任何事，避免反复触发 KWin 输出事件。
+        """
+        if not self._wayland or self._shutting_down:
+            return
+        scr = self._desired_screen()
+        handle = self.windowHandle()
+        if scr is None or handle is None:
+            return
+        current = handle.screen()
+        if current is not None and current.name() == scr.name():
+            return
+        try:
+            handle.setScreen(scr)
+            self.setScreen(scr)
+        except (AttributeError, RuntimeError):
+            return
+        self._last_input_region = None
+        self._shown = None
+        self.update()
+        self.refresh_input_region(force=True)
 
     def _sync_backend_geometry(self) -> None:
         if not self._wayland:

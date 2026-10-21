@@ -64,6 +64,14 @@ def item_rects(obj, scale: float) -> list[QRect]:
     """物品的粗略命中范围；杆、灯等没有圆形 rad 的按端点补。"""
     rects: list[QRect] = []
 
+    def value(name):
+        # ax/ay/bx/by 可能是会抛异常的 property（例如未扎墙的矛）。
+        # 输入区域每帧都要算，不能让一个物品的状态问题打断整个主循环。
+        try:
+            return getattr(obj, name)
+        except Exception:
+            return None
+
     def add(x, y, rad):
         try:
             x, y, rad = float(x), float(y), float(rad)
@@ -72,17 +80,25 @@ def item_rects(obj, scale: float) -> list[QRect]:
         if math.isfinite(x) and math.isfinite(y) and math.isfinite(rad):
             rects.append(_circle_rect(x, y, max(2.0, rad), scale))
 
-    if hasattr(obj, "ax") and hasattr(obj, "ay"):
-        add(obj.ax, obj.ay, 8.0 + ITEM_PAD)
-    if hasattr(obj, "bx") and hasattr(obj, "by"):
-        add(obj.bx, obj.by, 8.0 + ITEM_PAD)
-    if hasattr(obj, "anchor_x") and hasattr(obj, "anchor_y"):
-        add(obj.anchor_x, obj.anchor_y, 16.0 + ITEM_PAD)
-    if hasattr(obj, "bulb_x") and hasattr(obj, "bulb_y"):
-        add(obj.bulb_x, obj.bulb_y, 16.0 + ITEM_PAD)
-    if hasattr(obj, "x") and hasattr(obj, "y"):
-        rad = float(getattr(obj, "rad", DEFAULT_ITEM_RAD) or DEFAULT_ITEM_RAD)
-        add(obj.x, obj.y, rad + ITEM_PAD)
+    ax, ay = value("ax"), value("ay")
+    if ax is not None and ay is not None:
+        add(ax, ay, 8.0 + ITEM_PAD)
+    bx, by = value("bx"), value("by")
+    if bx is not None and by is not None:
+        add(bx, by, 8.0 + ITEM_PAD)
+    anchor_x, anchor_y = value("anchor_x"), value("anchor_y")
+    if anchor_x is not None and anchor_y is not None:
+        add(anchor_x, anchor_y, 16.0 + ITEM_PAD)
+    bulb_x, bulb_y = value("bulb_x"), value("bulb_y")
+    if bulb_x is not None and bulb_y is not None:
+        add(bulb_x, bulb_y, 16.0 + ITEM_PAD)
+    x, y = value("x"), value("y")
+    if x is not None and y is not None:
+        try:
+            rad = float(value("rad") or DEFAULT_ITEM_RAD)
+        except (TypeError, ValueError):
+            rad = DEFAULT_ITEM_RAD
+        add(x, y, rad + ITEM_PAD)
     return rects
 
 

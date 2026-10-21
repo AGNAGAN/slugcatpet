@@ -381,6 +381,17 @@ class WaylandKWinBackend(QObject, DesktopBackend):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(source, encoding="utf-8")
             self._script_path = path
+            # 持久插件如果已安装，保持其内容与当前输出一致。KWin 在某些
+            # start()/reconfigure 时序下会重新加载持久插件；若它仍是旧几何，
+            # 会在运行时脚本之后把 overlay 拉回上一块屏幕。
+            try:
+                from . import kwin_install
+
+                if kwin_install.is_installed():
+                    kwin_install.install(source)
+            except Exception as exc:
+                # 持久插件写失败不应影响本次运行时脚本加载。
+                log.warning("KWin bridge: cannot sync persistent script: %s", exc)
         except Exception as exc:
             log.warning("KWin bridge: cannot write script: %s", exc)
             self._script_loaded = False
@@ -406,8 +417,21 @@ class WaylandKWinBackend(QObject, DesktopBackend):
             return False
         self._call_scripting(iface, "start", required=False)
         self._script_loaded = True
+        # KWin 的 start() 可能按 [Plugins] 配置把持久脚本也一起启动；它带的是
+        # 上次写入的几何，会在本脚本之后执行并覆盖目标输出。运行时脚本使用
+        # 独立插件名，因此延迟再卸载持久插件是安全的。
+        for delay in (0, 300, 1200):
+            QTimer.singleShot(delay, self._unload_persistent_script)
         log.info("KWin bridge: script loaded for %s %s", self._target_screen, self._rect)
         return True
+
+    def _unload_persistent_script(self) -> None:
+        if self._shutting_down:
+            return
+        bus = QDBusConnection.sessionBus()
+        iface = QDBusInterface(KWIN_SERVICE, KWIN_PATH, KWIN_INTERFACE, bus)
+        if iface.isValid():
+            self._call_scripting(iface, "unloadScript", PERSISTENT_PLUGIN_NAME, required=False)
 
     def reload(self) -> bool:
         if self._window is None or not self._service_registered or self._shutting_down:

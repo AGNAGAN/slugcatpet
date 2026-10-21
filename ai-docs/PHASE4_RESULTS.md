@@ -158,3 +158,61 @@ ai-docs/PARAMS.md 是最新的
 - `tests/test_phase4.py`
 - `ai-docs/REMAINING_WORK.md`
 - `ai-docs/NATIVE_WAYLAND_PORT_PLAN.md`
+
+## 5. 2026-10-21 输出切换与矛输入区域修复
+
+### 5.1 输出屏幕切换失效
+
+复现：在 HDMI-A-1 上启动，设置页切到 eDP-1 后再切回 HDMI-A-1，overlay 的尺寸/输入原点会停在上一块屏；启用持久 KWin 脚本后更明显。
+
+根因有三层：
+
+1. KWin 的 `start()` 可能按 `[Plugins]` 启用状态把持久脚本 `slugcatpet` 一起启动。持久脚本带的是上次写入的旧输出几何，会在运行时脚本之后执行，把 overlay 拉回旧屏。
+2. `frameGeometry` 的写入是异步的；脚本里立刻 `sendGeometry()` 仍可能发送旧矩形，Python 的 `_origin` 会落后一屏。
+3. Wayland 下 `Qt.Tool` 窗口被 KWin 移到另一输出后，`QWindow.screen()` 有时仍指向旧屏，`devicePixelRatioF()` 和输入换算会继续使用旧 DPR。
+
+修复：
+
+- `kwin_bridge._load_script()` 同步已安装的持久脚本内容，并在 `start()` 后于 0/300/1200 ms 延迟卸载持久插件；运行时脚本继续使用独立的 `slugcatpet-runtime`。
+- KWin 脚本在 overlay 的 `frameGeometryChanged` / `outputChanged` 后重新推送实际几何，而不是只推赋值前的旧值。
+- `PetWindow` 监听 `overlay_geometry_changed`，并在 `set_output()` 后延迟调用 `_sync_native_screen()`；检测到 `windowHandle().screen()` 仍指向旧输出时，重新绑定目标 `QScreen`。
+
+验收：
+
+```text
+HDMI0 screen HDMI-A-1 dpr 1.5 overlay (0, 900, 1707, 1099)
+EDP1  screen eDP-1   dpr 2.0 overlay (0, 0, 1440, 932)
+HDMI1 screen HDMI-A-1 dpr 1.5 overlay (0, 900, 1707, 1099)
+```
+
+持久脚本已启用的情况下重复切换，`backend._target_screen`、`backend._rect`、overlay 矩形和 KWin 实际输出一致；测试结束后 `isScriptLoaded("slugcatpet") == False`，运行时脚本正常卸载。
+
+### 5.2 添加长矛导致输入区域崩溃
+
+错误：
+
+```text
+File ".../platform/wayland/regions.py", line 75, in item_rects
+  if hasattr(obj, "ax") and hasattr(obj, "ay"):
+File ".../items/spear/model.py", line 404, in _beam
+  side, face, along = self.wall
+TypeError: cannot unpack non-iterable NoneType object
+```
+
+根因：自由飞行的矛 `wall is None`，但 `ax`/`ay` property 无条件解包 `wall`；`hasattr()` 只会吞掉 `AttributeError`，不会吞掉 `TypeError`，因此异常从输入区域计算一直冒到主循环。
+
+修复：
+
+- `Spear._beam()` 在未扎墙时抛出 `AttributeError`，`hasattr()` 和直接访问都有明确语义。
+- `item_rects()` 改为安全读取每个属性，任何物品 property 异常都只跳过该端点，不再中断整个输入区域；自由矛最终使用 `x/y/rad` 作为命中范围。
+
+验收：运行中的场景调用 `pet.spawn("spear", 700, 100)`，矛自由下落且没有再出现 traceback；`_build_input_region()` 正常返回。
+
+### 5.3 检查
+
+```text
+uv run ruff check .                         通过
+uv run ruff format --check .                通过（293 files）
+uv run python -m unittest discover -s tests 48 tests OK
+uv run python tools/params_doc.py --check   通过
+```
