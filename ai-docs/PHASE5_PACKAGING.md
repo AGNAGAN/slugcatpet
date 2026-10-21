@@ -128,6 +128,15 @@ bash -n packaging/linux/uninstall.sh        通过
 desktop-file-validate ...desktop            无错误
 ```
 
+GitHub Actions（公开仓库实际运行）：
+
+```text
+Linux   run 1/2/3  success
+Windows run 1/2/3  success
+```
+
+对应提交 `10428d3`、`a640bb6`、`b7b8ef6`。
+
 ### 2.2 wheel 内容
 
 `uv build --wheel` 生成的 wheel 包含：
@@ -173,14 +182,14 @@ loaded runtime   True
 
 ## 3. 尚未完成的最终验收
 
-1. 在干净用户环境跑一次完整 `./packaging/linux/install.sh`。本机尝试时 PySide6 体积较大、下载超时，未作为失败处理；wheel 内容和启动逻辑已单独验证。
+1. 在干净用户环境跑一次完整 `./packaging/linux/install.sh`。本机真实 `uv tool install` 已完成依赖解析和构建，但下载 PySide6（约 250 MB）超时；用隔离 HOME/XDG 和假 `uv` 验证了 install/uninstall 的启动器、desktop、图标路径、`desktop-file-validate` 与卸载清理。wheel 内容和启动逻辑也已单独验证。
 2. 注销/重新登录，确认：
    - 持久脚本在应用启动前加载；
    - 应用启动后用当前输出几何重新加载运行时脚本；
    - 设置/音乐/托盘正常。
 3. 用 Rain World 实际全屏窗口做一次最终验收。
 4. 真实猫行为光标验收：石头命中、升天、矛、Pyro/Riv 抓取。
-5. 多输出逃逸：指针移到另一输出后确认降级不崩溃、不把光标拉回。
+5. ~~多输出逃逸~~：已用 uinput 持续移动到 eDP-1 验证，捕获面 `leaveEvent` 结束劫持，光标留在新输出；详见 `PHASE5_CURSOR_WRITE.md`。
 6. Windows 本机跑 `tests/behavior_check.py check`。
 
 ---

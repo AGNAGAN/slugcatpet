@@ -153,7 +153,7 @@
 - [x] 保留 `uv run slugcatpet` 源码运行方式。
 - [x] `pyproject.toml` 增加 Linux classifier / 多平台描述。
 - [x] wheel 包含 `kwin_script/metadata.json` 与 `contents/code/main.js`。
-- [ ] 在干净用户环境完整运行一次 `install.sh`（本机下载 PySide6 超时，未完成）。
+- [ ] 在干净用户环境完整运行一次 `install.sh`（真实 `uv tool install` 已解析/构建，下载 PySide6 约 250 MB 超时；脚本路径已用隔离目录 + 假 `uv` 验证）。
 
 ### 4.2 测试
 
@@ -233,5 +233,6 @@
   - `uv run python -m unittest discover -s tests`：46 个测试通过
   - `uv run python tools/params_doc.py --check`：通过
   - `uv run python tools/kwin_integration_check.py`：PASS
+  - GitHub Actions Linux/Windows：`10428d3`、`a640bb6`、`b7b8ef6` 全部 success
 - 本机 KWin 验收：临时捕获面 + `QCursor.setPos()` 已能把光标从 `(700,1500)` 移到 `(569,1256)`；忙碌样式状态为 true，释放后恢复。uinput 持续移动到 eDP-1 时捕获面 `leaveEvent` 结束劫持，光标停在 `(569,354)`。
 - 持久 KWin 脚本：`metadata.json` 的 `KPackageStructure: KWin/Script` 修复后，`reconfigure` 能在 Plasma 6.8 中加载 `slugcatpet`；运行时脚本使用 `slugcatpet-runtime`，停用持久插件不会卸载当前会话。
