@@ -150,9 +150,8 @@ class TongueHangController:
             wall_x = pet._WL if self.side > 0 else 0.0
             xmin, xmax = walk_band(pet)
             fx = clampf(wall_x, xmin, xmax)
-            if body.on_floor() and abs(body.chunk1.x - fx) > WALL_ARRIVE:
-                body.walk_to(fx)
-                return RUNNING
+            if body.afoot() and abs(body.chunk1.x - fx) > WALL_ARRIVE:
+                return RUNNING if body.walk_to(fx, WALL_ARRIVE) else GIVEUP
             body.stop_walk()
             stop = (
                 self.goal.radius * consts.PLAN_HANG_WALL_STOP_FRAC

@@ -206,7 +206,7 @@ def extract_rain_sounds(install: Path) -> list[str]:
     return done
 
 
-KARMA_SOUNDS = (
+DIAL_SOUNDS = (
     "karmaFuzz",
     "karmaWheelC_1",
     "karmaWheelC_2",
@@ -216,25 +216,27 @@ KARMA_SOUNDS = (
     "capBell2",
     "karmaRiseA",
     "UIWoodHit",
+    "tick",
+    "tock",
 )
 
 
-def karma_sounds_dir() -> Path:
+def dial_sounds_dir() -> Path:
     return assets_dir() / "karma"
 
 
-def karma_sounds_missing() -> list[str]:
-    return [n for n in KARMA_SOUNDS if not (karma_sounds_dir() / f"{n}.wav").is_file()]
+def dial_sounds_missing() -> list[str]:
+    return [n for n in DIAL_SOUNDS if not (dial_sounds_dir() / f"{n}.wav").is_file()]
 
 
-def extract_karma_sounds(install: Path) -> list[str]:
-    """业力梯的音效从音效资源包取出、封装成 wav；返回这次写出的片名。"""
+def extract_dial_sounds(install: Path) -> list[str]:
+    """表盘的音效从音效资源包取出、封装成 wav；返回这次写出的片名。"""
     from .audio.fsbogg import fsb_to_wav
 
-    todo = karma_sounds_missing()
+    todo = dial_sounds_missing()
     if not todo:
         return []
-    out = karma_sounds_dir()
+    out = dial_sounds_dir()
     out.mkdir(parents=True, exist_ok=True)
     done = []
     for name, fsb in _bundle_clips(Path(install), todo, _SFX_BUNDLES).items():

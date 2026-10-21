@@ -8,6 +8,7 @@ from ...abilities.base import Param
 from ...abilities.tongue.climb import TongueClimber
 from ...abilities.tongue.aim import fire_at, tongue_of
 from ...brain.desire import _lerp
+from ...brain.skills.motor import rain_blocks
 from ...brain.state import LIGHT, T_ACTIVITY, State
 from ...items.base import CLIMBABLE
 from ..base import Behavior, mood_candidate, mood_params
@@ -16,6 +17,33 @@ T_HPOLE_TIMEOUT = 1600
 HPOLE_MAX_CLIMBS = 3
 HPOLE_REACH_FRAC = 0.85
 HPOLE_GRAB_REACH = 0.60
+ARRIVE = 8.0  # 走到杆下、墙脚离要去的点这么近就行
+
+
+def _route(fsm, p):
+    """去这根横杆要经过的点：杆上、杆下，高杆还有墙脚和墙上。"""
+    b = fsm.body
+    lo, hi = min(p.ax, p.bx) + 8.0, max(p.ax, p.bx) - 8.0
+    ux = max(lo, min(hi, b.chunk1.x))
+    pts = [(lo, p.ay), (hi, p.ay), (ux, fsm.HL - 1.0)]
+    tg = tongue_of(fsm.win)
+    _, moy = fsm.gfx.mouth_world()
+    if tg is not None and p.ay < moy - tg.total * HPOLE_REACH_FRAC:
+        right = p.ax >= fsm.WL * 0.5
+        foot = b.walk_max if right else b.walk_min
+        if foot is not None:
+            pts.append((foot, fsm.HL - 1.0))
+        pts.append((fsm.WL if right else 0.0, p.ay))
+    return pts
+
+
+def _usable(fsm, p):
+    """横杆、大雨时一路不淋雨、要走到的地面上的点都走得到。"""
+    if p.kind != "horizontal":
+        return False
+    pts = _route(fsm, p)
+    walks = [fsm.body.reach(x, ARRIVE) for x, y in pts if y >= fsm.HL - 1.0]
+    return not rain_blocks(fsm, *pts) and None not in walks
 
 
 class SeekHPole(State):
@@ -57,12 +85,12 @@ class SeekHPole(State):
             self._hp_kind = "low"
             self._hp_ux = max(self._hp_lo + 8.0, min(self._hp_hi - 8.0, b.chunk1.x))
             self._hp_phase = "walk_under"
-            b.walk_to(self._hp_ux)
+            b.walk_to(self._hp_ux, ARRIVE)  # 挑的时候已判过走得到
         else:
             self._hp_kind = "high"
             self._hp_side = -1 if p.ax < fsm.WL * 0.5 else 1
             self._hp_phase = "to_wall"
-            b.walk_to(b.walk_max if self._hp_side > 0 else b.walk_min)
+            b.walk_to(b.walk_max if self._hp_side > 0 else b.walk_min, ARRIVE)
 
     def tick(self, cursor, disturbed):
         fsm = self.fsm
@@ -77,7 +105,7 @@ class SeekHPole(State):
         ph = self._hp_phase
 
         if ph == "walk_under":
-            if not b.is_moving() or abs(b.chunk1.x - self._hp_ux) < 8.0:
+            if not b.is_moving():
                 b.stop_walk()
                 self._hp_phase = "lick_low"
             return
@@ -93,8 +121,7 @@ class SeekHPole(State):
             return
 
         if ph == "to_wall":
-            tx = b.walk_max if self._hp_side > 0 else b.walk_min
-            if not b.is_moving() or abs(b.chunk1.x - tx) < 8.0:
+            if not b.is_moving():
                 b.stop_walk()
                 fsm.climb = None
                 self._hp_phase = "climb"
@@ -152,9 +179,12 @@ class SeekHPole(State):
         fsm.climb = None
         self._hp_tries = 0
         self._hp_climbs += 1
-        if self._hp_kind == "high" and self._hp_climbs <= HPOLE_MAX_CLIMBS:
+        if (
+            self._hp_kind == "high"
+            and self._hp_climbs <= HPOLE_MAX_CLIMBS
+            and b.walk_to(b.walk_max if self._hp_side > 0 else b.walk_min, ARRIVE)
+        ):
             self._hp_phase = "to_wall"
-            b.walk_to(b.walk_max if self._hp_side > 0 else b.walk_min)
         else:
             self._seekhpole_break()
             fsm._transition("IdleStand")
@@ -164,7 +194,7 @@ class SeekHPole(State):
         best = None
         hx = fsm.body.chunk1.x
         for p in fsm.items(CLIMBABLE):
-            if p.kind != "horizontal":
+            if not _usable(fsm, p):
                 continue
             midx = (p.ax + p.bx) * 0.5
             if best is None or abs(midx - hx) < abs((best.ax + best.bx) * 0.5 - hx):
@@ -227,7 +257,7 @@ class SeekHPoleBehavior(Behavior):
 
         def has_hpole(ctx):
             return (
-                any(pl.kind == "horizontal" for pl in fsm.items(CLIMBABLE))
+                any(_usable(fsm, pl) for pl in fsm.items(CLIMBABLE))
                 and ctx.energy >= fsm.traits.play_gate
                 and not ctx.submerged
             )

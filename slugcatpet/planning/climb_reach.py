@@ -16,6 +16,14 @@ START_BUCKET = 40.0  # 从地上出发时按这么宽分桶复用路线
 WAIT_WARM_PER_TICK = 8  # 等杆网算完时每 tick 帮着多算这么多个位置
 
 
+def keepout_for(pet):
+    """寻路要绕开的：大雨时露天的位置，和挪不开的别的猫；都没有返回 None。"""
+    rain = getattr(pet, "rain", None)
+    rain = rain if rain is not None and rain.dangerous() else None
+    social = getattr(pet, "social", None)
+    return rain if social is None else social.space.keepout(pet, rain)
+
+
 class ClimbPathReach(Reach):
     key = "polepath"
     from_pole = True
@@ -38,9 +46,8 @@ class ClimbPathReach(Reach):
             return None
         gx, gy = goal.pos()
         where = (start[0], start[1], round(start[2] / START_BUCKET)) if start[0] == "F" else start
-        rain = getattr(pet, "rain", None)
-        rain = rain if rain is not None and rain.dangerous() else None
-        key = (where, round(gx / 4.0), round(gy / 4.0), rain and rain.version)
+        ko = keepout_for(pet)
+        key = (where, round(gx / 4.0), round(gy / 4.0), ko and ko.version)
         plans = cm.__dict__.setdefault("plans", {})
         if key not in plans:
             budget = getattr(pet, "_plan_budget", None)
@@ -48,7 +55,7 @@ class ClimbPathReach(Reach):
                 return self._last.get(goal.key())  # 这一 tick 额度满了，先按上次的结果答
             if len(plans) > PLAN_CACHE:
                 plans.clear()
-            plans[key] = cm.search(start, gx, gy, rain)
+            plans[key] = cm.search(start, gx, gy, ko)
         if len(self._last) > PLAN_CACHE:
             self._last.clear()
         self._last[goal.key()] = plans[key]
@@ -111,13 +118,24 @@ class ClimbController:
     def catch(self, skip):
         return catch_in_air(self, skip)
 
+    def next_act(self):
+        """路线下一步的动作；没有了 None。"""
+        return self.path[self.i + 1][1] if self.i + 1 < len(self.path) else None
+
+    def next_open(self):
+        """路线下一步的位置这一 tick 没被挡着；杆网刚变（路线待重找）时算挡着。"""
+        if self._regrid or self.i + 1 >= len(self.path):
+            return False
+        spot = self.path[self.i + 1][0]
+        ko = keepout_for(self.pet)
+        return ko is None or spot[0] == "goal" or not self.cm._kept_out(ko, spot)
+
     def next_facing(self):
         """路线下一步往哪边走；看不出来 0。"""
-        if self.i + 1 < len(self.path):
-            act = self.path[self.i + 1][1]
-            if act[0] in ("beamwalk", "shimmy"):
-                d = act[2] - self.pet.body.chunk0.x
-                return 0 if abs(d) < 1.0 else (1 if d > 0 else -1)
+        act = self.next_act()
+        if act is not None and act[0] in ("beamwalk", "shimmy"):
+            d = act[2] - self.pet.body.chunk0.x
+            return 0 if abs(d) < 1.0 else (1 if d > 0 else -1)
         return 0
 
     def update(self):
@@ -125,6 +143,9 @@ class ClimbController:
             if self.i >= len(self.path):
                 return self._path_end()
             self.expect, act = self.path[self.i]
+            ko = keepout_for(self.pet)
+            if ko is not None and self.expect[0] != "goal" and self.cm._kept_out(ko, self.expect):
+                return self._replan(count=True)  # 下一步的位置有猫停下了
             self.move = make(self, act)
         r = self.move.update()
         if r == RUNNING:
@@ -183,8 +204,7 @@ class ClimbController:
 
     def _search(self, start):
         gx, gy = self.goal.pos()
-        rain = getattr(self.pet, "rain", None)
-        return self.cm.search(start, gx, gy, rain if rain is not None and rain.dangerous() else None)
+        return self.cm.search(start, gx, gy, keepout_for(self.pet))
 
     def cancel(self):
         """停下；还抓着杆就接着抓着，之后去哪由上层定。"""
@@ -216,7 +236,7 @@ class SpotController(ClimbController):
         return self.arrived()
 
     def _search(self, start):
-        path = self.cm.route_to(start, self.target)
+        path = self.cm.route_to(start, self.target, keepout=keepout_for(self.pet))
         return None if path is None else (path, 0.0)
 
     def on_geometry(self):

@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 from ..abilities.base import Param
 from ..brain.desire import Candidate
+from ..brain.skills.motor import rain_blocks
 from ..items.base import USES
 
 
@@ -26,7 +27,14 @@ def _one(_):
     return 1.0
 
 
-def mood_candidate(fsm, name, p, gate, one_shot=True, energy_factor=_one, before=None):
+def mood_candidate(fsm, name, p, gate, one_shot=True, energy_factor=_one, before=None, outdoor=None):
+    """outdoor：返回这件事要去的各点，大雨时有一处不该去就不选。"""
+    if outdoor is not None:
+        inner = gate
+
+        def gate(ctx):
+            return inner(ctx) and not rain_blocks(fsm, *outdoor())
+
     fsm.mood.add(
         Candidate(
             name,

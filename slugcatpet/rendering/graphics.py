@@ -343,7 +343,7 @@ class SlugcatGraphics(GraphicsDrawMixin):
 
     def is_moving(self):
         b = self.body
-        return b.is_moving() or b.move_dir != 0
+        return b.walking()
 
     def body_axis(self):
         return _ang_from_up(self.draw0[0] - self.draw1[0], self.draw0[1] - self.draw1[1])
@@ -413,14 +413,14 @@ class SlugcatGraphics(GraphicsDrawMixin):
             self.draw0[0] += (c1.x - c0.x) * PUP_CHEST_PULL
             self.draw0[1] += (c1.y - c0.y) * PUP_CHEST_PULL
         if b.bodyMode == "Stand":
-            if b.is_moving() or b.move_dir != 0:
+            if b.walking():
                 self.anim_frame += 1
                 if self.anim_frame > 6:
                     self.anim_frame = 0
             else:
                 self.anim_frame = 0
         elif b.bodyMode == "Crawl":
-            if (b.is_moving() or b.move_dir != 0) and abs(c1.vx) > 0.5:
+            if b.walking() and abs(c1.vx) > 0.5:
                 self.anim_frame += 1
                 if self.anim_frame > 10:
                     self.anim_frame = 0
@@ -453,7 +453,7 @@ class SlugcatGraphics(GraphicsDrawMixin):
         if not self.dead and (lx or ly):
             if b.standing:
                 ly_c = clampf(ly, -LOOK_LEAN_VCAP, LOOK_LEAN_VCAP)
-                if not (b.is_moving() or b.move_dir != 0):
+                if not (b.walking() or (b.on_pole and b.pole_input[0])):
                     self.head.vx -= lx * 0.5
                     self.head.vy -= ly_c * 0.5
                 self.draw0[0] -= lx * 2
@@ -534,6 +534,13 @@ class SlugcatGraphics(GraphicsDrawMixin):
                 sway = math.sin(self.balance_counter / 300.0 * TAU) / (abs(c1.vx) + 1.0)
                 self.draw0[0] += sway * (self.disbalance + 20.0) * tuning.BAL_SWAY_X
                 self.draw0[1] -= sway * self.disbalance * tuning.BAL_SWAY_Y
+
+        elif b.bodyMode == "WallClimb":
+            # 胸口离墙、略抬，腿朝下
+            self.legs_dir[1] += 1.0
+            self.draw0[1] -= 2.0
+            self.draw0[0] -= flip * (3.0 if c1.on_floor else 5.0)
+            self.head.vy += flip * 5.0
 
         elif b.bodyMode == "ZeroG":
             ddx, ddy = self.draw0[0] - self.draw1[0], self.draw0[1] - self.draw1[1]
@@ -652,7 +659,7 @@ class SlugcatGraphics(GraphicsDrawMixin):
         elif b.bodyMode in ("ZeroG", "Swimming"):
             self.face_rot_k = 1.0
             self.face_scale_x = self._latch_face(head_ang)
-        elif b.bodyMode == "Stand" and (b.is_moving() or b.move_dir != 0):
+        elif b.bodyMode == "Stand" and b.walking():
             self.head_frame_override = 6
             self.face_scale_x = 1.0 if head_ang >= 0 else -1.0
             look_x = 0.0
@@ -1009,6 +1016,11 @@ class SlugcatGraphics(GraphicsDrawMixin):
                         aim = (c0.x + off_x + lead_x, crawl_ground_y)
                         speed = CRAWL_HUNT_SPEED
                         quickness = CRAWL_QUICKNESS
+                elif b.bodyMode == "WallClimb":
+                    # 两手撑在胸前一个半径外的墙面上，一高一低
+                    c0 = b.chunk0
+                    low = (idx == 0) == (b.facing < 0)
+                    aim = (c0.x + b.facing * c0.rad, c0.y + (7.0 if low else -3.0))
                 elif b.bodyMode == "ZeroG" and getattr(b, "animation", None) == "ZeroGPoleGrab":
                     aim = self._zerog_pole_hand(idx)
                 elif b.bodyMode == "ZeroG":
@@ -1159,7 +1171,7 @@ class SlugcatGraphics(GraphicsDrawMixin):
             return 0
         if b.bodyMode == "Crawl":
             return 7
-        if b.bodyMode == "Stand" and (b.is_moving() or b.move_dir != 0):
+        if b.bodyMode == "Stand" and b.walking():
             return 6
         if b.bodyMode == "ZeroG":
             return 0

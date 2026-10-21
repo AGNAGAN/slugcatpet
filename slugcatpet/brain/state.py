@@ -5,11 +5,13 @@ from __future__ import annotations
 # 优先级：强制规则只能打断优先级比它低的状态，其余的等状态自己做完
 T_IDLE = 0  # 待机、空中、生完气闲逛、爬架
 T_ACTIVITY = 20  # 玩耍、让路：同级互不打断
+T_STALL = 25  # 走到一半路断了：放下玩耍、待机；找吃的、歇着、取暖、躲雨自己接着处理
 T_NEED = 30  # 饿了去找吃的
 T_REST = 35  # 累了趴下、睡觉
 T_WARM = 40  # 取暖、起身
 T_BODY = 60  # 晕、游泳
 T_HOLD = 65  # 定身
+T_CARRIED = 68  # 被别的猫拉着、背着
 T_FORCED = 70  # 被拖
 T_REFLEX = 80  # 躲杀
 T_HIT = 90  # 被砸中
@@ -23,13 +25,16 @@ EXHAUST = "exhaust"  # 体力告急 → 趴下
 SLEEPY = "sleepy"  # 困到撑不住就地睡
 HUNGER = "hunger"  # 饿了 → 找吃的
 CROWD = "crowd"  # 别的猫要过 → 让路
+STALL = "stall"  # 走到一半路断了 → 不做这件事了
 DRAG = "drag"  # 被光标抓住 → 被拖
 THREAT = "threat"  # 杀死弹窗 → 应对
 STUN = "stun"  # 被砸中 → 晕
 HOLD = "hold"  # 用户让它定身 → 定身
+CARRY = "carry"  # 被别的猫拉住、背上 → 被带着
 RULE_TIER = {
     STUN: T_HIT,
     HOLD: T_HOLD,
+    CARRY: T_CARRIED,
     THREAT: T_REFLEX,
     DRAG: T_FORCED,
     ZEROG: T_BODY,
@@ -40,6 +45,7 @@ RULE_TIER = {
     SLEEPY: T_REST,
     HUNGER: T_NEED,
     CROWD: T_ACTIVITY,
+    STALL: T_STALL,
 }
 
 

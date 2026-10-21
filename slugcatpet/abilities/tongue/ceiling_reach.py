@@ -77,8 +77,8 @@ class CeilingDropController:
             fx = clampf(wall_x, xmin, xmax)
             if body.on_floor() and abs(body.chunk1.x - fx) <= CEIL_WALL_ARRIVE:
                 self.phase = "hang"
-            else:
-                body.walk_to(fx)
+            elif not body.walk_to(fx, CEIL_WALL_ARRIVE):
+                return GIVEUP  # 墙脚走不到
             return RUNNING
         if self.phase == "hang":
             if self.climber is None:

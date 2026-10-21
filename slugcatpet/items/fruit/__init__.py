@@ -11,6 +11,7 @@ from ..base import CARRYABLE, EDIBLE, ItemKind, dump_loose
 from ..state import ItemState
 from .model import PLACE_HANGING_FRAC, Fruit, Stalk, make_fruit
 
+REGROW_TICKS = 4800  # 吊着的果子摘下后这么久在原处长出新的（开了自动刷新时）
 STALK_ROOT_W = 3.0
 STALK_TIP_W = 2.0
 STALK_COLOR = (0, 0, 0)
@@ -31,6 +32,7 @@ class FruitKind(ItemKind):
     grab_states = (ItemState.FREE, ItemState.HANGING)
     grab_rank = 2
     splash_states = (ItemState.FREE, ItemState.HANGING)
+    always_tick = True  # 场上没果子时也要等着长出新的
 
     def make(self, win, lx, ly, seed):
         return make_fruit(lx, ly, win._HL, seed=seed, zerog=win.zerog_on)
@@ -44,9 +46,45 @@ class FruitKind(ItemKind):
         if d.get("hang") and not win.zerog_on:
             f.state = ItemState.HANGING
             f.stalk = Stalk(f)
+            f.home = (f.x, f.y)
         else:
             f.state = ItemState.FREE
         return f
+
+    def tick(self, win):
+        self._regrow(win)
+        super().tick(win)
+
+    def _regrow(self, win):
+        """开了自动刷新时：吊着的果子摘下或碰掉就记下它挂的位置，过 REGROW_TICKS 在原处长出新的吊着的；
+        场上果子到上限就先不长，失重时暂停。"""
+        if win.zerog_on:
+            return
+        pend = _pending(win)
+        for f in win.fruits:
+            if f.home is not None and f.state != ItemState.HANGING:
+                if win.cfg_fruit_regrow:
+                    pend.append([*f.home, REGROW_TICKS])
+                f.home = None
+        if not win.cfg_fruit_regrow:
+            pend.clear()
+            return
+        for p in list(pend):
+            p[2] -= 1
+            if p[2] <= 0 and self.can_place(win) and win.spawn(self.key, p[0], p[1]) is not None:
+                pend.remove(p)
+
+    def cleared(self, win):
+        _pending(win).clear()
+
+    def save_state(self, win):
+        return [list(p) for p in _pending(win)] or None
+
+    def load_state(self, win, data, fit):
+        pend = _pending(win)
+        pend.clear()
+        for x, y, left in data if isinstance(data, list) else ():
+            pend.append([*fit.inside(float(x), float(y)), int(left)])
 
     def drop(self, win, f):
         f.stalk = None
@@ -136,6 +174,14 @@ class FruitKind(ItemKind):
         lp.end()
         p.drawPixmap(dst, outline, QRectF(outline.rect()))
         p.drawPixmap(dst, layer, QRectF(layer.rect()))
+
+
+def _pending(win):
+    """等着长出新果子的位置 [[x, y, 还剩 tick]]。"""
+    v = getattr(win, "fruit_regrow", None)
+    if v is None:
+        v = win.fruit_regrow = []
+    return v
 
 
 def _icon_fallback(p, r):

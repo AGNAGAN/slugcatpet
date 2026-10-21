@@ -6,7 +6,7 @@ import math
 import random
 
 from PySide6.QtCore import QPointF, QRect, QRectF, Qt
-from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QRadialGradient
+from PySide6.QtGui import QBrush, QColor, QFont, QGuiApplication, QPainter, QRadialGradient
 
 from ...core.units import lerp
 from ...rendering.primitives import blit
@@ -31,14 +31,19 @@ GLOW_ALPHA = 0.5
 GLYPH_SCALE = 2.0
 GLYPH_LIFT = 17.0  # 符文中心到珍珠中心的距离
 GLYPH_BOB = 1.2
+GLYPH_HALF = 7.0  # 符文画出来的半高
 
 HOVER_PAD = 8.0
 HOVER_DELAY = 14  # 光标停在珍珠上多少 tick 后显示文字
 HOVER_FADE = 6
-NOTE_WIDTH = 200
+NOTE_MIN_PX = 12.0  # 文字字号下限；平时跟系统界面字号
+NOTE_SHORT = 12  # 不超过这么多字、一行放得下的放大显示
+NOTE_SHORT_SCALE = 1.25
+NOTE_LINE_EM = 20  # 每行最多约这么多个汉字宽
 NOTE_MAX_LINES = 10
 NOTE_PAD = 7.0
-NOTE_GAP = 24.0  # 文字框下沿到珍珠中心的距离
+NOTE_GAP = 6.0  # 文字框和珍珠（有符文时是符文）之间的空隙
+NOTE_EDGE = 4.0
 NOTE_BG = (0, 0, 0, 175)
 NOTE_TEXT = (255, 255, 255, 235)
 _WHITE = (255, 255, 255)
@@ -243,23 +248,33 @@ def _compact(text):
     return "\n".join(ln for ln in text.replace("\r", "").split("\n") if ln.strip()).strip()
 
 
+def _note_font(text):
+    """跟系统界面字体走；短句放大。"""
+    f = QFont(QGuiApplication.font())
+    px = max(NOTE_MIN_PX, f.pointSizeF() * 96.0 / 72.0) if f.pointSizeF() > 0 else NOTE_MIN_PX
+    if len(text) <= NOTE_SHORT and "\n" not in text:
+        px *= NOTE_SHORT_SCALE
+    f.setPixelSize(round(px))
+    return f
+
+
 def _draw_note(win, p, o, alpha):
     p.save()
-    f = QFont()
-    f.setPointSizeF(9.0)
-    p.setFont(f)
-    fm = p.fontMetrics()
     text = _compact(o.text)
+    p.setFont(_note_font(text))
+    fm = p.fontMetrics()
+    wrap = fm.horizontalAdvance("中") * NOTE_LINE_EM
     room = int(min(win._HL - NOTE_GAP - NOTE_PAD * 2.0 - 8.0, fm.lineSpacing() * NOTE_MAX_LINES))
-    box = fm.boundingRect(QRect(0, 0, NOTE_WIDTH, 100000), int(_WRAP), text)
+    box = fm.boundingRect(QRect(0, 0, wrap, 100000), int(_WRAP), text)
     while box.height() > room and "\n" in text:
         text = text.rsplit("\n", 1)[0] + "…"
-        box = fm.boundingRect(QRect(0, 0, NOTE_WIDTH, 100000), int(_WRAP), text)
+        box = fm.boundingRect(QRect(0, 0, wrap, 100000), int(_WRAP), text)
     w, h = box.width() + NOTE_PAD * 2.0, min(box.height(), room) + NOTE_PAD * 2.0
-    x = min(max(o.x - w * 0.5, 4.0), win._WL - w - 4.0)
-    y = o.y - NOTE_GAP - h
-    if y < 4.0:
-        y = o.y + NOTE_GAP * 0.5
+    x = min(max(o.x - w * 0.5, NOTE_EDGE), win._WL - w - NOTE_EDGE)
+    above = GLYPH_LIFT + GLYPH_HALF + GLYPH_BOB if o.glyph is not None and o.glyph_fade > 0.0 else o.rad
+    y = o.y - above - NOTE_GAP - h
+    if y < NOTE_EDGE:
+        y = o.y + o.rad + NOTE_GAP
     p.setOpacity(alpha)
     p.setBrush(QColor(*NOTE_BG))
     p.setPen(QColor(*o.rgb(), 200))

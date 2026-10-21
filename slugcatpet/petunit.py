@@ -102,10 +102,8 @@ class PetUnit:
         _hips_half_w = w.atlas.source_size("base", "HipsA")[0] / 2.0
         _crawl_draw_raise = 4.0
         self.body.crawl_sink = _cp.RAD1 - _hips_half_w + _crawl_draw_raise
-        margin = self.layout_data.canvas_w / 2.0
-        self.body.walk_min = margin
-        self.body.walk_max = w._WL - margin
-        self.body.floor_spans = lambda: w.social.floor_spans(self)
+        self.body.set_walk_band(w._WL)
+        self.body.reach = lambda x, tol: w.social.space.reach(self, x, tol)
         self.atlas = self._make_atlas()
         self.gfx = SlugcatGraphics(self.body, self.layout_data, self.atlas, cat=self.cat, look=self.look)
         for _ in range(40):
@@ -259,6 +257,7 @@ class PetUnit:
 
             exit_control(self)
         self.dismiss_kill_dialog()
+        self.window.social.carry.release_all(self)
         self.body.drop_carried()
         w = self.window
         if preserve:

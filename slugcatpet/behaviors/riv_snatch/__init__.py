@@ -12,6 +12,7 @@ from ...planning.reach import walk_band
 from ...planning.backflip_reach import best_launch_hit, sweep_hit_topsafe, takeoff_c0_h
 from ...planning.jump_reach import SETTLE_MAX, SETTLE_VX
 from ...planning.jump_arc import get_backflip_arc
+from ...brain.skills.motor import arc_blocked, rain_blocks
 from ...brain.state import T_ACTIVITY, VIGOROUS
 from ..base import Behavior
 
@@ -72,11 +73,17 @@ def _mount(fsm, p):
         hipx = fsm.body.chunk1.x
         best = None
         for d in (1, -1):
-            r = best_launch_hit(
-                get_backflip_arc(stats, d, boosted=True), cx, cy, launch_y, xmin, xmax, PLAN_R, hipx
-            )
-            if r is not None and abs(r[0] - cx) >= MIN_LAUNCH_DX and (best is None or r[2] < best[2]):
-                best = (r[0], d, r[2])
+            arc = get_backflip_arc(stats, d, boosted=True)
+            r = best_launch_hit(arc, cx, cy, launch_y, xmin, xmax, PLAN_R, hipx)
+            if r is None or abs(r[0] - cx) < MIN_LAUNCH_DX or (best is not None and r[2] >= best[2]):
+                continue
+            if (
+                rain_blocks(fsm, (r[0], fsm.HL - 1.0))
+                or arc_blocked(fsm, r[0], launch_y, arc.points)
+                or fsm.body.reach(r[0], ARRIVE_X) is None
+            ):
+                continue
+            best = (r[0], d, r[2])
         return None if best is None else (best[0], best[1])
 
     def can_snatch():
@@ -90,6 +97,7 @@ def _mount(fsm, p):
             and not b.swimming
             and fsm.win.cursor_hijack is None
             and in_band(fsm.cursor)
+            and not rain_blocks(fsm, fsm.cursor)
             and snatch.cooldown <= 0
             and snatch.dwell >= p.dwell_ticks
         )
@@ -149,7 +157,7 @@ def _mount(fsm, p):
         snatch.dirty = True
         snatch.x = snatch.plan[0] if snatch.plan is not None else None
         if snatch.x is not None:
-            b.walk_to(snatch.x)
+            b.walk_to(snatch.x, ARRIVE_X)  # 挑的时候已判过走得到
 
     def finish(b, ok):
         brk(cooldown=p.cooldown if ok else p.cooldown_abort)
@@ -160,12 +168,10 @@ def _mount(fsm, p):
         stats = fsm.win.cat.stats
         first = 1 if cursor[0] >= c0.x else -1
         for d in (first, -first):
-            if (
-                sweep_hit_topsafe(
-                    get_backflip_arc(stats, d, boosted=True), cursor[0] - c0.x, cursor[1] - c0.y, PLAN_R, c0.y
-                )
-                is not None
-            ):
+            arc = get_backflip_arc(stats, d, boosted=True)
+            if sweep_hit_topsafe(
+                arc, cursor[0] - c0.x, cursor[1] - c0.y, PLAN_R, c0.y
+            ) is not None and not arc_blocked(fsm, c0.x, c0.y, arc.points):
                 return d
         return None
 
@@ -182,6 +188,7 @@ def _mount(fsm, p):
             if (
                 cursor is None
                 or not in_band(cursor)
+                or rain_blocks(fsm, cursor)
                 or fsm._cursor_speed > SPEED_RELEASE
                 or fsm.timer > WALK_TIMEOUT
             ):
@@ -198,7 +205,8 @@ def _mount(fsm, p):
                 snatch.phase = "settle"
             else:
                 b.walk_speed_target = 3.5 if dx < 32.0 else None
-                b.walk_to(snatch.x)
+                if not b.walk_to(snatch.x, ARRIVE_X):
+                    finish(b, ok=False)
             return
         if ph == "settle":
             if cursor is None or fsm._cursor_speed > SPEED_RELEASE:

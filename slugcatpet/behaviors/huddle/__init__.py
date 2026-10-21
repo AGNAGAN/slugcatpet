@@ -3,22 +3,22 @@
 from __future__ import annotations
 
 from ...abilities.base import Param
-from ...core import chunkphys as cp
+from ...brain.social.bonds import LYING
+from ...brain.social.space import LieMark, lie_extent
 from ...brain.state import LIGHT, T_REST, State
+from ...core.creature import WALK_STOP_EPS
 from ..base import Behavior
-from ..perch.choose import Mark
 from ..rest.states import lie_down
 
-LYING = ("LieDown", "Sleep")
 GAP = 2.0  # 臀离对方身子这么远
-TIMEOUT = 900
 
 
 def _blocked(fsm, x, side):
-    """在 x 背对对方趴下，身子（臀朝对方、胸朝外）会不会压到别的猫占的地方。"""
-    r = fsm.body.chunk1.rad
-    lo, hi = sorted((x - side * r, x + side * (cp.DIST_CRAWL + cp.RAD0)))
-    return any(a < hi and lo < b for a, b in fsm.social.floor_spans(fsm.win))
+    """在 x 背对对方趴下（臀朝对方、胸朝外）会压到别的猫占着或预约的地方，或者走不到 x。"""
+    return (
+        not fsm.social.space.free(fsm.win, *lie_extent(fsm.body, x, side))
+        or fsm.body.reach(x, WALK_STOP_EPS) is None
+    )
 
 
 def pick_spot(fsm, p):
@@ -27,9 +27,8 @@ def pick_spot(fsm, p):
     rain = fsm.win.rain
     r = b.chunk1.rad
     best = None
-    for o in fsm.social.others(fsm.win):
-        if fsm.social.state_of(o) not in LYING or not b.same_floor(o.body):
-            continue
+    for oc in fsm.social.space.mates(fsm.win, LYING):
+        o = oc.pet
         span = o.body.lying_span()
         if span is None:
             continue
@@ -68,15 +67,15 @@ class SeekHuddle(State):
         fsm = self.fsm
         fsm.body.set_posture(True)
         fsm.body.walk_to(self.x)
-        fsm.social.claim(fsm.win, "huddle", Mark(self.x, fsm.body.chunk1.y), state=self.name)
+        fsm.social.claim(fsm.win, "lie", LieMark(self.x, fsm.body.chunk1.y, self.side), state=self.name)
 
     def tick(self, cursor, disturbed):
         fsm = self.fsm
         b = fsm.body
-        if fsm.social.state_of(self.partner) not in LYING or fsm.timer >= TIMEOUT:
-            lie_down(fsm, self.why)  # 对方起来了或走不过去：就地趴下
+        if fsm.social.state_of(self.partner) not in LYING:
+            lie_down(fsm, self.why)  # 对方起来了：就地趴下
             return
-        if not b.is_moving():
+        if not b.is_moving():  # 到了，或者走到一半路断了：就地趴下
             b.stop_walk()
             b.facing = self.side  # 背对对方，免得身子压上去
             lie_down(fsm, self.why)

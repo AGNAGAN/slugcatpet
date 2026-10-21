@@ -15,6 +15,7 @@ from ..core.creature import SlugcatBody
 _SIM_W = 4000.0  # 模拟世界够宽，横向漂移不撞墙
 _SIM_H = 1000.0
 _SETTLE_TICKS = 120
+_WALK_TICKS = 40  # 走路模拟先走这么久到稳定速度
 _MAX_ARC_TICKS = 400
 
 _DROP_H = 1600.0
@@ -31,12 +32,13 @@ _baked = None  # 随程序带的弧：{数值指纹: {弧名: 字段}}
 
 @dataclass(frozen=True)
 class JumpArc:
-    """起跳弧：points 是每 tick chunk0 相对起跳点的位移（y↓），takeoff_h 是起跳时 chunk0 离地高度。"""
+    """起跳弧：points 是每 tick chunk0 相对起跳点的位移（y↓），hips 是同一 tick chunk1 相对它自己起跳点的位移，takeoff_h 是起跳时 chunk0 离地高度。"""
 
     hold_ticks: int
     move_dir: int
     takeoff_h: float
     points: tuple[tuple[float, float], ...]
+    hips: tuple[tuple[float, float], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -83,6 +85,7 @@ PYRO_INPUTS = {"vert": (0, 0), "side+": (1, 0), "side-": (-1, 0), "diag+": (1, 1
 BAKED_SPECS = (  # 离线算好、随程序带的弧
     tuple(("jump", (h, md)) for h in tuning.PLAN_JUMP_HOLD_GEARS for md in (0, 1, -1))
     + tuple(("freejump", (h, md)) for h in tuning.PLAN_JUMP_HOLD_GEARS for md in (0, 1, -1))
+    + tuple(("walkhop", (h, md)) for h in tuning.PLAN_JUMP_HOLD_GEARS for md in (1, -1))
     + tuple(("drop", (md,)) for md in (0, 1, -1))
     + tuple(("polejump", (d,)) for d in (1, -1))
     + tuple(("backflip", (d, b)) for d in (1, -1) for b in (False, True))
@@ -92,6 +95,7 @@ BAKED_SPECS = (  # 离线算好、随程序带的弧
 _KINDS = {
     "jump": JumpArc,
     "freejump": JumpArc,
+    "walkhop": JumpArc,
     "drop": DropArc,
     "polejump": PoleJumpArc,
     "backflip": BackflipArc,
@@ -102,6 +106,11 @@ _KINDS = {
 def get_arc(stats, hold_ticks: int, move_dir: int = 0) -> JumpArc:
     """起跳弧；move_dir 取 -1、0、1，0 为不带横向输入。"""
     return _get(*_spec("jump", stats, hold_ticks, move_dir))
+
+
+def get_walk_hop_arc(stats, hold_ticks: int, move_dir: int) -> JumpArc:
+    """走着往 move_dir 起跳的弧（起跳时已是走路速度）。"""
+    return _get(*_spec("walkhop", stats, hold_ticks, move_dir))
 
 
 def get_drop_arc(stats, move_dir: int = 0) -> DropArc:
@@ -134,6 +143,9 @@ def _spec(kind, stats, *args):
     if kind == "freejump":
         h, md = int(args[0]), int(args[1])
         return ("freejump", stats, h, md), lambda: _simulate_free_jump(stats, h, md)
+    if kind == "walkhop":
+        h, md = int(args[0]), 1 if int(args[1]) >= 0 else -1
+        return ("walkhop", stats, h, md), lambda: _simulate_walk_hop(stats, h, md)
     if kind == "drop":
         md = int(args[0])
         return ("drop", stats, md), lambda: _simulate_drop(stats, md)
@@ -170,6 +182,8 @@ def _from_baked(key):
         return None
     try:
         d = dict(d, points=tuple(tuple(p) for p in d["points"]))
+        if "hips" in d:
+            d["hips"] = tuple(tuple(p) for p in d["hips"])
         return _KINDS[key[0]](**d)
     except (KeyError, TypeError):
         return None  # 字段对不上就现算
@@ -206,24 +220,43 @@ def sweep_hit(arc, dx: float, dy: float, radius: float):
     return None
 
 
-def _simulate(stats, hold_ticks: int, move_dir: int) -> JumpArc:
-    body = SlugcatBody((_SIM_W / 2.0, _SIM_H), _SIM_W, _SIM_H, stats=stats)
-    for _ in range(_SETTLE_TICKS):
-        body.step()
+def _record_jump(body, hold_ticks: int, move_dir: int) -> JumpArc:
+    """已挂上跳的身体往前推，记下头和臀相对起跳时的轨迹，起跳后落地为止。"""
     ox, oy = body.chunk0.x, body.chunk0.y
-    body.request_jump("stand", hold_ticks=hold_ticks)
-    body.move_dir = int(move_dir)
+    hx, hy = body.chunk1.x, body.chunk1.y
     pts = []
+    hips = []
     airborne = False
     for _ in range(_MAX_ARC_TICKS):
         body.step()
         pts.append((body.chunk0.x - ox, body.chunk0.y - oy))
+        hips.append((body.chunk1.x - hx, body.chunk1.y - hy))
         if body.on_floor():
             if airborne:
                 break
         else:
             airborne = True
-    return JumpArc(hold_ticks, int(move_dir), _SIM_H - oy, tuple(pts))
+    return JumpArc(hold_ticks, int(move_dir), _SIM_H - oy, tuple(pts), tuple(hips))
+
+
+def _simulate(stats, hold_ticks: int, move_dir: int) -> JumpArc:
+    body = SlugcatBody((_SIM_W / 2.0, _SIM_H), _SIM_W, _SIM_H, stats=stats)
+    for _ in range(_SETTLE_TICKS):
+        body.step()
+    body.request_jump("stand", hold_ticks=hold_ticks)
+    body.move_dir = int(move_dir)
+    return _record_jump(body, hold_ticks, move_dir)
+
+
+def _simulate_walk_hop(stats, hold_ticks: int, move_dir: int) -> JumpArc:
+    body = SlugcatBody((_SIM_W / 2.0, _SIM_H), _SIM_W, _SIM_H, stats=stats)
+    for _ in range(_SETTLE_TICKS):
+        body.step()
+    body.walk_to(body.chunk1.x + move_dir * _SIM_W * 0.4)
+    for _ in range(_WALK_TICKS):
+        body.step()
+    body.request_jump("stand", hold_ticks=hold_ticks)
+    return _record_jump(body, hold_ticks, move_dir)
 
 
 def _simulate_free_jump(stats, hold_ticks: int, move_dir: int) -> JumpArc:

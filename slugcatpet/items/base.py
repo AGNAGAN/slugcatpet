@@ -50,6 +50,7 @@ class ItemKind:
     seed_key = None
     layer = "front"  # 绘制层：mid（盖住猫身，抓杆的手在它上面）/ front / top（水之上）
     mobile = True  # 会动：运动检测、出界夹回、重力、水位
+    always_tick = False  # 场上没有这类物品时也调 tick
     collides = False
     late_tick = False
     geometry = False  # 增删会改变路径前提
@@ -71,6 +72,16 @@ class ItemKind:
     def load(self, win, d, fit):
         """按 dump 的字典重建物体，坐标经 fit 换到当前屏幕；不入场，None 为放弃。"""
         return None
+
+    def cleared(self, win):
+        """这一类被清空之后。"""
+
+    def save_state(self, win):
+        """这一类在物品之外要存的状态（重启保留用）；None 不存。"""
+        return None
+
+    def load_state(self, win, data, fit):
+        """按 save_state 存的状态恢复，坐标经 fit 换到当前屏幕；data 可能为 None。"""
 
     def keeps(self, obj) -> bool:
         """清空时留下。"""

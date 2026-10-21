@@ -1,11 +1,11 @@
-"""引擎自带的状态：被拖 / 空中 / 砸晕 / 死亡。"""
+"""引擎自带的状态：被拖 / 被别的猫带着 / 空中 / 砸晕 / 死亡。"""
 
 from __future__ import annotations
 
 import math
 
 from .. import tuning
-from .state import T_BODY, T_FORCED, T_LOCKED, State
+from .state import T_BODY, T_CARRIED, T_FORCED, T_LOCKED, State
 from .fsm import ANGER_TOTAL
 
 
@@ -31,6 +31,28 @@ class Dragged(State):
             fsm._transition("Airborne")
 
 
+class Carried(State):
+    """被别的猫拉着或背着：拉在手里时跟着背者的按键动，背上时不动；等背猫那边放下或自己待够了下来。"""
+
+    name = "Carried"
+    tier = T_CARRIED
+
+    def enter(self):
+        b = self.fsm.body
+        b.set_posture(True)
+        b.stop_walk()
+
+    def tick(self, cursor, disturbed):
+        fsm = self.fsm
+        if fsm.social.carry.link_of(fsm.win) is None:
+            fsm.settle()
+            return
+        fsm.social.carry.steer(fsm.win)
+
+    def brk(self):
+        self.fsm.social.carry.drop(self.fsm.win)
+
+
 class Airborne(State):
     name = "Airborne"
 
@@ -51,7 +73,7 @@ class Airborne(State):
         fsm = self.fsm
         b = fsm.body
         sp = math.hypot(b.chunk1.vx, b.chunk1.vy) + math.hypot(b.chunk0.vx, b.chunk0.vy)
-        if b.on_floor() and sp < 1.2 and b.chunk0.y < b.chunk1.y - 2:
+        if (b.on_floor() or b.on_support()) and sp < 1.2 and b.chunk0.y < b.chunk1.y - 2:
             self._settle += 1
         else:
             self._settle = 0
@@ -121,4 +143,4 @@ class Dead(State):
                 fsm._transition("WakeSequence")
 
 
-CORE_STATES = (Dragged, Airborne, Dead, Stunned)
+CORE_STATES = (Dragged, Carried, Airborne, Dead, Stunned)

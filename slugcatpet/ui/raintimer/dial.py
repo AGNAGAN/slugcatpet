@@ -1,4 +1,4 @@
-"""雨循环表盘：业力符号外一圈雨 pip 的小浮窗；空闲时只有暗着的符号，滚轮调时长时预览，单击开始，拖动移位，右键开卡片，雨停时播业力梯。"""
+"""雨循环表盘：业力符号外一圈雨 pip 的小浮窗；空闲时只有暗着的符号，滚轮调时长时预览，单击开始，拖动移位，右键开卡片，晴天滴答脉动，雨停时播业力梯。"""
 
 from __future__ import annotations
 import time
@@ -10,10 +10,10 @@ from PySide6.QtWidgets import QLabel, QWidget
 from ...platform.topmost import raise_topmost
 from ...world.raintimer import DRY, DRY_MAX, IDLE, KARMA_TOP, RAIN
 from ..theme import qss
-from .ladder import KarmaLadder, lerp
+from .ladder import KarmaLadder, inv_lerp, lerp, lerp_and_tick
 from .card import RainCard
 from .text import status_line
-from .pips import DRAIN, HOLLOW, REFILL, PipRing
+from .pips import DRAIN, HOLLOW, PipRing
 from .sound import KarmaSounds
 
 SIZE = 200  # 窗口边长（逻辑 px）
@@ -21,7 +21,7 @@ TICK_MS = 25  # 动画 40 tick/s，与原版一致
 POLL_MS = 1000
 POP_MS = 4000  # 事件时弹出多久
 START_POP_MS = 2500
-ENV_POPS = ("rain", "clear")  # 别的程序全屏时只为这两件事弹出
+ENV_POPS = ("rain", "clear", "key")  # 别的程序全屏时只为这几件事弹出
 HOVER_HOLD_MS = 1200  # 鼠标离开后再留多久
 PREVIEW_MS = 1500  # 空闲时滚轮调完，空心 pip 预览再留多久
 IDLE_LIT = 0.4  # 空闲时业力符号的亮度
@@ -32,6 +32,8 @@ BACKDROP_R = 64.0
 EDGE_IN, EDGE_OUT = 78.0, 100.0  # 外缘渐隐，光晕和波纹不被窗口边切断
 SYMBOL_HALF = 31.5
 HUD_RADIUS = 22.5  # 原版 HUD 业力圈半径；pip 的尺寸按它和大符号的比例放大
+RAD_START = 17.0  # 业力符号出现时从这个半径长到 HUD_RADIUS
+TICK_TOCK = 240  # 滴答周期，半周期一响一脉动
 PIP_SCALE = SYMBOL_HALF / HUD_RADIUS
 WHEEL_STEP = 60
 WHEEL_MAX = 120 * 60
@@ -91,6 +93,9 @@ class RainDial(QWidget):
         self._wheel_acc = 0
         self._preview_until = 0.0
         self._lit = 1.0 if timer.phase != IDLE else IDLE_LIT
+        self._rad = RAD_START
+        self._ticks = 0
+        self._tip_until = 0.0
         self.on_poll = []  # 每秒回调，托盘据此刷新
         self.on_wanted = []  # 常驻开关变了时回调，设置页据此同步
 
@@ -140,6 +145,11 @@ class RainDial(QWidget):
         self._pop_until = max(self._pop_until, self._now_ms() + ms)
         self._wake()
         raise_topmost(self)
+
+    def peek(self):
+        """快捷键：弹出一会并直接显示读数。"""
+        self.pop(event="key")
+        self._tip_until = self._now_ms() + POP_MS
 
     def open_card(self):
         """在表盘旁边打开雨循环卡片，开着时表盘不收起。"""
@@ -224,7 +234,14 @@ class RainDial(QWidget):
         self._step_ladder()
         idle = self.timer.phase == IDLE
         preview = self._now_ms() < self._preview_until
-        self.ring.update(show and self.ladder is None and not self._celebrate and (not idle or preview))
+        raining = self.timer.phase == RAIN
+        self.ring.update(
+            show and self.ladder is None and not self._celebrate and not raining and (not idle or preview)
+        )
+        self._rad = lerp_and_tick(
+            self._rad, lerp(RAD_START, HUD_RADIUS, inv_lerp(0.0, 0.15, self.vis) ** 1.3), 0.12, 0.1
+        )
+        self._step_tick()
         lit = IDLE_LIT if idle and not self._celebrate else 1.0
         self._lit += (lit - self._lit) * LIT_EASE
         self._update_tip()
@@ -233,6 +250,17 @@ class RainDial(QWidget):
             self.hide()
             self._tip.hide()
             self._anim.stop()
+
+    def _step_tick(self):
+        """晴天 pip 显示时每半个周期脉动一下；弹出或悬停时还响一声。"""
+        if self.timer.phase != DRY or self.ring.fade <= 0.0:
+            return
+        self._ticks += 1
+        if self._ticks % (TICK_TOCK // 2):
+            return
+        self.ring.tick_pulse = 1.0
+        if self._now_ms() < self._pop_until or self._hover:
+            self._sounds.play("tick" if self._ticks % TICK_TOCK == 0 else "tock")
 
     def _step_ladder(self):
         if not self._celebrate or self.vis <= 0.0:
@@ -266,8 +294,10 @@ class RainDial(QWidget):
     # 悬停读数
 
     def _update_tip(self):
-        want = (self._hover and self._tip_at is not None and self._now_ms() >= self._tip_at) or (
-            self._tip.isVisible() and self._hover
+        want = (
+            (self._hover and self._tip_at is not None and self._now_ms() >= self._tip_at)
+            or (self._tip.isVisible() and self._hover)
+            or self._now_ms() < self._tip_until
         )
         if not want or self._menu_open or self.vis < 0.5:
             if self._tip.isVisible():
@@ -355,7 +385,7 @@ class RainDial(QWidget):
         la = self.ladder_alpha if self.ladder is not None else 0.0
         if la < 1.0:
             p.setOpacity((1.0 - la) * self._lit)
-            self._paint_symbol(p, c, self._shown_karma, 1.0, 0.0, WHITE)
+            self._paint_symbol(p, c, self._shown_karma, 1.0, 0.0, WHITE, self._rad / HUD_RADIUS)
             p.setOpacity(1.0)
             self._paint_pips(p, c)
         if la > 0.0:
@@ -397,7 +427,7 @@ class RainDial(QWidget):
         q.setRgb(*(round(v * TINT_STEPS / 255) * 255 // TINT_STEPS for v in (q.red(), q.green(), q.blue())))
         return self._atlas.sprite(key, frame, None if q == WHITE else q)
 
-    def _paint_symbol(self, p, c, k, sy, dy, color):
+    def _paint_symbol(self, p, c, k, sy, dy, color, scale=1.0):
         for frame in (karma_frame(k), "karmaRing"):
             pm = self._sprite(frame, color)
             if pm is None or pm.isNull():
@@ -405,7 +435,7 @@ class RainDial(QWidget):
             w, h = pm.width() / pm.devicePixelRatio(), pm.height() / pm.devicePixelRatio()
             p.save()
             p.translate(c.x(), c.y() - dy)
-            p.scale(1.0, sy)
+            p.scale(scale, sy * scale)
             p.drawPixmap(QRectF(-w / 2.0, -h / 2.0, w, h), pm, QRectF(pm.rect()))
             p.restore()
 
@@ -413,11 +443,11 @@ class RainDial(QWidget):
         t = self.timer
         n = t.pips()
         if t.phase == DRY:
-            circles = self.ring.circles(n, 1.0 - t.progress(), DRAIN, HUD_RADIUS)
+            circles = self.ring.circles(n, 1.0 - t.progress(), DRAIN, self._rad)
         elif t.phase == RAIN:
-            circles = self.ring.circles(n, t.progress(), REFILL, HUD_RADIUS)
+            return
         else:
-            circles = self.ring.circles(n, 1.0, HOLLOW, HUD_RADIUS)
+            circles = self.ring.circles(n, 1.0, HOLLOW, self._rad)
         for x, y, rad, thick in circles:
             pos = QPointF(c.x() + x * PIP_SCALE, c.y() - y * PIP_SCALE)
             r = rad * PIP_SCALE

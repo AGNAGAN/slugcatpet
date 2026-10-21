@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from ..core.units import lerp, inv_lerp
 from . import vmath
+from . import moves_wall as mw
+
+HEAVY_FREE = 0.2  # 手里拉着的猫超过这个质量的部分拖慢跑速、加大起跳的劲
+HEAVY_JUMP_MAX = 1.3  # 多使的劲最多是平时的这么多倍
 
 
 def dispatch(body, inp0) -> None:
@@ -18,6 +22,9 @@ def dispatch(body, inp0) -> None:
     rd = body._ctrl_roll_direction
     flip = body.facing
 
+    if body.bodyMode == "WallClimb":
+        mw.wall_jump(body, mw.jump_direction(body))
+        return
     if a == "Roll":
         _roll_to_rocket(body, c0, c1, rd)
         return
@@ -114,9 +121,15 @@ def _standard_jump(body, c0, c1) -> None:
     body.feet_stuck = None
     body.crawl_anchor = None
     body.crawl_pose = 0.0
-    c0.vy = body.stats.jump_head
-    c1.vy = body.stats.jump_feet
+    k = _load_fac(body)
+    c0.vy = body.stats.jump_head * k
+    c1.vy = body.stats.jump_feet * k
     body.jump_boost = body.stats.jump_boost
+
+
+def _load_fac(body):
+    """拉着成年猫时起跳多使的劲，抵掉被它往下坠的那部分。"""
+    return 1.0 + min(max(0.0, body.hand_load - HEAVY_FREE) * 1.5, HEAVY_JUMP_MAX)
 
 
 def _crouch_jump(body, c0, c1, inp0) -> None:
@@ -128,12 +141,13 @@ def _crouch_jump(body, c0, c1, inp0) -> None:
         pounce_speed = body.stats.pounce_super
         dir_x = 1 if c0.x > c1.x else -1
         body._ctrl_sim_hold = 6
+    k = _load_fac(body)
     c0.y -= 6.0
     if c0.on_floor:
-        c0.vy -= 3.0
+        c0.vy -= 3.0 * k
         if dir_x == 0:
-            c0.vy -= 3.0
-    c1.vy -= 4.0
+            c0.vy -= 3.0 * k
+    c1.vy -= 4.0 * k
     body.jump_boost = 6.0
     if dir_x != 0 and ((c0.x > c1.x) == (dir_x > 0)):
         c0.vx += dir_x * pounce_speed

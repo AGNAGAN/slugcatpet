@@ -48,7 +48,12 @@ RESET_TABLE: dict[str, object] = {
     "_ctrl_pull": None,  # 翻上横杆的过程
     "_ctrl_slide_up": 0,
     "_ctrl_nograb": 0,
+    "_ctrl_jump_taken": False,  # 杆上用掉的跳键不再在离杆那一 tick 触发别的跳
+    "_ctrl_pole_skip": 0,  # 踩杆再跳的冷却和罚时
     "_ctrl_was_zerog": False,
+    "_ctrl_wall_slide": 0,  # 连续贴墙的 tick 数
+    "_ctrl_can_wall_jump": 0,  # 离墙宽限，免得再次进入时凭空蹬墙
+    "_ctrl_jump_stun": 0,  # 蹬墙跳后锁横向输入的剩余 tick
 }
 
 # 退出时要清掉的手动控制动画，不含 ZeroGPoleGrab
@@ -110,6 +115,7 @@ def exit_control(pet) -> None:
     if not getattr(pet, "controlled", False):
         return
     body = pet.body
+    pet.window.social.carry.release_all(pet)
     if getattr(body, "_ctrl_tongue", None) is not None:
         body._ctrl_tongue.leave()
     body._input_provider = None
@@ -117,6 +123,8 @@ def exit_control(pet) -> None:
     reset_ctrl_state(body)
     if body.animation in ANIM_RESET:  # 死后残留 Roll 会让尾钩一直触发
         body.animation = None
+    if body.bodyMode == "WallClimb":  # 只有操控会进，交还前换回空中
+        body.bodyMode = "Default"
     body.stop_walk()
     body.jump_boost = 0.0
     pet.grasp_ctrl = None  # 手里的东西交给 AI 的手部管家

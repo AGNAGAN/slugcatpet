@@ -56,7 +56,9 @@ class CursorLicker:
         ):
             self.outcome = "walk_abort"
             return "to_idle"
-        self.body.walk_to(cursor[0])
+        if not self.body.walk_to(cursor[0], None):  # 光标下面走不过去
+            self.outcome = "walk_abort"
+            return "to_idle"
         if self.body.on_floor() and not self.body.is_moving():
             self.body.stop_walk()
             self.phase = "lick_shoot"

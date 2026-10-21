@@ -10,12 +10,13 @@ MOD_NOREPEAT = 0x4000
 VK_ESCAPE = 0x1B
 VK_RIGHT = 0x27
 
-HK_ABORT, HK_QUIT, HK_HUD, HK_PLACE_ESC, HK_FREEZE, HK_STEP, HK_STEP10 = 1, 2, 3, 4, 5, 6, 7
+HK_ABORT, HK_QUIT, HK_HUD, HK_PLACE_ESC, HK_FREEZE, HK_STEP, HK_STEP10, HK_RAIN = 1, 2, 3, 4, 5, 6, 7, 8
 _CA = MOD_CONTROL | MOD_ALT
 # 常驻热键：id → (修饰键, 虚拟键码, 文案键)，按键位弹窗里的顺序
 GLOBAL_KEYS = {
     HK_FREEZE: (_CA, 0x50, "kb_freeze"),
     HK_HUD: (_CA, 0x48, "kb_hud"),
+    HK_RAIN: (_CA, 0x52, "kb_rain"),
     HK_ABORT: (_CA, 0x51, "kb_abort"),
     HK_QUIT: (_CA, 0x58, "kb_quit"),
 }

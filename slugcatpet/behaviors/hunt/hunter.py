@@ -182,10 +182,8 @@ class Hunter:
             return "running"
         if self.want_x is None or self.t % STALK_REPICK == 0:
             self.want_x = self._stand_x(pt, close=wait)
-        if abs(b.chunk0.x - self.want_x) > NEAR:
-            b.walk_to(self.want_x)
-        else:
-            b.stop_walk()
+        if abs(b.chunk1.x - self.want_x) <= NEAR or not b.walk_to(self.want_x, NEAR):
+            b.stop_walk()  # 到了，或那里走不过去：就在这瞄
             pitch.aim(pt)
         if self.t > AIM_TIMEOUT:
             self.repos += 1

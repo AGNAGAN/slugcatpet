@@ -36,6 +36,7 @@ class Perch(State):
         self.dwell = None
         self.bar = None
         self.left = 0
+        self.paced = None  # 踱步换点时还剩多久要重选，到了接着算；不算新的一处
         self.rounds = 0  # 这一趟已经待了几处
         self.gv = None  # 上次看到的杆网版本
         self.stuck = False  # 这里没有不吓人的路下去
@@ -83,10 +84,13 @@ class Perch(State):
         self.dwell = Dwell(fsm, self.bar, spot)
         hx, hy = cm.head(spot)
         fsm.social.claim(fsm.win, "perch", Mark(hx, hy), "Perch")
-        k = 0.5 if spot[0] in ("H", "V") else 1.0
-        self.left = int(fsm.rng.randint(tuning.PERCH_DWELL_MIN, tuning.PERCH_DWELL_MAX) * k)
+        if self.paced is None:
+            k = 0.5 if spot[0] in ("H", "V") else 1.0
+            self.left = int(fsm.rng.randint(tuning.PERCH_DWELL_MIN, tuning.PERCH_DWELL_MAX) * k)
+            self.rounds += 1
+        else:
+            self.left, self.paced = self.paced, None
         self.phase = "dwell"
-        self.rounds += 1
         self.stuck = False
 
     def _geometry_ok(self):
@@ -136,6 +140,16 @@ class Perch(State):
         tired = self.dwell.kind in ("H", "V") and fsm.body.energy < TIRED_ON_ARMS
         if self.left <= 0 or (tired and not self.stuck):
             self._decide(tired)
+        elif fsm.rng.random() < tuning.PACE_PROB * fsm.traits.activity * fsm.ask("listless", 1.0):
+            self._pace()
+
+    def _pace(self):
+        """待着时踱步：和地上一样的概率，换到同一根杆上另一处。"""
+        cm = map_for(self.fsm.win)
+        here = locate(cm, self.fsm.win)
+        left = self.left
+        if here is not None and here[0] != "F" and self._choose(cm, here, here[1], here):
+            self.paced = left
 
     def _decide(self, tired):
         """待够了：换个地方，或者下来做地上最想做的事。"""

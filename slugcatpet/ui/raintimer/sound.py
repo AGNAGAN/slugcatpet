@@ -1,11 +1,11 @@
-"""业力梯音效：原版 sounds.txt 里各事件对应的片段与音量，转轮循环音随滚动快慢变化。"""
+"""表盘音效：原版 sounds.txt 里各事件对应的片段与音量，业力梯转轮循环音随滚动快慢变化。"""
 
 from __future__ import annotations
 import random
 
 from PySide6.QtCore import QObject, QUrl
 
-from ...gameassets import karma_sounds_dir
+from ...gameassets import dial_sounds_dir
 
 # 事件 → [(片名候选, 音量)]，同一事件的几条一起响
 EVENTS = {
@@ -14,6 +14,8 @@ EVENTS = {
     "cap_hit": [(("capBell2",), 0.3)],
     "bump": [(("karmaRiseA",), 0.4), (("UIWoodHit",), 0.4)],
     "cap_bump": [(("karmaRiseA",), 0.4), (("UIWoodHit",), 0.4)],
+    "tick": [(("tick",), 0.25)],
+    "tock": [(("tock",), 0.25)],
 }
 LOOP_CLIP, LOOP_VOL = "karmaWheelLow", 0.5
 
@@ -29,7 +31,7 @@ class KarmaSounds(QObject):
     def _effect(self, name, loop=False):
         if name in self._fx:
             return self._fx[name]
-        path = karma_sounds_dir() / f"{name}.wav"
+        path = dial_sounds_dir() / f"{name}.wav"
         e = None
         if path.is_file():
             from PySide6.QtMultimedia import QSoundEffect

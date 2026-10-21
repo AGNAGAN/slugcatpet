@@ -5,7 +5,7 @@ import math
 
 from .. import tuning
 from ..core.units import clampf
-from .reach import Reach, Estimate, RUNNING, DONE, reach_assist, walk_band
+from .reach import Reach, Estimate, RUNNING, DONE, GIVEUP, reach_assist, walk_band
 
 
 class WalkReach(Reach):
@@ -19,7 +19,7 @@ class WalkReach(Reach):
             return None
         xmin, xmax = walk_band(pet)
         fx = clampf(gx, xmin, xmax)
-        if abs(gx - fx) > tuning.PLAN_WALK_X_PAD:
+        if abs(gx - fx) > tuning.PLAN_WALK_X_PAD or pet.body.reach(fx, tuning.PLAN_ARRIVE_EPS) is None:
             return None
         t = abs(pet.body.chunk1.x - fx) / tuning.PLAN_WALK_SPEED + tuning.PLAN_STARTUP_TICKS
         return Estimate(t, t * tuning.PLAN_EN_RATE_LIGHT)
@@ -42,7 +42,7 @@ class WalkReach(Reach):
         half = math.sqrt(r * r - dy * dy)
         xmin, xmax = walk_band(pet)
         fx = clampf(gx, xmin, xmax)
-        if abs(gx - fx) > half:
+        if abs(gx - fx) > half or pet.body.reach(fx, tuning.PLAN_ARRIVE_EPS) is None:
             return None
         t = abs(pet.body.chunk1.x - fx) / tuning.PLAN_WALK_SPEED + tuning.PLAN_STARTUP_TICKS
         return Estimate(t, t * tuning.PLAN_EN_RATE_LIGHT)
@@ -73,7 +73,8 @@ class WalkReachController:
             self._hold += 1
             return DONE if self._hold >= tuning.PLAN_ARRIVE_HOLD else RUNNING
         self._hold = 0
-        body.walk_to(fx)
+        if not body.walk_to(fx, tuning.PLAN_ARRIVE_EPS):
+            return GIVEUP  # 走到一半路断了，或目标那里站不下
         return RUNNING
 
     def cancel(self):

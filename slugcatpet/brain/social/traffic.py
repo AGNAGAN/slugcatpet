@@ -1,135 +1,34 @@
-"""通行：把猫按通道排开，找出谁挡谁的路，决定谁让、怎么过。"""
+"""通行：按占位找出谁挡谁的路，定下谁让、怎么过。地上在走的猫每 tick 按现在的样子重求落脚处（space.reach），
+到不了当场交回行为；身前一排进了视线就照它的走法（ground.plan，按这排的样子缓存）走，落地后从新的位置接着来。
+迎面的按一个先后定谁过，输的原地等（停住，过的一方把它算进那排）；同向在走的跟在后面。"""
 
 from __future__ import annotations
 
-import math
+import logging
+from collections import namedtuple
 
 from ... import tuning
-from ..state import CROWD
+from ...core.stride import ARRIVE, TO, Stride
+from .ground import BRAKE, WALK_V, Plan, gait, lead, near_edge, plan, snapshot
+from .space import FLOOR, ON_CAT, POLE, sign, stand_half, stuck
+
+log = logging.getLogger(__name__)
 
 LEAD = 10  # 按对方速度提前这么多 tick 开始让
-CONTACT = {"F": 24.0, "W": 26.0, "H": 22.0, "S": 22.0, "V": 40.0, "Z": 22.0}  # 通道上两只猫挨上的距离
+CONTACT = {"W": 26.0, "H": 22.0, "S": 22.0, "V": 40.0, "Z": 22.0}  # 通道上两只猫挨上的距离
 WATER_BAND = 26.0  # 水里上下相差这么多以内才会挡路
-GROUND_BAND = 40.0  # 脚离地这么近也算在地上
-HOP_DIST = 44.0  # 离挡路的猫这么近时跨过去
-HOP_HOLD = 6  # 跨越的持跳 tick
-HOP_COOLDOWN = 20
-SWIM_TURN = 0.35  # 想游方向的横向分量超过此值才算往一边游
-PATIENCE = 60  # 杆上被挡停这么久还过不去就不走了
+HOP_DIST = 44.0  # 水里离挡路的猫这么近时从水面跳过去
 SHOVE_TICKS = 20  # 顶着杆尖上的猫往上挤这么久就把它顶下去
 SHOVE_FALL_VX = 3.5  # 被顶下去时的横向速度
 SHOVE_GHOST = 45  # 被顶下去后穿过别的猫的 tick，免得和杆上的猫撞翻
-REST_TICKS = 10  # 被别的猫托着不动这么久就滑下来
-REST_SPEED = 1.2
-SLIP_VX = 2.5  # 滑下来时的横向速度
-SLIP_GHOST = 10  # 滑下来时穿过别的猫的 tick
-YIELD = ("lie", "swap", "clear", "stop")  # 由让路状态执行的指令
+LOOK = 90.0  # 身前一排、在走的猫离这么近才管；照走法走从这和 ground.lead 里远的那个起
+STOP_GAP = 8.0  # 跟在别的猫后面时隔这么远
+GET_OFF_GHOST = 20  # 停在别的猫身上又不走时穿过它落到地上
+FALLBACK_TICKS = 200  # 兜底：有要去的地方却这么久一点没靠近，记下现场并交回行为（设计上不该发生）
+YIELD = ("lie", "swap", "clear")  # 由让路状态执行的指令
 
-
-class Order:
-    """让路指令：kind 见 YIELD，by 是对方，dir 是对方的去向。"""
-
-    __slots__ = ("kind", "by", "dir")
-
-    def __init__(self, kind, by, d):
-        self.kind = kind
-        self.by = by
-        self.dir = d
-
-
-class _Rec:
-    __slots__ = ("pet", "lane", "s", "y", "d", "v", "goal", "can", "key", "giving")
-
-    def __init__(self, pet, lane, s, y, d, v, goal, can):
-        self.pet = pet
-        self.lane = lane
-        self.s = s
-        self.y = y
-        self.d = d
-        self.v = v
-        self.goal = goal
-        self.can = can
-        fsm = pet.behavior
-        self.key = (fsm._cur().tier, pet.index)
-        self.giving = fsm.state == "MakeWay"  # 正在让路：顺着对方走也还算挡着
-
-
-def _sign(v):
-    return 1 if v > 0 else (-1 if v < 0 else 0)
-
-
-def _rec(pet):
-    b = getattr(pet, "body", None)
-    fsm = getattr(pet, "behavior", None)
-    if b is None or fsm is None or fsm.grab.active:
-        return None
-    able = not b.dead and b.stun <= 0
-    c0, c1 = b.chunk0, b.chunk1
-    if b.zerog:
-        pole = b.zerog_pole
-        if pole is None:
-            return None
-        ax, ay = pole.bx - pole.ax, pole.by - pole.ay
-        n = math.hypot(ax, ay) or 1.0
-        ax, ay = ax / n, ay / n
-        fx, fy = b.zerog_pole_intent
-        d = _sign(round(fx * ax + fy * ay))
-        v = abs(c0.vx * ax + c0.vy * ay)
-        return _Rec(pet, ("Z", id(pole)), c0.x * ax + c0.y * ay, 0.0, d, v, None, False)
-    if b.swimming:
-        sx, _ = b._swim_dir()
-        d = _sign(sx) if abs(sx) > SWIM_TURN else 0
-        can = able and not (b.no_dive or b.swim_resting)
-        return _Rec(pet, ("W",), c0.x, c0.y, d, abs(c0.vx), None, can)
-    can = able and "MakeWay" in fsm._states and (fsm.state == "MakeWay" or not fsm.blocked(CROWD))
-    if b.on_pole:
-        anim = b.animation
-        ix, iy = b.pole_input
-        if anim in ("ClimbOnBeam", "GetUpToBeamTip", "BeamTip"):
-            tip = anim != "ClimbOnBeam"
-            d = 0 if anim == "BeamTip" else -iy
-            return _Rec(pet, ("V", round(b.pole_x)), c0.y, 0.0, d, abs(c0.vy), None, can and not tip)
-        if anim == "HangFromBeam":
-            return _Rec(pet, ("H", round(b.pole_y)), c0.x, 0.0, ix, abs(c0.vx), None, can)
-        if anim == "StandOnBeam":
-            return _Rec(pet, ("S", round(b.pole_y)), c1.x, 0.0, ix, abs(c1.vx), None, can)
-        return None
-    grounded = b.on_floor()
-    if not grounded and pet._HL - c1.y > GROUND_BAND:
-        return None
-    if not grounded:  # 贴地飞过的只占位，不叫别的猫让
-        return _Rec(pet, ("F",), c1.x, 0.0, 0, abs(c1.vx), None, False)
-    goal = b.walk_target_x if b.is_moving() else None
-    d = _sign(goal - c1.x) if goal is not None else _sign(b.move_dir)
-    can = can and (fsm.state == "MakeWay" or b.standing)
-    return _Rec(pet, ("F",), c1.x, 0.0, d, abs(c1.vx), goal, can)
-
-
-def _resting_on(pet, pets):
-    """不动地停在别的猫身上（脚不着地、也不在杆上）：返回托着它的猫，没有 None。"""
-    b = pet.body
-    if b.on_floor() or b.on_pole or b.swimming or b.chunk1.vx**2 + b.chunk1.vy**2 > REST_SPEED**2:
-        return None
-    x, y = b.chunk1.x, b.chunk1.y
-    for o in pets:
-        ob = getattr(o, "body", None)
-        if ob is None or o is pet:
-            continue
-        if any(abs(c.x - x) < CONTACT["F"] and 0.0 < c.y - y < GROUND_BAND for c in (ob.chunk0, ob.chunk1)):
-            return o
-    return None
-
-
-def _slip_off(pet, under):
-    """把停在别的猫身上的猫往外侧滑下去。"""
-    b = pet.body
-    if getattr(pet, "controlled", False) or pet.held is not None:
-        return
-    ub = under.body
-    side = _sign(b.chunk1.x - (ub.chunk0.x + ub.chunk1.x) * 0.5) or (b.facing or 1)
-    b.chunk0.vx += side * SLIP_VX
-    b.chunk1.vx += side * SLIP_VX
-    b.ghost = SLIP_GHOST
+# 让路指令：kind 见 YIELD，by 是对方，dir 在地上是趴下的朝向、杆上是对方的去向
+Order = namedtuple("Order", "kind by dir")
 
 
 def _knock_off(pet):
@@ -137,7 +36,7 @@ def _knock_off(pet):
     b = pet.body
     if getattr(pet, "controlled", False) or pet.held is not None or not b.on_pole:
         return False
-    side = _sign(b.chunk0.x - b.pole_x) or (b.facing or 1)
+    side = sign(b.chunk0.x - b.pole_x) or (b.facing or 1)
     b.let_go_pole()
     b.chunk0.vx += side * SHOVE_FALL_VX
     b.chunk1.vx += side * SHOVE_FALL_VX * 0.4
@@ -152,49 +51,32 @@ class Traffic:
         self.social = social
         self.orders = {}  # 猫 → Order
         self.tips = set()  # 有猫站着（或正爬上去）的杆尖所在通道
-        self.ground = set()  # 在地面通道上的猫
-        self.rest = {}  # 猫 → (被托着不动了几 tick, 托着它的猫)
-        self.held = {}  # 猫 → 在杆上被挡停了几 tick
         self.shove = {}  # 猫 → 顶着杆尖上的猫往上挤了几 tick
-        self._shoving = {}  # 本 tick 往上挤的猫 → 杆尖上的猫
-        self._hop_cd = {}
+        self.called = {}  # 猫 → {叫过让路的猫: (指令, 方向)}
+        self.waiting = set()  # 迎面输了原地等的猫，下一 tick 的占位里算停住
+        self.plans = {}  # 一排的样子（ground.snapshot 的键）→ 走法或 None
+        self.progress = {}  # 猫 → (意图, 离落脚处最近到过多近, 之后多少 tick 没更近)
+        self._shoving = {}
 
     def update(self):
         self.orders.clear()
+        self.waiting.clear()
         self.tips.clear()
-        self.ground.clear()
-        pets = self.social.win.pets
-        lanes = {}
-        self._hop_cd = {p: n - 1 for p, n in self._hop_cd.items() if n > 1}
-        for p in pets:
+        space = self.social.space
+        for p in self.social.win.pets:
             b = getattr(p, "body", None)
             if b is not None:
-                b.lane_hold = 0
-            r = _rec(p)
-            if r is not None:
-                lanes.setdefault(r.lane, []).append(r)
-                if r.lane[0] == "F":
-                    self.ground.add(p)
-                if r.lane[0] == "V" and p.body.animation != "ClimbOnBeam":
-                    self.tips.add(r.lane)
-        rest = {}
-        for r in lanes.get(("F",), ()):
-            under = _resting_on(r.pet, pets)
-            if under is not None:
-                rest[r.pet] = (self.rest.get(r.pet, (0, None))[0] + 1, under)
-        self.rest = rest
-        held = {}
+                b.lane_hold, b.lane_blocked = 0, False
         self._shoving = {}
-        for recs in lanes.values():
-            if len(recs) < 2:
+        for lane, occs in space.lanes().items():
+            if lane[0] == "V":
+                self.tips.update(lane for o in occs if o.pet.body.animation != "ClimbOnBeam")
+            if len(occs) < 2:
                 continue
-            for a in recs:
+            for a in occs:
                 if a.d:
-                    self._scan(a, recs, held)
-        for p, (n, under) in rest.items():
-            if n >= REST_TICKS:
-                _slip_off(p, under)
-        self.held = {p: self.held.get(p, 0) + 1 for p in held}
+                    self._scan(a, occs)
+        self._ground(space)
         self.shove = {p: self.shove.get(p, 0) + 1 for p in self._shoving}
         for p, top in self._shoving.items():
             if self.shove[p] >= SHOVE_TICKS:
@@ -202,34 +84,33 @@ class Traffic:
                 if _knock_off(top):
                     self.social.bonds.nudge(p, top, tuning.BOND_SHOVE)
 
-    def _scan(self, a, recs, held):
+    def tip_free(self, pet):
+        """我所在竖杆的杆尖空着。"""
+        return ("V", round(pet.body.pole_x)) not in self.tips
+
+    # 杆上、水里、失重
+
+    def _scan(self, a, occs):
         kind = a.lane[0]
         c = CONTACT[kind]
         reach = c + a.v * LEAD
-        if a.goal is not None:
-            reach = min(reach, (a.goal - a.s) * a.d)
-        for b in recs:
+        for b in occs:
             if b is a or (b.d == a.d and not b.giving) or (kind == "W" and abs(b.y - a.y) > WATER_BAND):
                 continue
             rel = (b.s - a.s) * a.d
             if 0.0 < rel <= reach:
-                self._meet(kind, a, b, rel, c, held)
+                self._meet(kind, a, b, rel, c)
 
-    def _meet(self, kind, a, b, rel, c, held):
+    def _meet(self, kind, a, b, rel, c):
         """a 往 b 走、b 挡着：定谁让、怎么过。"""
         if b.d != -a.d:
             y = b if b.can else None
         else:  # 迎面：正在让路的不再掉头让
             y = min((r for r in (a, b) if r.can and not r.giving), key=lambda r: r.key, default=None)
         by = b if y is a else a
-        # a 是过的一方；都让不了的迎面由优先级低的过
         passes = not a.giving and y is not a and (y is not None or b.d != -a.d or a.key < b.key)
-        if kind == "F":
-            if y is not None:
-                self._order(y, "lie", by)
-            if passes and rel <= HOP_DIST:
-                self._hop(a.pet)
-        elif kind == "W":
+        controlled = getattr(a.pet, "controlled", False)
+        if kind == "W":
             if a.pet.body.swim_pass.busy or b.pet.body.swim_pass.busy:
                 return  # 已经有一只在错开
             if y is None and a.can:
@@ -239,30 +120,160 @@ class Traffic:
             elif passes and rel <= HOP_DIST:
                 a.pet.body.swim_pass.request(False, b.s, b.pet.body.chunk0.vx)
         elif kind == "Z":
-            if rel <= c and not (b.d == -a.d and a.key < b.key):
+            if rel <= c and not (b.d == -a.d and a.key < b.key) and not controlled:
                 a.pet.body.lane_hold = a.d  # 迎面时优先级低的接着走
         else:
             if y is not None:
-                self._order(y, "swap" if kind in ("H", "S") else "clear", by)
-            if rel <= c:
+                self._order(y.pet, "swap" if kind in ("H", "S") else "clear", by.pet, by.d)
+            if rel <= c and not controlled:
                 a.pet.body.lane_hold = -a.d if kind == "V" else a.d
-                held[a.pet] = True
                 if kind == "V" and a.d < 0 and b.pet.body.animation == "BeamTip":
                     self._shoving[a.pet] = b.pet
-                if a.can and not a.giving and self.held.get(a.pet, 0) > PATIENCE:
-                    self._order(a, "stop", b)
+                elif y is None:
+                    a.pet.body.lane_blocked = True  # 谁都让不开：当场交回
 
-    def tip_free(self, pet):
-        """我所在竖杆的杆尖空着。"""
-        return ("V", round(pet.body.pole_x)) not in self.tips
+    # 地上
 
-    def _order(self, r, kind, by):
-        if r.pet not in self.orders:
-            self.orders[r.pet] = Order(kind, by.pet, by.d)
+    def _ground(self, space):
+        for o in space.occs.values():
+            pet, b = o.pet, o.pet.body
+            if b.walk_target_x is None or getattr(pet, "controlled", False):
+                self._end(pet)
+                if o.pose == ON_CAT and b.stride is None and not stuck(pet):
+                    b.ghost = max(b.ghost, GET_OFF_GHOST)  # 停在别的猫身上又不走：穿过它落到地上
+                continue
+            if o.pose in (FLOOR, ON_CAT):  # 空中、杆上：落地再说
+                t = space.reach(pet, b.walk_target_x, b.walk_tol, keep=b.target_x)
+                if t is None or self._fallback(o, t):
+                    self._block(o)
+                    continue
+                b.target_x = o.target = t  # 后面的猫这一 tick 就避开它
+                if o.pose == FLOOR and not space.free(pet, o.lo, o.hi, parked=True):
+                    b.ghost = max(b.ghost, 2)  # 在地上和停住的猫叠着：穿过它走开，免得拖着它走
+                d = sign(t - o.x)
+                if not self._walkers(space, o, t, d):
+                    self._pass(space, o, t, d)
+            self._call(space, o)
 
-    def _hop(self, pet):
-        b = pet.body
-        if pet in self._hop_cd or not (b.standing and b.on_floor()):
+    def _pass(self, space, o, t, d):
+        """身前一排进了视线就照它的走法走；走法变了（这排的样子变了）就换。从远处走过来、走着过不比站定费事的，走着过。"""
+        b = o.pet.body
+        rows = space.rows(o, t)
+        if not rows or (o.under is None and (near_edge(rows[0][0], d) - o.x) * d > max(LOOK, lead(b, d))):
+            self._drop_stride(b)
             return
-        b.request_jump("stand", hold_ticks=HOP_HOLD)
-        self._hop_cd[pet] = HOP_COOLDOWN
+        st = b.stride
+        p = st and self.verdict(o, *rows[0], st.walking)[1]
+        if st is not None and (p is None or p.steps != st.plan.steps):
+            self._drop_stride(b)
+        if b.stride is not None:
+            return
+        x0, p = self.verdict(o, *rows[0])  # reach 刚判过能过
+        steps = p.steps if abs(x0 - o.x) <= ARRIVE or o.under is not None else [(TO, x0), *p.steps]
+        st = Stride(steps, p, False)
+        if o.under is None and not p.yields:
+            xw, w = self.verdict(o, *rows[0], walking=True)
+            ws = w and (w.steps if w.steps[0][0] == TO else [(TO, xw), *w.steps])
+            room = ws and (ws[0][1] - o.x) * d >= gait(b.stats)[1]  # 走到起步处已是走路速度
+            if room and w.cost <= p.cost + abs(x0 - xw) / WALK_V + BRAKE:
+                st = Stride(ws, w, True)
+        b.stride = st
+
+    def _walkers(self, space, o, t, d):
+        """身前在走的猫：同向的按身子、迎面的按它整段要走的路，近边在我的落脚处之前（和 rows 同一口径）才算。
+        迎面的按先后定谁过，让的一方原地等；同向的跟在后面。要等或跟着时返回真。"""
+        best = None
+        for q in space.floor(o.pet) if d else ():
+            if q.target is None or not q.d or q.parked or (q.d == -d and self._wins(o, q)):
+                continue
+            mid, gap = (q.lo + q.hi) * 0.5, (q.lo - o.hi) if d > 0 else (o.lo - q.hi)
+            near = (q.lo if d > 0 else q.hi) * d
+            if q.d == -d:
+                near = min(near, q.target * d - stand_half(q.pet.body))  # 它退后助跑时也还挡着
+            if (mid - o.x) * d > 0.0 and near < t * d and gap <= LOOK:
+                best = (gap, q) if best is None or gap < best[0] else best
+        if best is None:
+            return False
+        if best[1].d == -d:
+            self.waiting.add(o.pet)
+        if best[1].d == -d or best[0] <= STOP_GAP:
+            o.pet.body.lane_hold = d  # 迎面输了原地等；同向的跟到它身后停下（还算在走）
+        self._drop_stride(o.pet.body)
+        return True
+
+    @staticmethod
+    def _wins(a, q):
+        """迎面碰上时 a 先过：已经开始过的先过，叫不动的先过，再按优先级。"""
+        st = [o.pet.body.stride for o in (a, q)]
+        ka, kq = ((s is not None and (s.i > 0 or s.jumped), not o.can, o.key) for s, o in zip(st, (a, q)))
+        return ka > kq
+
+    def _call(self, space, o):
+        """叫要让的猫让开：走到等着那一步时叫走法里要让的，叫过的一直叫到越过它；走法里要让的都让好了才放行。"""
+        pet, st = o.pet, o.pet.body.stride
+        called = self.called.setdefault(pet, {})
+        if st is not None and st.waiting:
+            called.update(st.plan.yields)
+        d = sign(pet.body.target_x - o.x)
+        for y, (kind, f) in list(called.items()):
+            yo = space.of(y)
+            if yo is None or ((yo.hi if d > 0 else yo.lo) - (o.lo if d > 0 else o.hi)) * d <= 0.0:
+                del called[y]  # 越过它了
+            else:
+                self._order(y, kind, pet, f)
+        if st is not None:
+            st.go = all(self._cleared(space.of(y), k) for y, (k, _) in st.plan.yields.items())
+
+    @staticmethod
+    def _cleared(yo, kind):
+        """让路的猫让好了：趴平了，或从低处杆上挪开了。"""
+        flat = yo is not None and yo.pet.body.lying_flat()
+        return yo is None or (flat if kind == "lie" else not (yo.pose == POLE and yo.blocks))
+
+    @staticmethod
+    def _drop_stride(b):
+        if b.stride is not None and not b.stride.jumped:
+            b.stride = None
+
+    def _block(self, o):
+        """路断了：当场交回行为（停在猫背上的下一 tick 就穿过它落到地上）。"""
+        self._end(o.pet)
+        o.pet.body.walk_blocked()
+
+    def _end(self, pet):
+        self.called.pop(pet, None)
+        self.progress.pop(pet, None)
+        self._drop_stride(pet.body)
+
+    def _fallback(self, o, t):
+        """兜底：有要去的地方却很久一点没靠近，说明设计有漏洞或出了物理意外；记下现场，交回行为。"""
+        w, dist = o.pet.body.walk_target_x, abs(t - o.x)
+        w0, best, n = self.progress.get(o.pet, (None, 0.0, 0))
+        self.progress[o.pet] = (w, dist, 0) if w0 != w or dist < best - 1.0 else (w, best, n + 1)
+        if n + 1 >= FALLBACK_TICKS:
+            self.fallback(o.pet, "走不近")
+            return True
+        return False
+
+    def fallback(self, pet, why):
+        """兜底触发：记下现场（每只猫的编号、状态、姿势、位置、停没停、落脚处，和这只的过路动作）。"""
+        occs = self.social.space.occs.values()
+        scene = [(q.pet.index, q.state, q.pose, round(q.x), q.parked, q.target) for q in occs]
+        st = pet.body.stride
+        rec = (why, self.social.now, pet.index, pet.body.walk_target_x, st and st.steps, st and st.i, scene)
+        log.warning("通行兜底触发：%s", rec)
+
+    def verdict(self, a, row, glo, ghi, walking=False):
+        """a 过这一排、落到 [glo, ghi] 的走法：(起步处, Plan 或 None)，按这排的样子（ground.snapshot）缓存。"""
+        d = sign((glo + ghi) * 0.5 - a.x)
+        key, x0, occs = snapshot(self.social.space, a.pet, d, row, glo, ghi, walking, a.under)
+        if key not in self.plans:
+            if len(self.plans) > 4096:
+                self.plans.clear()
+            self.plans[key] = plan(key, a.pet.body)
+        p = self.plans[key]
+        return x0, p and Plan(p.steps, {occs[i].pet: (k, f) for i, k, f in p.yields}, p.cost)
+
+    def _order(self, pet, kind, by, d):
+        if pet not in self.orders:
+            self.orders[pet] = Order(kind, by, d)

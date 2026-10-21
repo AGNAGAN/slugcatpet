@@ -7,6 +7,7 @@ from . import moves_posture as mp
 from . import moves_slide as ms
 from . import moves_jump as mj
 from . import moves_pole as mpole
+from . import moves_wall as mw
 
 
 def ctrl_movement_update(body):
@@ -21,14 +22,19 @@ def ctrl_movement_update(body):
     if getattr(body, "_ctrl_want_jump", None) is None:
         body._ctrl_want_jump = 0
         body._ctrl_can_jump = 0
+    taken = body._ctrl_jump_taken  # 这一 tick 的跳键已在杆上用掉
+    body._ctrl_jump_taken = False
+    if body._ctrl_pole_skip > 0:
+        body._ctrl_pole_skip -= 1
     if body._ctrl_want_jump > 0:
         body._ctrl_want_jump -= 1
-    elif inp0.jmp and not inp1.jmp:
-        body._ctrl_want_jump = 5
+    elif inp0.jmp and not inp1.jmp and not taken:
+        if not mpole.pole_skip(body, inp0):
+            body._ctrl_want_jump = 5
     if body._ctrl_can_jump > 0:
         body._ctrl_can_jump -= 1
     tongue = getattr(body, "_ctrl_tongue", None)
-    if tongue is not None:
+    if tongue is not None and not taken:
         tongue.update(body, inp0, inp1, body._ctrl_can_jump)
 
     ms.ensure(body)
@@ -50,6 +56,8 @@ def ctrl_movement_update(body):
     # 蓄力过半且一直按着跳时不能横移
     if getattr(body, "_ctrl_super_launch", 0) > 10 and inp0.jmp and inp1.jmp and inp[2].jmp and inp0.y < 1:
         move_x = 0
+    if body._ctrl_jump_stun != 0:  # 蹬墙跳后横向锁成蹬开的方向
+        move_x = 1 if body._ctrl_jump_stun > 0 else -1
     if move_x > 0:
         body.facing = 1
     elif move_x < 0:
@@ -88,6 +96,7 @@ def ctrl_movement_update(body):
         body.bodyMode = "Stand"
     else:
         body.bodyMode = "Crawl"
+    mw.try_enter(body, inp0)  # 着地时也会贴墙
 
     if mpole.try_grab(body, inp0, inp1):
         return  # 抓住杆，由杆上动作接管
@@ -103,6 +112,8 @@ def ctrl_movement_update(body):
 
     if on_ground:
         body._ctrl_can_jump = 5
+    if body.bodyMode == "WallClimb":
+        mw.update(body, inp0)
 
     dyn0 = cr.RUN_UPPER * body.stats.runspeed_fac
     dyn1 = cr.RUN_LOWER * body.stats.runspeed_fac
@@ -122,11 +133,17 @@ def ctrl_movement_update(body):
             dyn1 *= 0.75
         if move_x == 0 and c1.on_floor and not c0.pinned and not c1.pinned and body._jump_pending is None:
             body._crawl_pose()  # 不把头投影到连接距离的圆上，否则蓄力的着地判定会出错
+    elif body.bodyMode == "WallClimb":
+        dyn0 = dyn1 = ms.DEFAULT_DYN
 
     if body._ctrl_roll_direction != 0:  # 翻滚、滑铲时用默认跑速上限
         dyn0 = dyn1 = ms.DEFAULT_DYN
     dyn0 *= body.slow_fac(0.5)
     dyn1 *= body.slow_fac(0.5)
+    if body.hand_load > 0.0:  # 手里拉着猫跑得慢
+        heavy = 1.0 + max(0.0, body.hand_load - mj.HEAVY_FREE)
+        dyn0 /= heavy
+        dyn1 /= heavy
     accel = cr.H_ACCEL * body.slow_fac(0.4)
     ms.super_launch_charge(body, move_x, inp0, inp1)
 
@@ -153,10 +170,15 @@ def ctrl_movement_update(body):
             target = max(-dyn, min(dyn, c.vx)) if move_x != 0 else 0.0
             c.vx += (target - c.vx) * cr.SKID_DAMP
 
-    # 按当前动作选跳法：Roll、BellySlide、DownOnFours、站立跳、蹲跳
+    # 按当前动作选跳法：贴墙、Roll、BellySlide、DownOnFours、站立跳、蹲跳；之后是离墙宽限内的蹬墙跳、踩猫跳
     want_pre = body._ctrl_want_jump  # dispatch 会清零，先记下给工匠的钩子用
     can_pre = body._ctrl_can_jump
     mj.dispatch(body, inp0)
+    mw.try_grace_jump(body, inp0)  # 跳了会清掉预输入
+    if body._ctrl_want_jump > 0 and body._ctrl_can_jump <= 0 and body.on_support():
+        body._ctrl_want_jump = 0
+        body.aerobic_increase(body.stats.jump_aerobic)
+        body.jump_on_chunk()
 
     # 蓄力衰减放在 dispatch 之后，扑跳才读得到满蓄力
     if getattr(body, "_ctrl_sl_decay", 0) > 0 and body._ctrl_super_launch > 0:
@@ -179,12 +201,15 @@ def ctrl_movement_update(body):
     else:
         body.jump_boost = 0.0
 
+    # 走位边界就是操控时的左右墙：夹回边界，去掉朝墙的横速
     if body.walk_min is not None and move_x != 0:
         for c in (c0, c1):
-            if c.x < body.walk_min:
+            if c.x <= body.walk_min:
                 c.x = body.walk_min
-            elif c.x > body.walk_max:
+                c.vx = max(c.vx, 0.0)
+            elif c.x >= body.walk_max:
                 c.x = body.walk_max
+                c.vx = min(c.vx, 0.0)
 
     # 能力的操控钩子（工匠、舌头），没有时为 None
     pyro = getattr(body, "_ctrl_pyro", None)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ..perch.choose import Mark
 from ...brain.state import LIGHT, T_WARM, State
 from ...planning import GIVEUP, HOLDING, MODE_STAY, PlanExecutor, point_goal
 from ...planning.climbmoves import release
@@ -21,13 +22,12 @@ def exposed(fsm) -> bool:
 
 
 def _taken(fsm):
-    """别的猫已经躲着或正要去躲的位置。"""
+    """别的猫已经躲着或预约了要去躲的位置。"""
     out = []
     for o in fsm.social.others(fsm.win):
-        beh = o.behavior
-        st = beh._states.get("SeekShelter") if beh is not None else None
-        if beh is not None and beh.state == "SeekShelter" and st is not None and st.target is not None:
-            out.append(st.target)
+        m = fsm.social.held(o, "shelter")
+        if m is not None:
+            out.append(m.x)
         elif not fsm.win.rain.exposed(o.body.chunk1.x, o.body.chunk1.y):
             out.append(o.body.chunk1.x)
     return out
@@ -63,7 +63,6 @@ class SeekShelter(State):
         super().__init__(fsm)
         self._exec = None
         self.cooldown = 0
-        self.target = None  # 要去的躲雨位置，别的猫据此让开
 
     def enter(self):
         fsm = self.fsm
@@ -74,9 +73,10 @@ class SeekShelter(State):
         fsm._clear_hands()
         fsm.climb = None
         self._exec = None
-        x = self.target = shelter_x(fsm)
+        x = shelter_x(fsm)
         if x is None:
             return
+        fsm.social.claim(fsm.win, "shelter", Mark(x, fsm.win._HL), state=self.name)
         g = point_goal(x, fsm.win._HL, radius=ARRIVE)
         if not fsm.planner.stay_candidates(g):
             self.cooldown = RETRY
@@ -111,7 +111,7 @@ class SeekShelter(State):
         if self._exec is not None:
             self._exec.cancel()
             self._exec = None
-        self.target = None
+        fsm.social.release(fsm.win, "shelter")
         fsm.release_organs()
         fsm.body.stop_walk()
         fsm.climb = None

@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from ... import tuning
 from ...brain.skills import motor
+from ...brain.social.bonds import LYING
+from ...brain.social.space import LieMark
 from ...brain.state import T_REST, T_WARM, State, LIGHT, REST
+from ...core.creature import BLOCKED
 
 
 def too_cold_to_sleep(fsm):
@@ -32,7 +35,7 @@ def lie_down(fsm, why):
 
 def lying_for(fsm):
     """趴着或睡着的原因；没趴着 None。"""
-    if fsm.state in ("LieDown", "Sleep"):
+    if fsm.state in LYING:
         return fsm._states[fsm.state].why
     return None
 
@@ -49,11 +52,32 @@ class LieDown(State):
         fsm = self.fsm
         b = fsm.body
         self.why, self.next_why = self.next_why or EXHAUST, None
-        b.set_posture(False)
         b.stop_walk()
+        self.face = None
+        spot = fsm.social.space.lie_spot(fsm.win) if b.standing else None  # 这里趴下会压到别的猫就先挪到走得到的空地
+        if spot is None:
+            b.set_posture(False)
+            return
+        x, self.face = spot
+        fsm.social.claim(fsm.win, "lie", LieMark(x, b.chunk1.y, self.face), state=self.name)
+        if abs(x - b.chunk1.x) <= 1.0 or not b.walk_to(x):  # 就在脚下或走不过去：原地趴下
+            b.facing = self.face
+            b.set_posture(False)
 
     def tick(self, cursor, disturbed):
         fsm = self.fsm
+        b = fsm.body
+        if b.standing:
+            if b.is_moving():
+                return
+            if b.walk_result == BLOCKED:  # 走到一半路断了：就地找个趴得下的朝向
+                spot = fsm.social.space.lie_spot(fsm.win, here=True)
+                self.face = spot[1] if spot is not None else self.face
+            b.stop_walk()
+            if self.face is not None:
+                b.facing = self.face
+            b.set_posture(False)
+            fsm.timer = 0
         if self.why in SLEEPS:
             if too_cold_to_sleep(fsm):
                 fsm._transition("WakeSequence")

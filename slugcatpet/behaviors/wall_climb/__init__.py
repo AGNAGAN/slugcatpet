@@ -5,10 +5,20 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from ...abilities.base import Param
-from ...abilities.tongue.climb import CeilingHanger, TongueClimber, hang_above_water
+from ...abilities.tongue.climb import (
+    CEIL_EDGE_MARGIN,
+    HANG_IDEAL,
+    CeilingHanger,
+    TongueClimber,
+    hang_above_water,
+)
 from ...brain.desire import _lerp
 from ...brain.state import LIGHT, T_ACTIVITY, VIGOROUS
 from ..base import Behavior, mood_candidate, mood_params
+
+
+CEIL_SAMPLE = 32.0  # 检查天花板沿途淋不淋雨的取样间隔
+WALL_ARRIVE = 6.0  # 走到离墙脚这么近就开始爬
 
 
 class WallClimb(Behavior):
@@ -45,8 +55,10 @@ def _mount(fsm, p):
         target = b.walk_max if side > 0 else b.walk_min
         if relocate.x is None:
             relocate.x = target
-            b.walk_to(target)
-        if not b.is_moving() or abs(b.chunk1.x - target) < 6.0:
+            if not b.walk_to(target, WALL_ARRIVE):
+                fsm.settle()  # 墙脚走不到
+                return
+        if not b.is_moving():
             b.stop_walk()
             fsm._transition("TongueClimb")
 
@@ -110,15 +122,33 @@ def _mount(fsm, p):
     def face_nearer_wall():
         fsm._wall_side = -1 if fsm.body.chunk1.x < fsm.WL / 2 else 1
 
+    def route():
+        """墙脚、墙顶和天花板上吊着晃过的各点。"""
+        b, WL, HL = fsm.body, fsm.WL, fsm.HL
+        left = b.chunk1.x < WL / 2
+        foot = b.walk_min if left else b.walk_max
+        if foot is None:
+            foot = 0.0 if left else WL
+        pts = [(foot, HL - 1.0), (0.0 if left else WL, HANG_IDEAL)]
+        x, hi = min(CEIL_EDGE_MARGIN, WL * 0.25), max(WL - CEIL_EDGE_MARGIN, WL * 0.75)
+        while x <= hi:
+            pts.append((x, HANG_IDEAL))
+            x += CEIL_SAMPLE
+        return pts
+
     fsm.register_mood_entry("ceiling_play", "RelocateToWall", before=face_nearer_wall)
     mood_candidate(
         fsm,
         "ceiling_play",
         p,
         gate=lambda ctx: (
-            ctx.energy >= fsm.traits.play_gate and not ctx.submerged and hang_above_water(fsm.win)
+            ctx.energy >= fsm.traits.play_gate
+            and not ctx.submerged
+            and hang_above_water(fsm.win)
+            and fsm.body.reach(route()[0][0], WALL_ARRIVE) is not None
         ),
         one_shot=False,
         energy_factor=lambda e: _lerp(e, 0.0, 1.0, p.energy_fac_tired, p.energy_fac_fresh),
         before="idle",
+        outdoor=route,
     )

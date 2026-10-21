@@ -20,6 +20,8 @@ from .climbmap import (
 RUNNING, DONE, FAIL = "running", "done", "fail"
 SIDE_OFF = 5.0  # 爬竖杆时头偏到杆的一侧
 ARRIVE = 1.5
+STAND_RESTART = 6.0  # 站横杆停下后离目标超过这么远才重新走
+STAND_COAST = 2.8  # 站横杆走动时提前这么多倍速度松手，停下时滑行到目标附近
 TILE = 20.0  # 一格
 GRAVITY = 0.9
 CLIMB_SLIDE = 2.2  # 往下滑时头的推力
@@ -32,6 +34,9 @@ HANG_ARRIVE = 2.0
 PULL_BUTT_UP = 2.0  # 翻杆时臀部的上推力
 PULL_BUTT_FWD = 0.5  # 往前推
 PULLUP_SAFETY = 200
+PULL_STUCK = 20  # 翻杆时臀这么久没再抬高就改成直着往上翻
+PULL_STRAIGHT = 1.8  # 直着往上翻时头和臀朝目标的推力
+PULL_STRAIGHT_LOST = 25.0  # 直着翻时头离目标超过这么远就松手
 UPRIGHT = 0.85  # 头高出臀这么多倍身长算直起身
 TIP_ARRIVE = 6.0  # 臀离杆尖站点这么近算站上去
 HANG_BEFORE_PULL = 6  # 抓住横杆后先吊这么久再翻
@@ -40,6 +45,7 @@ REACH_LOST_TICKS = 20  # 目标离开够得着的范围这么久就重新找路
 REACH_UP_TICKS = 10
 REACH_UP_HOP = 8.0  # 伸手抓上面横杆时身子先上窜的距离
 LAUNCH_EPS = 4.0  # 地上起跳点的容差
+GRAB_V_REACH = 20.0  # 走到离竖杆这么近就能从地上抓
 SETTLE_VX = 0.6
 AIR_TIMEOUT = 260
 MOVE_SLACK = 90  # 每个动作在预计耗时外再给这么多 tick
@@ -73,6 +79,35 @@ class Move:
         if self.t > self.budget + MOVE_SLACK:
             return FAIL
         return self.step()
+
+
+class AlongMove(Move):
+    """沿一根杆走到一个采样点。下一步同样沿这根杆同向走时不在这里停下，走过就算到；
+    下一步的位置被挡着时改回停在这里。"""
+
+    act = None
+
+    def __init__(self, nav, bar, target, pos):
+        super().__init__(nav, bar)
+        self.target = target
+        d = target - pos
+        self.dir = 1 if d > 0 else (-1 if d < 0 else 0)
+        nxt = nav.next_act()
+        self.through = (
+            self.dir != 0
+            and nxt is not None
+            and nxt[0] == self.act
+            and nav.cm.bars[nxt[1]] is bar
+            and (nxt[2] - target) * self.dir > 0
+        )
+
+    def step(self):
+        if self.through and not self.nav.next_open():
+            self.through = False
+        if not self.through:
+            return DONE if self.toward() else RUNNING
+        self.push(self.dir)
+        return DONE if (self.target - self.pos()) * self.dir <= 0.0 else RUNNING
 
 
 # 竖杆
@@ -133,15 +168,22 @@ def climb_toward(body, bar, y):
     return iy == 0
 
 
-class Climb(Move):
+class Climb(AlongMove):
+    act = "climb"
+
     def __init__(self, nav, bar, y):
-        super().__init__(nav, bar)
-        self.y = y
+        super().__init__(nav, bar, y, nav.pet.body.chunk0.y)
         d = abs(y - self.body.chunk0.y)
         self.budget = int(d / min(CLIMB_UP, CLIMB_DOWN)) + 30
 
-    def step(self):
-        return DONE if climb_toward(self.body, self.bar, self.y) else RUNNING
+    def pos(self):
+        return self.body.chunk0.y
+
+    def push(self, d):
+        climb_tick(self.body, self.bar, -d)
+
+    def toward(self):
+        return climb_toward(self.body, self.bar, self.target)
 
 
 class GrabFromFloor(Move):
@@ -155,9 +197,8 @@ class GrabFromFloor(Move):
         b = self.body
         c1 = b.chunk1
         b.set_posture(True)  # 站着走过去抓杆
-        if abs(c1.x - self.bar.x) > 20.0 or not c1.on_floor:
-            b.walk_to(self.bar.x)
-            return RUNNING
+        if abs(c1.x - self.bar.x) > GRAB_V_REACH or not c1.on_floor:
+            return RUNNING if b.walk_to(self.bar.x, GRAB_V_REACH) else FAIL
         b.stop_walk()
         attach_vertical(b, self.bar, 1 if b.chunk0.x >= self.bar.x else -1)
         return DONE
@@ -220,8 +261,10 @@ def tip_up_tick(body, bar):
 
 
 def tip_step(body, bar, nudge=0.0):
-    """站在杆尖上推一 tick；头掉到臀以下返回 False。"""
+    """站在杆尖上推一 tick；头掉到臀以下或臀离开杆尖那一格返回 False。"""
     c0, c1 = body.chunk0, body.chunk1
+    if abs(c1.x - bar.x) > TILE / 2:
+        return False
     grip(body, bar)
     body.standing = True
     body.animation = "BeamTip"
@@ -338,53 +381,77 @@ def stand_tick(body, bar, ix):
             body.pole_frame = 0
     else:
         body.pole_frame = 0
-    c0.pinned, c1.pinned = False, True
+    c0.pinned = c1.pinned = False
     c1.vx *= 0.5
-    c1.vy = 0.0
+    c1.vy = -GRAVITY * body.room_gravity  # 抵掉这一 tick 的重力，臀停在杆上
+    c1.y = bar.y - STAND_HOVER
     c0.vy -= STAND_HEAD_UP
     run_accel(body, ix, BEAM_WALK * body.stats.runspeed_fac)
-    c1.x = min(max(c1.x + c1.vx, bar.x0 + 2.0), bar.x1 - 2.0)
-    c1.y = bar.y - STAND_HOVER
+    lo, hi = bar.x0 + 2.0, bar.x1 - 2.0
+    c1.x = min(max(c1.x, lo), hi)
+    c1.vx = min(max(c1.vx, lo - c1.x), hi - c1.x)
     body.pole_x = c1.x
 
 
 def stand_toward(body, bar, x):
     """站在横杆上往 x 走一 tick，停稳了返回 True。"""
     d = x - body.chunk1.x
-    ix = 0 if abs(d) <= max(ARRIVE, abs(body.chunk1.vx)) else (1 if d > 0 else -1)
+    stopped = body.animation == "StandOnBeam" and body.pole_input[0] == 0
+    reach = STAND_RESTART if stopped else max(ARRIVE, abs(body.chunk1.vx) * STAND_COAST)
+    ix = 0 if abs(d) <= reach else (1 if d > 0 else -1)
     stand_tick(body, bar, ix)
     return ix == 0 and abs(body.chunk1.vx) < 0.2
 
 
-class Shimmy(Move):
+class Shimmy(AlongMove):
+    act = "shimmy"
+
     def __init__(self, nav, bar, x):
-        super().__init__(nav, bar)
-        self.x = x
+        super().__init__(nav, bar, x, nav.pet.body.chunk0.x)
         self.budget = int(abs(x - self.body.chunk0.x) / SHIMMY) + 20
 
-    def step(self):
-        return DONE if hang_toward(self.body, self.bar, self.x) else RUNNING
+    def pos(self):
+        return self.body.chunk0.x
+
+    def push(self, d):
+        hang_tick(self.body, self.bar, d)
+
+    def toward(self):
+        return hang_toward(self.body, self.bar, self.target)
 
 
-class BeamWalk(Move):
+class BeamWalk(AlongMove):
+    act = "beamwalk"
+
     def __init__(self, nav, bar, x):
-        super().__init__(nav, bar)
-        self.x = x
+        super().__init__(nav, bar, x, nav.pet.body.chunk1.x)
         self.budget = int(abs(x - self.body.chunk1.x) / BEAM_WALK) + 10
 
-    def step(self):
-        return DONE if stand_toward(self.body, self.bar, self.x) else RUNNING
+    def pos(self):
+        return self.body.chunk1.x
+
+    def push(self, d):
+        stand_tick(self.body, self.bar, d)
+
+    def toward(self):
+        return stand_toward(self.body, self.bar, self.target)
 
 
 class PullUpMotion:
-    """翻上横杆：臀绕着扣住杆的头甩上去，高过头就站上杆。"""
+    """翻上横杆：臀绕着扣住杆的头甩上去，高过头就站上杆；甩的那侧没杆或被挡住时直着往上翻。"""
 
     def __init__(self, body, bar, facing):
         self.body = body
         self.bar = bar
         self.x = body.chunk0.x
-        self.facing = facing or 1
+        face = facing or 1
+        if not bar.x0 <= self.x + face * TILE <= bar.x1:
+            face = -face
+        self.straight = not bar.x0 <= self.x + face * TILE <= bar.x1
+        self.facing = face
         self.t = 0
+        self.best = body.chunk1.y
+        self.since_best = 0
 
     def step(self):
         """推进一 tick：站上去 True，还在翻 False，翻不上去松手返回 None。"""
@@ -405,11 +472,43 @@ class PullUpMotion:
         if self.t > PULLUP_SAFETY:
             release(b)
             return None
+        if self.straight:
+            return self._straight_step()
+        if c1.y < self.best - 0.5:
+            self.best, self.since_best = c1.y, 0
+        else:
+            self.since_best += 1
+            if self.since_best > PULL_STUCK:
+                self.straight = True
         if c1.y < c0.y:
             c1.y = bar.y - STAND_HOVER
             c1.vy = 0.0
             stand_tick(b, bar, 0)
             return True
+        return False
+
+    def _straight_step(self):
+        """直着往上翻：头往杆上方一格、臀往杆上推，臀到杆上就站上去。"""
+        b = self.body
+        c0, c1 = b.chunk0, b.chunk1
+        bar = self.bar
+        c0.pinned = False
+        c0.vx = c0.vy = 0.0
+        b.ghost = max(b.ghost, 2)  # 从挡住的猫身边穿上去
+        ux, uy = self.x, bar.y - TILE
+        for c, ty in ((c0, uy), (c1, bar.y)):
+            dx, dy = ux - c.x, ty - c.y
+            n = math.hypot(dx, dy) or 1.0
+            c.vx += dx / n * PULL_STRAIGHT
+            c.vy += dy / n * PULL_STRAIGHT
+        if c1.y < bar.y + STAND_HOVER and bar.x0 <= c1.x <= bar.x1:
+            c1.y = bar.y - STAND_HOVER
+            c1.vy = 0.0
+            stand_tick(b, bar, 0)
+            return True
+        if math.hypot(c0.x - ux, c0.y - uy) > PULL_STRAIGHT_LOST:
+            release(b)
+            return None
         return False
 
 
@@ -430,7 +529,7 @@ class PullUp(Move):
             hang_tick(b, self.bar, 0)
             return RUNNING
         if self.t == HANG_BEFORE_PULL + 1:
-            face = self.nav.next_facing() if hasattr(self.nav, "next_facing") else 0
+            face = self.nav.next_facing()
             self.motion = PullUpMotion(b, self.bar, face or b.facing)
         if self.motion is not None:
             r = self.motion.step()
@@ -467,6 +566,7 @@ class SwingUnderMotion:
         """推进一 tick：吊住了 True，还在落 False。"""
         b = self.body
         self.t += 1
+        b.ghost = max(b.ghost, 2)  # 落的时候穿过杆上要过去的那只
         if self.t == 1:
             release(b)
             b.chunk0.vx = b.chunk1.vx = 0.0
@@ -629,8 +729,7 @@ class FloorFly(Fly):
             b.set_posture(True)
             c1 = b.chunk1
             if abs(c1.x - self.lx) > LAUNCH_EPS or not b.on_floor():
-                b.walk_to(self.lx)
-                return RUNNING
+                return RUNNING if b.walk_to(self.lx, LAUNCH_EPS) else FAIL
             b.stop_walk()
             if abs(c1.vx) > SETTLE_VX or abs(b.chunk0.vx) > SETTLE_VX:
                 return RUNNING
