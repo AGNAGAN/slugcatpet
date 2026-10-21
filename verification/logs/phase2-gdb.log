@@ -1,0 +1,253 @@
+
+warning: Loadable section ".dynstr" outside of ELF segments
+  in /home/user/.local/share/uv/python/cpython-3.12.15-linux-x86_64-gnu/bin/python3.12
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://repo.archlinuxcn.org>
+  <https://debuginfod.archlinux.org>
+  <https://debuginfod.cachyos.org>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/usr/lib/libthread_db.so.1".
+[New Thread 0x7ffff71ff6c0 (LWP 58062) (id 2)]
+[New Thread 0x7fffe69c86c0 (LWP 58063) (id 3)]
+[New Thread 0x7fffe61c76c0 (LWP 58064) (id 4)]
+[New Thread 0x7fffe59c66c0 (LWP 58065) (id 5)]
+[New Thread 0x7fffd57ff6c0 (LWP 58067) (id 6)]
+[New Thread 0x7fffd4ffe6c0 (LWP 58068) (id 7)]
+[New Thread 0x7fffcffff6c0 (LWP 58069) (id 8)]
+[New Thread 0x7fffbcbff6c0 (LWP 58070) (id 9)]
+[New Thread 0x7fffb0dde6c0 (LWP 58075) (id 10)]
+[New Thread 0x7fffaab5c6c0 (LWP 58087) (id 11)]
+[Thread 0x7fffaab5c6c0 (LWP 58087) (id 11) exited]
+[Thread 0x7fffb0dde6c0 (LWP 58075) (id 10) exited]
+[New Thread 0x7fffb0dde6c0 (LWP 58088) (id 12)]
+[New Thread 0x7fffcc1ff6c0 (LWP 58089) (id 13)]
+[New Thread 0x7fffaab5c6c0 (LWP 58108) (id 14)]
+[New Thread 0x7fffabfff6c0 (LWP 58109) (id 15)]
+[New Thread 0x7fffab7fe6c0 (LWP 58110) (id 16)]
+[New Thread 0x7fffaa35b6c0 (LWP 58111) (id 17)]
+[New Thread 0x7fff913ff6c0 (LWP 58112) (id 18)]
+[New Thread 0x7fff90bfe6c0 (LWP 58113) (id 19)]
+[New Thread 0x7fff87fff6c0 (LWP 58114) (id 20)]
+[New Thread 0x7fff877fe6c0 (LWP 58115) (id 21)]
+[New Thread 0x7fff86ffd6c0 (LWP 58116) (id 22)]
+[New Thread 0x7fff867fc6c0 (LWP 58117) (id 23)]
+[Thread 0x7ffff71ff6c0 (LWP 58062) (id 2) exited]
+
+Thread 1 "python" received signal SIGINT, Interrupt.
+0x00007ffff7ab5a22 in ?? () from /usr/lib/libc.so.6
+
+Thread 23 (Thread 0x7fff867fc6c0 (LWP 58117) "data-loop.0"):
+#0  0x00007ffff7ab5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007ffff7b4f178 in epoll_wait () from /usr/lib/libc.so.6
+#2  0x00007fffd407c569 in ?? () from /usr/lib/spa-0.2/support/libspa-support.so
+#3  0x00007fffd40658e9 in ?? () from /usr/lib/spa-0.2/support/libspa-support.so
+#4  0x00007fffd4192471 in ?? () from /usr/lib/libpipewire-0.3.so.0
+#5  0x00007ffff7aac93f in ?? () from /usr/lib/libc.so.6
+#6  0x00007ffff7b4eeec in ?? () from /usr/lib/libc.so.6
+
+Thread 22 (Thread 0x7fff86ffd6c0 (LWP 58116) "QFFmpeg::Demuxe"):
+#0  0x00007ffff7ab5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007ffff7b3e388 in ppoll () from /usr/lib/libc.so.6
+#2  0x00007ffff4570490 in ?? () from /usr/lib/libglib-2.0.so.0
+#3  0x00007ffff4570592 in g_main_context_iteration () from /usr/lib/libglib-2.0.so.0
+#4  0x00007fffefcb114e in QEventDispatcherGlib::processEvents(QFlags<QEventLoop::ProcessEventsFlag>) () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#5  0x00007fffef99bf5b in QEventLoop::exec(QFlags<QEventLoop::ProcessEventsFlag>) () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#6  0x00007fffefaab4f3 in QThread::exec() () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#7  0x00007fffefb5e71e in ?? () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#8  0x00007ffff7aac93f in ?? () from /usr/lib/libc.so.6
+#9  0x00007ffff7b4eeec in ?? () from /usr/lib/libc.so.6
+
+Thread 21 (Thread 0x7fff877fe6c0 (LWP 58115) "QFFmpeg::Stream"):
+#0  0x00007ffff7ab5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007ffff7b3e388 in ppoll () from /usr/lib/libc.so.6
+#2  0x00007ffff4570490 in ?? () from /usr/lib/libglib-2.0.so.0
+#3  0x00007ffff4570592 in g_main_context_iteration () from /usr/lib/libglib-2.0.so.0
+#4  0x00007fffefcb114e in QEventDispatcherGlib::processEvents(QFlags<QEventLoop::ProcessEventsFlag>) () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#5  0x00007fffef99bf5b in QEventLoop::exec(QFlags<QEventLoop::ProcessEventsFlag>) () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#6  0x00007fffefaab4f3 in QThread::exec() () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#7  0x00007fffefb5e71e in ?? () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#8  0x00007ffff7aac93f in ?? () from /usr/lib/libc.so.6
+#9  0x00007ffff7b4eeec in ?? () from /usr/lib/libc.so.6
+
+Thread 20 (Thread 0x7fff87fff6c0 (LWP 58114) "QFFmpeg::AudioR"):
+#0  0x00007ffff7ab5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007ffff7b3e388 in ppoll () from /usr/lib/libc.so.6
+#2  0x00007ffff4570490 in ?? () from /usr/lib/libglib-2.0.so.0
+#3  0x00007ffff4570592 in g_main_context_iteration () from /usr/lib/libglib-2.0.so.0
+#4  0x00007fffefcb114e in QEventDispatcherGlib::processEvents(QFlags<QEventLoop::ProcessEventsFlag>) () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#5  0x00007fffef99bf5b in QEventLoop::exec(QFlags<QEventLoop::ProcessEventsFlag>) () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#6  0x00007fffefaab4f3 in QThread::exec() () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#7  0x00007fffefb5e71e in ?? () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#8  0x00007ffff7aac93f in ?? () from /usr/lib/libc.so.6
+#9  0x00007ffff7b4eeec in ?? () from /usr/lib/libc.so.6
+
+Thread 19 (Thread 0x7fff90bfe6c0 (LWP 58113) "Thread (pooled)"):
+#0  0x00007ffff7ab5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007ffff7aa908a in ?? () from /usr/lib/libc.so.6
+#2  0x00007ffff7aabf2a in pthread_cond_timedwait () from /usr/lib/libc.so.6
+#3  0x00007fffefb668ae in QWaitCondition::wait(QMutex*, QDeadlineTimer) () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#4  0x00007fffefaaf254 in ?? () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#5  0x00007fffefb5e71e in ?? () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#6  0x00007ffff7aac93f in ?? () from /usr/lib/libc.so.6
+#7  0x00007ffff7b4eeec in ?? () from /usr/lib/libc.so.6
+
+Thread 18 (Thread 0x7fff913ff6c0 (LWP 58112) "Thread (pooled)"):
+#0  0x00007ffff7ab5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007ffff7aa908a in ?? () from /usr/lib/libc.so.6
+#2  0x00007ffff7aabf2a in pthread_cond_timedwait () from /usr/lib/libc.so.6
+#3  0x00007fffefb668ae in QWaitCondition::wait(QMutex*, QDeadlineTimer) () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#4  0x00007fffefaaf254 in ?? () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#5  0x00007fffefb5e71e in ?? () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#6  0x00007ffff7aac93f in ?? () from /usr/lib/libc.so.6
+#7  0x00007ffff7b4eeec in ?? () from /usr/lib/libc.so.6
+
+Thread 17 (Thread 0x7fffaa35b6c0 (LWP 58111) "Thread (pooled)"):
+#0  0x00007ffff7ab5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007ffff7aa908a in ?? () from /usr/lib/libc.so.6
+#2  0x00007ffff7aabf2a in pthread_cond_timedwait () from /usr/lib/libc.so.6
+#3  0x00007fffefb668ae in QWaitCondition::wait(QMutex*, QDeadlineTimer) () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#4  0x00007fffefaaf254 in ?? () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#5  0x00007fffefb5e71e in ?? () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#6  0x00007ffff7aac93f in ?? () from /usr/lib/libc.so.6
+#7  0x00007ffff7b4eeec in ?? () from /usr/lib/libc.so.6
+
+Thread 16 (Thread 0x7fffab7fe6c0 (LWP 58110) "Thread (pooled)"):
+#0  0x00007ffff7ab5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007ffff7aa908a in ?? () from /usr/lib/libc.so.6
+#2  0x00007ffff7aabf2a in pthread_cond_timedwait () from /usr/lib/libc.so.6
+#3  0x00007fffefb668ae in QWaitCondition::wait(QMutex*, QDeadlineTimer) () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#4  0x00007fffefaaf254 in ?? () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#5  0x00007fffefb5e71e in ?? () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#6  0x00007ffff7aac93f in ?? () from /usr/lib/libc.so.6
+#7  0x00007ffff7b4eeec in ?? () from /usr/lib/libc.so.6
+
+Thread 15 (Thread 0x7fffabfff6c0 (LWP 58109) "Thread (pooled)"):
+#0  0x00007ffff7ab5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007ffff7aa908a in ?? () from /usr/lib/libc.so.6
+#2  0x00007ffff7aabf2a in pthread_cond_timedwait () from /usr/lib/libc.so.6
+#3  0x00007fffefb668ae in QWaitCondition::wait(QMutex*, QDeadlineTimer) () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#4  0x00007fffefaaf254 in ?? () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#5  0x00007fffefb5e71e in ?? () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#6  0x00007ffff7aac93f in ?? () from /usr/lib/libc.so.6
+#7  0x00007ffff7b4eeec in ?? () from /usr/lib/libc.so.6
+
+Thread 14 (Thread 0x7fffaab5c6c0 (LWP 58108) "Thread (pooled)"):
+#0  0x00007ffff7ab5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007ffff7aa908a in ?? () from /usr/lib/libc.so.6
+#2  0x00007ffff7aabf2a in pthread_cond_timedwait () from /usr/lib/libc.so.6
+#3  0x00007fffefb668ae in QWaitCondition::wait(QMutex*, QDeadlineTimer) () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#4  0x00007fffefaaf254 in ?? () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#5  0x00007fffefb5e71e in ?? () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#6  0x00007ffff7aac93f in ?? () from /usr/lib/libc.so.6
+#7  0x00007ffff7b4eeec in ?? () from /usr/lib/libc.so.6
+
+Thread 13 (Thread 0x7fffcc1ff6c0 (LWP 58089) "PWDevMon"):
+#0  0x00007ffff7ab5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007ffff7b3e388 in ppoll () from /usr/lib/libc.so.6
+#2  0x00007ffff4570490 in ?? () from /usr/lib/libglib-2.0.so.0
+#3  0x00007ffff4570592 in g_main_context_iteration () from /usr/lib/libglib-2.0.so.0
+#4  0x00007fffefcb114e in QEventDispatcherGlib::processEvents(QFlags<QEventLoop::ProcessEventsFlag>) () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#5  0x00007fffef99bf5b in QEventLoop::exec(QFlags<QEventLoop::ProcessEventsFlag>) () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#6  0x00007fffefaab4f3 in QThread::exec() () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#7  0x00007fffefb5e71e in ?? () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#8  0x00007ffff7aac93f in ?? () from /usr/lib/libc.so.6
+#9  0x00007ffff7b4eeec in ?? () from /usr/lib/libc.so.6
+
+Thread 12 (Thread 0x7fffb0dde6c0 (LWP 58088) "PwEventLoop"):
+#0  0x00007ffff7ab5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007ffff7b4f178 in epoll_wait () from /usr/lib/libc.so.6
+#2  0x00007fffd407c569 in ?? () from /usr/lib/spa-0.2/support/libspa-support.so
+#3  0x00007fffd40658e9 in ?? () from /usr/lib/spa-0.2/support/libspa-support.so
+#4  0x00007fffd41faf81 in ?? () from /usr/lib/libpipewire-0.3.so.0
+#5  0x00007ffff7aac93f in ?? () from /usr/lib/libc.so.6
+#6  0x00007ffff7b4eeec in ?? () from /usr/lib/libc.so.6
+
+Thread 9 (Thread 0x7fffbcbff6c0 (LWP 58070) "cuda00005000015"):
+#0  0x00007ffff7ab5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007ffff7b3db92 in poll () from /usr/lib/libc.so.6
+#2  0x00007fffbcf80c17 in ?? () from /usr/lib/libcuda.so.1
+#3  0x00007fffbd050ac4 in ?? () from /usr/lib/libcuda.so.1
+#4  0x00007fffbcf68c13 in ?? () from /usr/lib/libcuda.so.1
+#5  0x00007ffff7aac93f in ?? () from /usr/lib/libc.so.6
+#6  0x00007ffff7b4eeec in ?? () from /usr/lib/libc.so.6
+
+Thread 8 (Thread 0x7fffcffff6c0 (LWP 58069) "Thread (pooled)"):
+#0  0x00007ffff7ab5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007ffff7aa908a in ?? () from /usr/lib/libc.so.6
+#2  0x00007ffff7aabf2a in pthread_cond_timedwait () from /usr/lib/libc.so.6
+#3  0x00007fffefb668ae in QWaitCondition::wait(QMutex*, QDeadlineTimer) () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#4  0x00007fffefaaf254 in ?? () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#5  0x00007fffefb5e71e in ?? () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#6  0x00007ffff7aac93f in ?? () from /usr/lib/libc.so.6
+#7  0x00007ffff7b4eeec in ?? () from /usr/lib/libc.so.6
+
+Thread 7 (Thread 0x7fffd4ffe6c0 (LWP 58068) "Thread (pooled)"):
+#0  0x00007ffff7ab5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007ffff7aa908a in ?? () from /usr/lib/libc.so.6
+#2  0x00007ffff7aabf2a in pthread_cond_timedwait () from /usr/lib/libc.so.6
+#3  0x00007fffefb668ae in QWaitCondition::wait(QMutex*, QDeadlineTimer) () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#4  0x00007fffefaaf254 in ?? () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#5  0x00007fffefb5e71e in ?? () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#6  0x00007ffff7aac93f in ?? () from /usr/lib/libc.so.6
+#7  0x00007ffff7b4eeec in ?? () from /usr/lib/libc.so.6
+
+Thread 6 (Thread 0x7fffd57ff6c0 (LWP 58067) "Thread (pooled)"):
+#0  0x00007ffff7ab5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007ffff7aa908a in ?? () from /usr/lib/libc.so.6
+#2  0x00007ffff7aabf2a in pthread_cond_timedwait () from /usr/lib/libc.so.6
+#3  0x00007fffefb668ae in QWaitCondition::wait(QMutex*, QDeadlineTimer) () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#4  0x00007fffefaaf254 in ?? () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#5  0x00007fffefb5e71e in ?? () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#6  0x00007ffff7aac93f in ?? () from /usr/lib/libc.so.6
+#7  0x00007ffff7b4eeec in ?? () from /usr/lib/libc.so.6
+
+Thread 5 (Thread 0x7fffe59c66c0 (LWP 58065) "WaylandEventThr"):
+#0  0x00007ffff7ab5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007ffff7b3db92 in poll () from /usr/lib/libc.so.6
+#2  0x00007fffe6a638b0 in ?? () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/plugins/platforms/../../lib/libQt6WaylandClient.so.6
+#3  0x00007fffefb5e71e in ?? () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#4  0x00007ffff7aac93f in ?? () from /usr/lib/libc.so.6
+#5  0x00007ffff7b4eeec in ?? () from /usr/lib/libc.so.6
+
+Thread 4 (Thread 0x7fffe61c76c0 (LWP 58064) "WaylandEventThr"):
+#0  0x00007ffff7ab5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007ffff7b3db92 in poll () from /usr/lib/libc.so.6
+#2  0x00007fffe6a638b0 in ?? () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/plugins/platforms/../../lib/libQt6WaylandClient.so.6
+#3  0x00007fffefb5e71e in ?? () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#4  0x00007ffff7aac93f in ?? () from /usr/lib/libc.so.6
+#5  0x00007ffff7b4eeec in ?? () from /usr/lib/libc.so.6
+
+Thread 3 (Thread 0x7fffe69c86c0 (LWP 58063) "QDBusConnection"):
+#0  0x00007ffff7ab5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007ffff7b3e388 in ppoll () from /usr/lib/libc.so.6
+#2  0x00007ffff4570490 in ?? () from /usr/lib/libglib-2.0.so.0
+#3  0x00007ffff4570592 in g_main_context_iteration () from /usr/lib/libglib-2.0.so.0
+#4  0x00007fffefcb114e in QEventDispatcherGlib::processEvents(QFlags<QEventLoop::ProcessEventsFlag>) () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#5  0x00007fffef99bf5b in QEventLoop::exec(QFlags<QEventLoop::ProcessEventsFlag>) () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#6  0x00007fffefaab4f3 in QThread::exec() () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#7  0x00007ffff44676ee in ?? () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6DBus.so.6
+#8  0x00007fffefb5e71e in ?? () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#9  0x00007ffff7aac93f in ?? () from /usr/lib/libc.so.6
+#10 0x00007ffff7b4eeec in ?? () from /usr/lib/libc.so.6
+
+Thread 1 (Thread 0x7ffff7e4c780 (LWP 58057) "python"):
+#0  0x00007ffff7ab5a22 in ?? () from /usr/lib/libc.so.6
+#1  0x00007ffff7b3e388 in ppoll () from /usr/lib/libc.so.6
+#2  0x00007ffff4570490 in ?? () from /usr/lib/libglib-2.0.so.0
+#3  0x00007ffff4570592 in g_main_context_iteration () from /usr/lib/libglib-2.0.so.0
+#4  0x00007fffefcb114e in QEventDispatcherGlib::processEvents(QFlags<QEventLoop::ProcessEventsFlag>) () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#5  0x00007fffef99bf5b in QEventLoop::exec(QFlags<QEventLoop::ProcessEventsFlag>) () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#6  0x00007fffef99783a in QCoreApplication::exec() () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/Qt/lib/libQt6Core.so.6
+#7  0x00007ffff6001ef4 in ?? () from /home/user/clone/slugcatpet/.venv/lib/python3.12/site-packages/PySide6/QtWidgets.abi3.so
+#8  0x0000000001814391 in cfunction_vectorcall_NOARGS ()
+#9  0x00000000018199ad in _PyEval_EvalFrameDefault ()
+#10 0x000000000187301e in PyEval_EvalCode ()
+#11 0x00000000018b0757 in run_mod ()
+#12 0x0000000001959f82 in PyRun_SimpleStringFlags ()
+#13 0x0000000001adc32a in Py_RunMain.warm ()
+#14 0x000000000198848f in pymain_main ()
+#15 0x00000000019882f6 in main ()

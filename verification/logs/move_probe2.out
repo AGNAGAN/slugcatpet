@@ -1,0 +1,4 @@
+SHOW screen eDP-1 geo (0, 0, 500, 300)
+T1 screen eDP-1 geo (0, 0, 1440, 872) frame (0, 0, 1440, 872)
+T3 screen eDP-1 geo (0, 0, 1440, 872) frame (0, 0, 1440, 872)
+T5 screen eDP-1 geo (0, 0, 1440, 872) frame (0, 0, 1440, 872)

@@ -135,9 +135,14 @@ uv run ruff check .
 uv run ruff format --check .
 uv run python -m unittest discover -s tests -v
 uv run python tools/params_doc.py --check
-timeout -s INT 8s env SLUGCATPET_HOME=/tmp/opencode/slugcatpet-phase1 \
+# 先把隔离配置复制到可写目录；fixture 见 verification/fixtures/
+rm -rf /tmp/slugcatpet-verify-home
+cp -a verification/fixtures/phase3-home /tmp/slugcatpet-verify-home
+timeout -s INT 8s env SLUGCATPET_HOME=/tmp/slugcatpet-verify-home \
   uv run python -m slugcatpet.main
 ```
+
+> 历史记录中这里的隔离 HOME 是 `/tmp/opencode/slugcatpet-phase1`，该临时目录已清理；archive 只保留了 Phase 3/4/5 使用的 `phase3-home`。
 
 结果：
 

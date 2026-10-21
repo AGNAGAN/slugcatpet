@@ -1,0 +1,7 @@
+Fatal Python error: Segmentation fault
+
+Current thread 0x00007fcadf03f780 (most recent call first):
+  File "/home/user/clone/slugcatpet/slugcatpet/main.py", line 587 in main
+  File "<string>", line 1 in <module>
+
+Extension modules: shiboken6.Shiboken, PySide6.QtCore, PySide6.QtGui, PySide6.QtWidgets, numpy._core._multiarray_umath, numpy.linalg._umath_linalg, PySide6.QtNetwork, PySide6.QtDBus, PySide6.QtMultimedia (total: 9)

@@ -1,0 +1,4 @@
+SHOW eDP-1 (0, 0, 500, 300)
+T1 screen HDMI-A-1 geo (0, 0, 1440, 932) frame (0, 0, 1440, 932)
+T3 screen HDMI-A-1 geo (0, 0, 1440, 932) frame (0, 0, 1440, 932)
+T5 screen HDMI-A-1 geo (0, 0, 1440, 932) frame (0, 0, 1440, 932)

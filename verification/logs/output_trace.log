@@ -1,0 +1,29 @@
+LOAD_SCRIPT target= HDMI-A-1 rect= (0, 900, 1707, 1099)
+KWin bridge: inactive shortcuts: Ctrl+Alt+P, Ctrl+Alt+Right
+KWin bridge: inactive shortcuts: Ctrl+Alt+P, Ctrl+Alt+Right
+  File "/tmp/opencode/test_output_trace.py", line 21, in <module>
+    pet.show()
+  File "/home/user/clone/slugcatpet/slugcatpet/window.py", line 618, in showEvent
+    self._backend_attached = bool(self._backend.attach_overlay(self))
+  File "/home/user/clone/slugcatpet/slugcatpet/platform/wayland/kwin_bridge.py", line 237, in attach_overlay
+    return self._load_script()
+  File "/tmp/opencode/test_output_trace.py", line 13, in load
+    traceback.print_stack(limit=5, file=sys.stdout)
+DUMP T2 tscreen HDMI-A-1 win HDMI-A-1 overlay (0, 900, 1707, 1099) b HDMI-A-1 (0, 0, 1440, 900)
+SET_OUTPUT start
+CONFIGURE name= eDP-1 rect= (0, 0, 1440, 932) cur_target= HDMI-A-1 cur_rect= (0, 0, 1440, 900)
+LOAD_SCRIPT target= eDP-1 rect= (0, 0, 1440, 932)
+  File "/home/user/clone/slugcatpet/slugcatpet/window.py", line 1034, in apply_workspace
+    self._sync_backend_geometry()
+  File "/home/user/clone/slugcatpet/slugcatpet/window.py", line 416, in _sync_backend_geometry
+    self._backend.configure_overlay(name, self.overlay_rect())
+  File "/tmp/opencode/test_output_trace.py", line 19, in conf
+    return orig_conf(name,rect)
+  File "/home/user/clone/slugcatpet/slugcatpet/platform/wayland/kwin_bridge.py", line 249, in configure_overlay
+    self._load_script()
+  File "/tmp/opencode/test_output_trace.py", line 13, in load
+    traceback.print_stack(limit=5, file=sys.stdout)
+SET_OUTPUT done
+KWin bridge: inactive shortcuts: Ctrl+Alt+P, Ctrl+Alt+Right
+KWin bridge: inactive shortcuts: Ctrl+Alt+P, Ctrl+Alt+Right
+DUMP T6 tscreen eDP-1 win HDMI-A-1 overlay (0, 0, 1440, 932) b eDP-1 (0, 900, 1707, 1099)

@@ -283,19 +283,24 @@ DONE (569, 354) hijack False
 ### 3.5 复现命令
 
 ```bash
-SLUGCATPET_HOME=/tmp/opencode/phase3-home \
-XDG_CONFIG_HOME=/tmp/opencode/phase4-config \
-uv run python /tmp/opencode/test_pet_cursor.py
+# 使用可写的隔离配置，避免修改归档 fixture
+rm -rf /tmp/slugcatpet-verify-home /tmp/slugcatpet-verify-config
+cp -a verification/fixtures/phase3-home /tmp/slugcatpet-verify-home
+mkdir -p /tmp/slugcatpet-verify-config
 
-SLUGCATPET_HOME=/tmp/opencode/phase3-home \
-XDG_CONFIG_HOME=/tmp/opencode/phase4-config \
-uv run python /tmp/opencode/test_cursor_focus_click.py
+SLUGCATPET_HOME=/tmp/slugcatpet-verify-home \
+XDG_CONFIG_HOME=/tmp/slugcatpet-verify-config \
+uv run python verification/scripts/test_pet_cursor.py
+
+SLUGCATPET_HOME=/tmp/slugcatpet-verify-home \
+XDG_CONFIG_HOME=/tmp/slugcatpet-verify-config \
+uv run python verification/scripts/test_cursor_focus_click.py
 
 # 真实按键验收（另开终端，需可写 /dev/uinput）
-python /tmp/opencode/mouse_click.py
+python verification/scripts/mouse_click.py
 ```
 
-这些脚本只用于本地验收，不属于仓库测试。
+这些脚本只用于本地验收，不属于仓库测试；完整说明见 `verification/README.md`。重跑产生的日志写入 `verification/logs/live/`，不会覆盖 `verification/logs/` 中的关键记录。
 
 ---
 

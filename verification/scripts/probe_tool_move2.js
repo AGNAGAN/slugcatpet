@@ -1,0 +1,3 @@
+function find(){var o=workspace.stackingOrder;for(var i=0;i<o.length;i++) if(o[i].caption==="slugcatpet-tool-probe") return o[i];return null;}
+function move(tag){var w=find(); if(!w){print("TOOLMOVE2",tag,"none");return;} print("TOOLMOVE2",tag,"before",JSON.stringify(w.frameGeometry),"out",w.output?w.output.name:"?"); try{w.frameGeometry={x:0,y:0,width:1440,height:932};}catch(e){print("TOOLMOVE2 err",String(e));} print("TOOLMOVE2",tag,"after",JSON.stringify(w.frameGeometry),"out",w.output?w.output.name:"?");}
+workspace.windowAdded.connect(function(w){if(w.caption==="slugcatpet-tool-probe")move("added");}); move("load");

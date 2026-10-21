@@ -1,0 +1,5 @@
+T1 screen HDMI-A-1 dpr 2.0 geo (0, 0, 1440, 932)
+REBIND eDP-1
+R1 screen eDP-1 dpr 2.0 geo (0, 0, 1440, 932)
+R3 screen eDP-1 dpr 2.0 geo (0, 0, 1440, 932)
+T6 screen eDP-1 dpr 2.0 geo (0, 0, 1440, 932)

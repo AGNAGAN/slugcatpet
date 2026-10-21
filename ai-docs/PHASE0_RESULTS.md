@@ -3,7 +3,7 @@
 - 日期：2026-10-20
 - 对应计划：`ai-docs/NATIVE_WAYLAND_PORT_PLAN.md` 的 Phase 0
 - 结论：**Go（有条件）**。没有发现必须回退 XWayland 的阻塞项；进入 Phase 1 前必须落实输入区域提交、子控件本地坐标和窗口级 DPR 三项约束。
-- 源码改动：**无**。验证脚本全部在 `/tmp/opencode/`，仓库只新增文档。
+- 源码改动：**无**。验证脚本当时放在 `/tmp/opencode/`，现已归档到 `verification/scripts/`；仓库只新增文档和本地验收记录。
 
 ---
 
@@ -419,9 +419,9 @@ KWin 脚本构造 JSON 并通过 `callDBus` 发送：
 
 ---
 
-## 6. 测试脚本（临时，不提交）
+## 6. 测试脚本（已归档到 `verification/scripts/`）
 
-以下文件在 `/tmp/opencode/`，仅用于复现 Phase 0：
+以下文件已从 `/tmp/opencode/` 归档到 `verification/scripts/`，仅用于复现 Phase 0：
 
 - `uinput_mouse.py`、`uinput_keyboard.py`：虚拟输入设备；
 - `phase0_click_app.py`、`phase0_click.js`：输入区域/穿透/光标/热键；

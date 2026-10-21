@@ -1,0 +1,6 @@
+signal time=1792496792.010961 sender=org.freedesktop.DBus -> destination=:1.1029 serial=4294967295 path=/org/freedesktop/DBus; interface=org.freedesktop.DBus; member=NameAcquired
+   string ":1.1029"
+signal time=1792496792.010971 sender=org.freedesktop.DBus -> destination=:1.1029 serial=4294967295 path=/org/freedesktop/DBus; interface=org.freedesktop.DBus; member=NameLost
+   string ":1.1029"
+method call time=1792496793.028849 sender=:1.9 -> destination=org.slugcatpet.Bridge serial=138484 path=/Bridge; interface=org.slugcatpet.Bridge; member=WindowListChanged
+   string "[{"caption":"Alacritty test window","resourceClass":"Alacritty","output":"HDMI-A-1","x":100,"y":950,"w":800,"h":600,"fullScreen":false,"pid":17922}]"

@@ -1,0 +1,5 @@
+KWin bridge: inactive shortcuts: Ctrl+Alt+P, Ctrl+Alt+Right
+KWin bridge: inactive shortcuts: Ctrl+Alt+P, Ctrl+Alt+Right
+SPAWN True mode free wall None spears 1
+REGION contains False
+DONE spears 1 ys [(700, 528, 'free')]

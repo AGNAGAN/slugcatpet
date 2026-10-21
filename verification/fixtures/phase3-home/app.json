@@ -1,0 +1,105 @@
+{
+  "pets": [
+    {
+      "id": "pet-0",
+      "variant": "saint",
+      "name": "",
+      "personality": {
+        "energy": 0.4,
+        "sympathy": 0.3
+      },
+      "hidden": false,
+      "energy": 1.0,
+      "temper": 0.0,
+      "food": 1,
+      "food_q": 0,
+      "karma": 9,
+      "cold": 0.0,
+      "sleepiness": 0.6022416666666855,
+      "dead": false
+    },
+    {
+      "id": "pet-1",
+      "variant": "rivulet",
+      "name": "",
+      "personality": {
+        "energy": 0.95,
+        "sympathy": 0.45
+      },
+      "hidden": false,
+      "energy": 1.0,
+      "temper": 0.34759999999854657,
+      "food": 1,
+      "food_q": 0,
+      "karma": 9,
+      "cold": 0.0,
+      "sleepiness": 0.43476666666656344,
+      "dead": false
+    },
+    {
+      "id": "pet-2",
+      "variant": "monk",
+      "name": "",
+      "personality": {
+        "energy": 0.4,
+        "sympathy": 0.75
+      },
+      "hidden": false,
+      "energy": 1.0,
+      "temper": 0.0,
+      "food": 2,
+      "food_q": 0,
+      "karma": 8,
+      "cold": 0.0,
+      "sleepiness": 0.41864999999964475,
+      "dead": false
+    },
+    {
+      "id": "pet-3",
+      "variant": "survivor",
+      "name": "",
+      "personality": {
+        "energy": 0.5,
+        "sympathy": 0.75
+      },
+      "hidden": false,
+      "energy": 1.0,
+      "temper": 0.0,
+      "food": 2,
+      "food_q": 0,
+      "karma": 8,
+      "cold": 0.0,
+      "sleepiness": 0.39884166666626547,
+      "dead": false
+    }
+  ],
+  "schema_version": 2,
+  "lang": "zh",
+  "hud_x": 1458,
+  "hud_y": 182,
+  "hud_visible": true,
+  "rain_timer": {
+    "dial_pos": [
+      1265,
+      645
+    ],
+    "dry_s": 600,
+    "loop": false,
+    "rain_s": 120
+  },
+  "tab_y": 296,
+  "tab_expanded": false,
+  "bonds": {
+    "pet-0|pet-1": 0.0122,
+    "pet-0|pet-2": 0.0458,
+    "pet-1|pet-2": 0.2451,
+    "pet-0|pet-3": 0.0509,
+    "pet-1|pet-3": 0.174,
+    "pet-2|pet-3": 0.9984
+  },
+  "skins_scan_external": true,
+  "ui_coord_space": "overlay",
+  "output": "HDMI-A-1",
+  "friendly_fire": true,
+  "freeze_tip_shown": true
+}

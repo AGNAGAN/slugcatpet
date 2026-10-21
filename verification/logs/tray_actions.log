@@ -1,0 +1,3 @@
+TRAY_SHOW True SUPPORTS True
+TRAY_ACTIVATED ActivationReason.Trigger
+ACTION settings

@@ -1,0 +1,8 @@
+KWin bridge: inactive shortcuts: Ctrl+Alt+P, Ctrl+Alt+Right
+T1000 capture_state False capture_visible False busy False override False hijack False
+START capture_state True capture_visible True busy True override True hijack True
+T2500 capture_state True capture_visible True busy True override True hijack True
+T4000 capture_state True capture_visible True busy True override True hijack True
+T6000 capture_state True capture_visible True busy True override True hijack True
+T8000 capture_state False capture_visible False busy False override False hijack False
+DONE

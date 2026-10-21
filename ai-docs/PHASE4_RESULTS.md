@@ -3,8 +3,8 @@
 - 日期：2026-10-20
 - 后续更新：Wayland 光标写入已通过“临时全屏捕获面 + Qt 6.12 pointer-warp”实现，本文 1.4 节的“Wayland 直接禁用”和“已知限制”中的相应条目已被 `PHASE5_CURSOR_WRITE.md` 取代。
 - 环境：KDE Plasma 6.8 / KWin 6.8 / Qt 6.12 / PySide6 6.12
-- 测试配置：`SLUGCATPET_HOME=/tmp/opencode/phase3-home`
-- 测试 XDG 配置：`XDG_CONFIG_HOME=/tmp/opencode/phase4-config`
+- 测试配置：隔离 HOME（当时为 `/tmp/opencode/phase3-home`，现归档为 `verification/fixtures/phase3-home`）
+- 测试 XDG 配置：当时为 `/tmp/opencode/phase4-config`，重跑时用 `/tmp/slugcatpet-verify-config`
 - 输出：eDP-1 `1440x900`，HDMI-A-1 `1707x1067`（逻辑坐标 `0,900`）
 
 ## 1. 完成内容

@@ -1,0 +1,3 @@
+WIN dpr=2.0 geo=PySide6.QtCore.QRect(0, 0, 1440, 900) screen=eDP-1
+SCREEN eDP-1 geo=PySide6.QtCore.QRect(0, 0, 1440, 900) dpr=2.0
+SCREEN HDMI-A-1 geo=PySide6.QtCore.QRect(0, 900, 1707, 1067) dpr=2.0

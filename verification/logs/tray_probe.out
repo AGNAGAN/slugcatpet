@@ -1,0 +1,12 @@
+qt.dbus.integration: QDBusConnection: couldn't handle call to Id, no slot matched
+qt.dbus.integration: QDBusConnection: couldn't handle call to Id, no slot matched
+qt.dbus.integration: Could not find slot QStatusNotifierItemAdaptor::Id
+qt.dbus.integration: QDBusConnection: couldn't handle call to Title, no slot matched
+qt.dbus.integration: QDBusConnection: couldn't handle call to Title, no slot matched
+qt.dbus.integration: Could not find slot QStatusNotifierItemAdaptor::Title
+qt.dbus.integration: QDBusConnection: couldn't handle call to ToolTip, no slot matched
+qt.dbus.integration: QDBusConnection: couldn't handle call to ToolTip, no slot matched
+qt.dbus.integration: Could not find slot QStatusNotifierItemAdaptor::ToolTip
+qt.dbus.integration: QDBusConnection: couldn't handle call to Activate, no slot matched
+qt.dbus.integration: QDBusConnection: couldn't handle call to Activate, no slot matched
+qt.dbus.integration: Could not find slot QStatusNotifierItemAdaptor::Activate

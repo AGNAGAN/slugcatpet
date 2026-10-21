@@ -3,7 +3,7 @@
 - 日期：2026-10-20
 - 环境：KDE Plasma 6.8 / KWin 6.8 / Qt 6.12 / PySide6 6.12
 - 目标输出：HDMI-A-1，逻辑几何 `0,900 1707x1067`
-- 测试配置：`SLUGCATPET_HOME=/tmp/opencode/phase3-home`
+- 测试配置：隔离 HOME（当时为 `/tmp/opencode/phase3-home`，现归档为 `verification/fixtures/phase3-home`）
 
 ## 1. 完成内容
 

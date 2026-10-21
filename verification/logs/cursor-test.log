@@ -1,0 +1,10 @@
+KWin bridge: inactive shortcuts: Ctrl+Alt+P, Ctrl+Alt+Right
+START available True cursor (700, 1500) capture False busy False override False hijack False qcursor PySide6.QtCore.QPoint(0, 0) mask_empty False mask_bounds (305, 976, 1107, 116) win_geom (0, 0, 1707, 1099) win_frame (0, 0, 1707, 1099) handle_geom (0, 0, 1707, 1099) handle_frame (0, 0, 1707, 1099)
+cursor logical 350.0 300.0 expected global 700.0 1500.0
+created True mock False
+requestActivate called
+HOLD1 available True cursor (700, 1500) capture True busy True override True hijack True qcursor PySide6.QtCore.QPoint(700, 1500) mask_empty False mask_bounds (295, 976, 1117, 116) win_geom (0, 0, 1707, 1099) win_frame (0, 0, 1707, 1099) handle_geom (0, 0, 1707, 1099) handle_frame (0, 0, 1707, 1099)
+target2 logical 284.5 177.83333333333334 expected global 569.0 1255.6666666666667
+HOLD2 available True cursor (569, 1256) capture True busy True override True hijack True qcursor PySide6.QtCore.QPoint(569, 1256) mask_empty False mask_bounds (295, 976, 1117, 116) win_geom (0, 0, 1707, 1099) win_frame (0, 0, 1707, 1099) handle_geom (0, 0, 1707, 1099) handle_frame (0, 0, 1707, 1099)
+STOP available True cursor (569, 1256) capture False busy False override False hijack False qcursor PySide6.QtCore.QPoint(569, 1256) mask_empty False mask_bounds (304, 976, 1108, 116) win_geom (0, 0, 1707, 1099) win_frame (0, 0, 1707, 1099) handle_geom (0, 0, 1707, 1099) handle_frame (0, 0, 1707, 1099)
+DONE

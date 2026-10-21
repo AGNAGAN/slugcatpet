@@ -1,0 +1,18 @@
+INFO:slugcatpet.platform.wayland.kwin_bridge:KWin bridge: script loaded for eDP-1 PySide6.QtCore.QRect(0, 0, 1440, 932)
+DEBUG:slugcatpet.platform.wayland.kwin_bridge:KWin bridge: cursor 720,846
+INFO:slugcatpet.platform.wayland.kwin_bridge:KWin bridge: script loaded
+qt.qpa.services: Failed to register with host portal QDBusError("org.freedesktop.portal.Error.Failed", "Could not register app ID: App info not found for 'org.slugcatpet.SlugcatPet'")
+DEBUG:slugcatpet.platform.wayland.kwin_bridge:KWin bridge: overlay geometry 0,0 1440x900
+DEBUG:slugcatpet.platform.wayland.kwin_bridge:KWin bridge: overlay geometry 0,0 1440x900
+DEBUG:slugcatpet.platform.wayland.kwin_bridge:KWin bridge: cursor 500,100
+DEBUG:slugcatpet.platform.wayland.kwin_bridge:KWin bridge: cursor 720,846
+Traceback (most recent call last):
+  File "/home/user/clone/slugcatpet/slugcatpet/window.py", line 476, in _on_timer
+    def _on_timer(self):
+
+KeyboardInterrupt
+Traceback (most recent call last):
+  File "/home/user/clone/slugcatpet/slugcatpet/window.py", line 476, in _on_timer
+    def _on_timer(self):
+
+KeyboardInterrupt

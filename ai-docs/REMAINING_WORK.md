@@ -244,7 +244,8 @@
 
 ## 8. 当前仓库状态
 
-- 测试应用使用隔离配置 `/tmp/opencode/phase3-home`、`XDG_CONFIG_HOME=/tmp/opencode/phase4-config`；验收脚本会临时加载/卸载 KWin 脚本。
+- 测试应用使用隔离配置 `verification/fixtures/phase3-home`，重跑前复制到 `/tmp/slugcatpet-verify-home`；`XDG_CONFIG_HOME` 用 `/tmp/slugcatpet-verify-config`；验收脚本会临时加载/卸载 KWin 脚本。
+- Wayland/KWin 验收脚本、隔离配置和关键结果日志已从 `/tmp/opencode/` 归档到 `verification/`，不属于应用运行时代码；Ruff 已排除该目录。
 - Phase 0–4 已提交；Wayland 光标写入、焦点/点击、Linux 打包、KWin 持久安装、CI 和文档已作为 Phase 5 的一部分提交；`pyproject.toml` 的打包相关改动与 `uv.lock` 的用户改动分开处理。
 - 最近一次自动检查结果：
   - `uv run ruff check .`：通过

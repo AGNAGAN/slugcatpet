@@ -1,0 +1,5 @@
+KWin bridge: inactive shortcuts: Ctrl+Alt+P, Ctrl+Alt+Right
+START (1213, 1966) overlay (0, 900, 1707, 1099)
+created True mock False
+KNOCK cursor (1706, 1469) hijack True capture True
+STOP (1706, 1469) None

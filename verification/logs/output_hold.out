@@ -1,0 +1,7 @@
+KWin bridge: inactive shortcuts: Ctrl+Alt+P, Ctrl+Alt+Right
+APP T1 screen HDMI-A-1 overlay (0, 900, 1707, 1099) frame (0, 0, 1707, 1099) b_target HDMI-A-1 b_rect (0, 900, 1707, 1067)
+SWITCH
+APP AFTER screen eDP-1 overlay (0, 0, 1440, 932) frame (0, 0, 1440, 932) b_target eDP-1 b_rect (0, 0, 1440, 932)
+KWin bridge: inactive shortcuts: Ctrl+Alt+P, Ctrl+Alt+Right
+APP T6 screen HDMI-A-1 overlay (0, 0, 1440, 932) frame (0, 0, 1440, 932) b_target eDP-1 b_rect (0, 900, 1707, 1099)
+APP T9 screen HDMI-A-1 overlay (0, 0, 1440, 932) frame (0, 0, 1440, 932) b_target eDP-1 b_rect (0, 900, 1707, 1099)

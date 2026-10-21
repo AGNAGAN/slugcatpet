@@ -1,0 +1,5 @@
+﻿别人给的皮肤（文件夹或 zip）放进这里就行。创意工坊里订阅的会自动读取，不用放。
+换皮肤、改颜色：在设置里点猫旁边的「外观」。
+自己画：把 _templates 里的一只猫复制到这里，改里面的 png，再把 metadata.json 里的 id 和 name 改成自己的。
+格式和 Dress My Slugcat 一样，见它的创意工坊页面：https://steamcommunity.com/sharedfiles/filedetails/?id=2948971756
+皮肤读不出来时，原因会写在「加载报告.txt」里。

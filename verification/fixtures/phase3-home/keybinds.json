@@ -1,0 +1,10 @@
+{
+  "left": "A",
+  "right": "D",
+  "up": "W",
+  "down": "S",
+  "jump": "Space",
+  "grab": "K",
+  "throw": "J",
+  "hold": "F"
+}

@@ -1,0 +1,7 @@
+KWin bridge: inactive shortcuts: Ctrl+Alt+P, Ctrl+Alt+Right
+KWin bridge: inactive shortcuts: Ctrl+Alt+P, Ctrl+Alt+Right
+Traceback (most recent call last):
+  File "/tmp/opencode/test_spear_region.py", line 11, in go
+    print('scale', pet._scale, 'overlay', pet.overlay_rect().getRect(), 'items', len(pet._items()), 'in', s in pet._items(), 's', s.x,s.y,getattr(s,'rad',None),flush=True)
+                                                                                 ^^^^^^^^^^^^^^^^^
+TypeError: object of type 'generator' has no len()

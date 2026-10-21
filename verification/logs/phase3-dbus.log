@@ -1,0 +1,19 @@
+signal time=1792494749.637463 sender=org.freedesktop.DBus -> destination=:1.896 serial=4294967295 path=/org/freedesktop/DBus; interface=org.freedesktop.DBus; member=NameAcquired
+   string ":1.896"
+signal time=1792494749.637480 sender=org.freedesktop.DBus -> destination=:1.896 serial=4294967295 path=/org/freedesktop/DBus; interface=org.freedesktop.DBus; member=NameLost
+   string ":1.896"
+method call time=1792494751.052119 sender=:1.9 -> destination=org.slugcatpet.Bridge serial=130469 path=/Bridge; interface=org.slugcatpet.Bridge; member=CursorMoved
+   int32 417
+   int32 480
+method call time=1792494751.201938 sender=:1.9 -> destination=org.slugcatpet.Bridge serial=130472 path=/Bridge; interface=org.slugcatpet.Bridge; member=CursorMoved
+   int32 422
+   int32 480
+method call time=1792494751.352384 sender=:1.9 -> destination=org.slugcatpet.Bridge serial=130475 path=/Bridge; interface=org.slugcatpet.Bridge; member=CursorMoved
+   int32 427
+   int32 480
+method call time=1792494751.502797 sender=:1.9 -> destination=org.slugcatpet.Bridge serial=130478 path=/Bridge; interface=org.slugcatpet.Bridge; member=CursorMoved
+   int32 432
+   int32 480
+method call time=1792494751.652889 sender=:1.9 -> destination=org.slugcatpet.Bridge serial=130481 path=/Bridge; interface=org.slugcatpet.Bridge; member=CursorMoved
+   int32 438
+   int32 480

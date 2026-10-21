@@ -1,0 +1,5 @@
+KWin bridge: inactive shortcuts: Ctrl+Alt+P, Ctrl+Alt+Right
+KWin bridge: inactive shortcuts: Ctrl+Alt+P, Ctrl+Alt+Right
+scale 2 overlay (0, 900, 1707, 1099) items 1 in True s 700.0 100.0 5.0
+region rects (302, 176, 1122, 916) contains False rect_count ?
+item_rects [PySide6.QtCore.QRect(1376, 176, 48, 48)]

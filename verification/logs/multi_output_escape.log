@@ -1,0 +1,14 @@
+KWin bridge: inactive shortcuts: Ctrl+Alt+P, Ctrl+Alt+Right
+START cursor (1183, 1966) last (1183, 1966) hijack False capture False
+start hold logical 591.5 533.0 global (1183, 1966) area (0, 900, 1707, 1067)
+created True mock False
+HOLD cursor (1183, 1966) last (1183, 1966) hijack True capture True
+ESCAPE_START cursor (569, 1434) last (569, 1434) hijack True capture True
+HOLD_MOVED cursor (569, 1434) last (569, 1434) hijack True capture True
+AFTER_ESCAPE cursor (569, 1434) last (569, 1434) hijack True capture True
+target overlay (0, 900, 1707, 1099)
+event count 2 min y 1434
+events tail [(3217.767, 1183, 1966), (3221.513, 569, 1434)]
+ESCAPE_EVENT 397 100
+STOP cursor (397, 100) last (397, 100) hijack False capture False
+DONE

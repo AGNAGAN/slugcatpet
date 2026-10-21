@@ -35,6 +35,8 @@ KWin 集成（置顶、全屏检测、挡雨窗口、全局热键）在设置 �
 
 Wayland 的光标抢取是 **best-effort**，不是系统级锁定；左/右键单击会解除，指针持续移到其他输出时也会结束抢取并留在新输出。详细限制见 [`ai-docs/PHASE5_CURSOR_WRITE.md`](ai-docs/PHASE5_CURSOR_WRITE.md)。安装/卸载和故障排查见 [`packaging/linux/README.md`](packaging/linux/README.md)。
 
+本地 Wayland/KWin 验收脚本、隔离配置和关键结果日志整理在 [`verification/`](verification/README.md)，不属于应用运行时代码。
+
 ## 音乐
 
 音乐窗口的「导入」菜单里可以选「从 Rain World 导入配乐…」：程序会读取当前游戏目录中的全部配乐，在弹出的二级窗口中搜索、勾选，再把选中的曲目复制到 `~/.slugcatpet/music/Rain World`，不会修改游戏文件。设置 → **声音** → **Rain World 配乐** 也能打开同一个窗口。少数资源包曲目会解码成 wav，体积比 ogg 大。

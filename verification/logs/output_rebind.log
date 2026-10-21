@@ -1,0 +1,10 @@
+KWin bridge: inactive shortcuts: Ctrl+Alt+P, Ctrl+Alt+Right
+APP T1 screen HDMI-A-1 dpr 1.5 overlay (0, 900, 1707, 1099) b HDMI-A-1 (0, 0, 1440, 900)
+APP BEFORE screen HDMI-A-1 dpr 1.5 overlay (0, 900, 1707, 1099) b HDMI-A-1 (0, 0, 1440, 900)
+APP AFTER screen eDP-1 dpr 1.5 overlay (0, 0, 1440, 932) b eDP-1 (0, 0, 1440, 932)
+KWin bridge: inactive shortcuts: Ctrl+Alt+P, Ctrl+Alt+Right
+APP PRE_REBIND screen HDMI-A-1 dpr 2.0 overlay (0, 0, 1440, 932) b eDP-1 (0, 900, 1707, 1099)
+REBIND_TO eDP-1
+APP REBIND_500 screen eDP-1 dpr 2.0 overlay (0, 0, 1440, 932) b eDP-1 (0, 900, 1707, 1099)
+APP REBIND_2S screen eDP-1 dpr 2.0 overlay (0, 0, 1440, 932) b eDP-1 (0, 900, 1707, 1099)
+APP T10 screen eDP-1 dpr 2.0 overlay (0, 0, 1440, 932) b eDP-1 (0, 900, 1707, 1099)

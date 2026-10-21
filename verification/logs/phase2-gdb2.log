@@ -1,0 +1,63 @@
+
+warning: Loadable section ".dynstr" outside of ELF segments
+  in /home/user/.local/share/uv/python/cpython-3.12.15-linux-x86_64-gnu/bin/python3.12
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://repo.archlinuxcn.org>
+  <https://debuginfod.archlinux.org>
+  <https://debuginfod.cachyos.org>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+SIGINT is used by the debugger.
+Are you sure you want to change it? (y or n) [answered Y; input not from terminal]
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/usr/lib/libthread_db.so.1".
+[New Thread 0x7ffff71ff6c0 (LWP 58166) (id 2)]
+[New Thread 0x7fffe69c86c0 (LWP 58167) (id 3)]
+[New Thread 0x7fffe61c76c0 (LWP 58168) (id 4)]
+[New Thread 0x7fffe59c66c0 (LWP 58169) (id 5)]
+[New Thread 0x7fffd57ff6c0 (LWP 58170) (id 6)]
+[New Thread 0x7fffd4ffe6c0 (LWP 58171) (id 7)]
+[New Thread 0x7fffcffff6c0 (LWP 58172) (id 8)]
+[New Thread 0x7fffbcbff6c0 (LWP 58173) (id 9)]
+[New Thread 0x7fffb0dde6c0 (LWP 58177) (id 10)]
+[New Thread 0x7fffaab5c6c0 (LWP 58179) (id 11)]
+[Thread 0x7fffaab5c6c0 (LWP 58179) (id 11) exited]
+[Thread 0x7fffb0dde6c0 (LWP 58177) (id 10) exited]
+[New Thread 0x7fffb0dde6c0 (LWP 58180) (id 12)]
+[New Thread 0x7fffcc1ff6c0 (LWP 58181) (id 13)]
+[New Thread 0x7fffaab5c6c0 (LWP 58191) (id 14)]
+[New Thread 0x7fffabfff6c0 (LWP 58192) (id 15)]
+[New Thread 0x7fffab7fe6c0 (LWP 58193) (id 16)]
+[New Thread 0x7fffa8dff6c0 (LWP 58194) (id 17)]
+[New Thread 0x7fffa17ff6c0 (LWP 58195) (id 18)]
+[New Thread 0x7fffaa35b6c0 (LWP 58196) (id 19)]
+[New Thread 0x7fffa9b5a6c0 (LWP 58197) (id 20)]
+[New Thread 0x7fffa0ffe6c0 (LWP 58198) (id 21)]
+[New Thread 0x7fff87dff6c0 (LWP 58199) (id 22)]
+[New Thread 0x7fff875fe6c0 (LWP 58200) (id 23)]
+[Thread 0x7ffff71ff6c0 (LWP 58166) (id 2) exited]
+[Thread 0x7fff875fe6c0 (LWP 58200) (id 23) exited]
+[Thread 0x7fff87dff6c0 (LWP 58199) (id 22) exited]
+[Thread 0x7fffa0ffe6c0 (LWP 58198) (id 21) exited]
+[Thread 0x7fffa9b5a6c0 (LWP 58197) (id 20) exited]
+[Thread 0x7fffab7fe6c0 (LWP 58193) (id 16) exited]
+[Thread 0x7fffa17ff6c0 (LWP 58195) (id 18) exited]
+[Thread 0x7fffabfff6c0 (LWP 58192) (id 15) exited]
+[Thread 0x7fffcffff6c0 (LWP 58172) (id 8) exited]
+[Thread 0x7fffd4ffe6c0 (LWP 58171) (id 7) exited]
+[Thread 0x7fffa8dff6c0 (LWP 58194) (id 17) exited]
+[Thread 0x7fffaab5c6c0 (LWP 58191) (id 14) exited]
+[Thread 0x7fffaa35b6c0 (LWP 58196) (id 19) exited]
+[Thread 0x7fffd57ff6c0 (LWP 58170) (id 6) exited]
+[Thread 0x7fffcc1ff6c0 (LWP 58181) (id 13) exited]
+[Thread 0x7fffb0dde6c0 (LWP 58180) (id 12) exited]
+[Thread 0x7fffe61c76c0 (LWP 58168) (id 4) exited]
+[Thread 0x7fffe59c66c0 (LWP 58169) (id 5) exited]
+[Thread 0x7fffe69c86c0 (LWP 58167) (id 3) exited]
+[Thread 0x7ffff7e4c780 (LWP 58161) (id 1) exited]
+[Thread 0x7fffbcbff6c0 (LWP 58173) (id 9) exited]
+[New process 58161 (id 24)]
+[Inferior 1 (process 58161) exited normally]
+No stack.

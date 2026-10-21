@@ -126,7 +126,7 @@
 - HUD 工具提示作为 overlay 子 label 显示在面板下方；
 - 退出应用后 KWin 脚本正常卸载。
 
-临时截图和测试脚本在 `/tmp/opencode/phase2-*`，不属于仓库内容。
+临时截图已清理；测试脚本归档到 `verification/scripts/`，关键日志在 `verification/logs/`，不再属于应用运行时代码。
 
 ---
 

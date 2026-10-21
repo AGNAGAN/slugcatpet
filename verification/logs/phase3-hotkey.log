@@ -1,0 +1,8 @@
+signal time=1792495524.812708 sender=org.freedesktop.DBus -> destination=:1.952 serial=4294967295 path=/org/freedesktop/DBus; interface=org.freedesktop.DBus; member=NameAcquired
+   string ":1.952"
+signal time=1792495524.812725 sender=org.freedesktop.DBus -> destination=:1.952 serial=4294967295 path=/org/freedesktop/DBus; interface=org.freedesktop.DBus; member=NameLost
+   string ":1.952"
+method call time=1792495526.234793 sender=:1.9 -> destination=org.slugcatpet.Bridge serial=137667 path=/Bridge; interface=org.slugcatpet.Bridge; member=HotkeyPressed
+   int32 3
+method call time=1792495526.535082 sender=:1.9 -> destination=org.slugcatpet.Bridge serial=137670 path=/Bridge; interface=org.slugcatpet.Bridge; member=HotkeyPressed
+   int32 3

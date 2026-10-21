@@ -1,0 +1,16 @@
+KWin bridge: inactive shortcuts: Ctrl+Alt+P, Ctrl+Alt+Right
+KWin bridge: inactive shortcuts: Ctrl+Alt+P, Ctrl+Alt+Right
+T2 target HDMI-A-1 _screen HDMI-A-1 win_screen HDMI-A-1 overlay (0, 900, 1440, 932) frame (0, 0, 1440, 932) backend_target HDMI-A-1 backend_rect (0, 0, 1440, 932) backend_origin (0, 0)
+BEFORE1 target HDMI-A-1 _screen HDMI-A-1 win_screen HDMI-A-1 overlay (0, 900, 1440, 932) frame (0, 0, 1440, 932) backend_target HDMI-A-1 backend_rect (0, 0, 1440, 932) backend_origin (0, 0)
+set HDMI->eDP True
+AFTER1 target eDP-1 _screen eDP-1 win_screen eDP-1 overlay (0, 0, 1440, 932) frame (0, 0, 1440, 932) backend_target eDP-1 backend_rect (0, 0, 1440, 932) backend_origin (0, 0)
+KWin bridge: inactive shortcuts: Ctrl+Alt+P, Ctrl+Alt+Right
+KWin bridge: inactive shortcuts: Ctrl+Alt+P, Ctrl+Alt+Right
+T5 target eDP-1 _screen eDP-1 win_screen eDP-1 overlay (0, 0, 1440, 932) frame (0, 0, 1440, 932) backend_target eDP-1 backend_rect (0, 0, 1440, 932) backend_origin (0, 0)
+BEFORE2 target eDP-1 _screen eDP-1 win_screen eDP-1 overlay (0, 0, 1440, 932) frame (0, 0, 1440, 932) backend_target eDP-1 backend_rect (0, 0, 1440, 932) backend_origin (0, 0)
+set eDP->HDMI True
+AFTER2 target HDMI-A-1 _screen HDMI-A-1 win_screen HDMI-A-1 overlay (0, 900, 1707, 1099) frame (0, 0, 1707, 1099) backend_target HDMI-A-1 backend_rect (0, 900, 1707, 1099) backend_origin (0, 900)
+KWin bridge: inactive shortcuts: Ctrl+Alt+P, Ctrl+Alt+Right
+KWin bridge: inactive shortcuts: Ctrl+Alt+P, Ctrl+Alt+Right
+T8 target HDMI-A-1 _screen HDMI-A-1 win_screen HDMI-A-1 overlay (0, 900, 1440, 932) frame (0, 0, 1440, 932) backend_target HDMI-A-1 backend_rect (0, 0, 1440, 932) backend_origin (0, 0)
+DONE target HDMI-A-1 _screen HDMI-A-1 win_screen HDMI-A-1 overlay (0, 900, 1440, 932) frame (0, 0, 1440, 932) backend_target HDMI-A-1 backend_rect (0, 0, 1440, 932) backend_origin (0, 0)
