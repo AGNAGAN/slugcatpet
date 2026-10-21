@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QListWidget,
     QListWidgetItem,
+    QMenu,
     QSlider,
     QFileDialog,
 )
@@ -88,6 +89,7 @@ class MusicPanel(QWidget):
         self._outer.setSpacing(10)
         self._body = None
         self._connected = False
+        self._game_dlg = None
         self._rebuild()
 
     def open(self):
@@ -170,12 +172,14 @@ class MusicPanel(QWidget):
     def _build_controls(self, v):
         row = QHBoxLayout()
         row.setSpacing(6)
-        b_files = QPushButton(t("music_import_files"))
-        b_files.clicked.connect(self._import_files)
-        row.addWidget(b_files)
-        b_dir = QPushButton(t("music_import_dir"))
-        b_dir.clicked.connect(self._import_dir)
-        row.addWidget(b_dir)
+        b_import = QPushButton(t("music_import_menu"))
+        menu = QMenu(b_import)
+        menu.addAction(t("music_import_files"), self._import_files)
+        menu.addAction(t("music_import_dir"), self._import_dir)
+        menu.addSeparator()
+        menu.addAction(t("music_import_game"), self._import_rainworld)
+        b_import.setMenu(menu)
+        row.addWidget(b_import)
         b_open = QPushButton(t("music_open_folder"))
         b_open.clicked.connect(self._open_folder)
         row.addWidget(b_open)
@@ -406,6 +410,28 @@ class MusicPanel(QWidget):
 
     def _on_seek_released(self):
         self._player.seek(self._seek.value())
+
+    def _import_rainworld(self):
+        if self._game_dlg is not None:
+            return
+        from .gamemusic import RainWorldMusicDialog
+
+        dlg = RainWorldMusicDialog(self._player, self._save, parent=self)
+        dlg.imported.connect(self._on_rainworld_imported)
+        dlg.finished.connect(lambda _r: self._game_dlg_finished(dlg))
+        self._game_dlg = dlg
+        dlg.place_center(self)
+        dlg.open()
+
+    def _game_dlg_finished(self, dlg):
+        self._game_dlg = None
+        dlg.deleteLater()
+
+    def _on_rainworld_imported(self, n):
+        if n > 0:
+            self._notify(n)
+        else:
+            self._now_lbl.setText(t("music_game_done_zero"))
 
     def _import_files(self):
         exts = " ".join(f"*{e}" for e in AUDIO_EXTS)

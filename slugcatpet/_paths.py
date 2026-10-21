@@ -54,3 +54,13 @@ def user_music_dir() -> Path:
     except Exception:
         pass
     return d
+
+
+def rainworld_music_dir() -> Path:
+    """从游戏选择性导入的配乐放在单独子目录，方便整体管理。"""
+    d = user_music_dir() / "Rain World"
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+    return d

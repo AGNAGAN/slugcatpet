@@ -613,6 +613,24 @@ class SettingsWindow(QWidget):
             btn = QPushButton(t("settings_scene_music_btn"))
             btn.clicked.connect(lambda: self._on_scene_music(director))
             self._row(v, "settings_scene_music", btn)
+            btn = QPushButton(t("settings_game_music_btn"))
+            btn.clicked.connect(self._on_game_music)
+            self._row(v, "settings_game_music", btn)
+
+    def _on_game_music(self):
+        if self._dlg is not None:
+            return
+        from .gamemusic import RainWorldMusicDialog
+
+        dlg = RainWorldMusicDialog(
+            self._window._music_player,
+            self._write_state,
+            parent=self,
+        )
+        dlg.finished.connect(lambda _r: self._look_finished(dlg))
+        self._dlg = dlg
+        dlg.place_center(self)
+        dlg.open()
 
     def _on_scene_music(self, director):
         if self._dlg is not None:

@@ -2,8 +2,8 @@
 
 - 日期：2026-10-21
 - 依据：`PHASE0_RESULTS.md`、`PHASE1_RESULTS.md`、`PHASE2_RESULTS.md`、`PHASE3_RESULTS.md`、`PHASE4_RESULTS.md`、`PHASE5_CURSOR_WRITE.md`、`PHASE5_PACKAGING.md` 与当前代码审计
-- 用途：记录 Phase 0–4 之后仍未完成的工作，作为 Phase 5 的执行清单
-- 结论：**Phase 0–4 已完成；Phase 5 的 Wayland/KWin 光标写入、焦点保持、左/右键解除、多输出逃逸、Linux 打包、KWin 脚本持久安装/启用、desktop/图标、Linux CI 和 README 已完成。剩余最终验收（真实猫行为、Rain World 全屏、注销登录）和 Windows 完整行为回归。**
+- 用途：记录 Phase 0–4 之后仍未完成的工作，作为 Phase 5 及后续功能的执行清单
+- 结论：**Phase 0–4 已完成；Phase 5 的 Wayland/KWin 光标写入、焦点保持、左/右键解除、多输出逃逸、Linux 打包、KWin 脚本持久安装/启用、desktop/图标、Linux CI 和 README 已完成。后续新增的 Rain World 配乐选择性导入已实现并通过逻辑/提取测试。剩余最终验收（真实猫行为、Rain World 全屏、注销登录）和 Windows 完整行为回归。**
 
 ---
 
@@ -17,6 +17,7 @@
 | Phase 3 | 已完成 | 全屏、窗口快照、热键、冲突提示、设置页状态与重载；持久安装/启用在 Phase 5 完成 |
 | Phase 4 | 已完成 | XDG 自启、输出选择、光标只读/写入能力、托盘锚点、transient 设置/音乐窗；desktop/图标在 Phase 5 完成 |
 | Phase 5 | 接近完成 | 光标写入、焦点/点击、多输出逃逸、Linux 打包、KWin 持久安装、desktop/图标、CI、README 已完成；最终人工验收和 Windows 行为回归待做 |
+| 后续功能 | 已完成 | Rain World 配乐选择性导入；人工验收待做 |
 
 ---
 
@@ -106,7 +107,7 @@
 - [x] 应用标识
   - 非 Windows 设置 `SlugcatPet` 应用名（不设置 `applicationDisplayName`，避免改 overlay 标题）
   - `setDesktopFileName()` 仅在 `.desktop` 已安装时启用
-- [ ] 应用桌面文件与图标安装（转入 Phase 5 打包）
+- [x] 应用桌面文件与图标安装（转入 Phase 5 打包）
 - [x] 输出选择
   - 持久化 `output` 参数
   - 设置页下拉框列出主屏/各输出
@@ -164,10 +165,11 @@
 - [x] overlay 布局测试：geometry、持久化迁移、clamp。
 - [x] KWin 持久安装测试：kwinrc 文本、安装/卸载、metadata（`test_kwin_install.py`）。
 - [x] KWin 集成本机脚本：`tools/kwin_integration_check.py`（临时安装/启用、`isScriptLoaded`、恢复配置）。
-- [x] 现有 offscreen 单元回归保持通过（48 个测试）。
+- [x] 现有 offscreen 单元回归保持通过（当前全量 56 个测试）。
 - [x] 输出切换回归：HDMI 1.5 → eDP 2.0 → HDMI 1.5，overlay/KWin origin/输入区域一致；持久插件启用时同样通过。
 - [x] 物品输入区域回归：自由长矛不再因 `ax` property 触发输入区域异常（`test_wayland_regions.py`）。
-- [ ] 手动验收：点击穿透、拖猫、右键菜单、HUD/标签栏、托盘、全屏隐藏、音频。
+- [x] 手动验收（用户已确认）：设置、音乐、音频、托盘、雨循环卡片、拖猫、右键菜单、溪流猫抢夺光标/点击解除、overlay 收起/恢复。
+- [ ] 手动验收剩余项：点击穿透、HUD/标签栏、Rain World 实际全屏隐藏。
 - [ ] Windows 行为回归；`tests/behavior_check.py check` 需要本机 Rain World 素材，CI 只跑单元/静态检查。
 
 ### 4.3 光标写入（已完成本机验证）
@@ -226,14 +228,28 @@
 
 ---
 
-## 7. 当前仓库状态
+## 7. 后续功能：Rain World 配乐选择性导入（已完成）
+
+- [x] 音乐窗口「导入」菜单增加「从 Rain World 导入配乐…」
+- [x] 设置 → 声音增加同一入口
+- [x] 二级窗口搜索、勾选、全选/全不选/只选未导入
+- [x] 从散文件或 `music_songs` 资源包提取；未知 Vorbis setup 解码为 wav
+- [x] 导入到 `~/.slugcatpet/music/Rain World`，不修改游戏文件
+- [x] 8 个单元测试、全量 56 个测试、本机 266 首扫描与 3 首实际提取通过
+- [ ] 人工验收：真实游戏目录选择、全选/部分导入、重启后列表保留、播放导入的 wav/ogg 曲目
+
+详细记录见 `ai-docs/PHASE6_GAME_MUSIC_IMPORT.md`。
+
+---
+
+## 8. 当前仓库状态
 
 - 测试应用使用隔离配置 `/tmp/opencode/phase3-home`、`XDG_CONFIG_HOME=/tmp/opencode/phase4-config`；验收脚本会临时加载/卸载 KWin 脚本。
 - Phase 0–4 已提交；Wayland 光标写入、焦点/点击、Linux 打包、KWin 持久安装、CI 和文档已作为 Phase 5 的一部分提交；`pyproject.toml` 的打包相关改动与 `uv.lock` 的用户改动分开处理。
 - 最近一次自动检查结果：
   - `uv run ruff check .`：通过
   - `uv run ruff format --check .`：通过
-  - `uv run python -m unittest discover -s tests`：48 个测试通过
+  - `uv run python -m unittest discover -s tests`：56 个测试通过
   - `uv run python tools/params_doc.py --check`：通过
   - `uv run python tools/kwin_integration_check.py`：PASS
   - GitHub Actions Linux/Windows：`912a0aa` 以及此前 `10428d3`、`a640bb6`、`b7b8ef6`、`a59b47d` 全部 success
