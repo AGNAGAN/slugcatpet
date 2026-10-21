@@ -120,7 +120,7 @@ python tests/behavior_check.py check
 
 ```text
 uv run ruff check .                         通过
-uv run ruff format --check .                通过（292 files）
+uv run ruff format --check .                通过（293 files）
 uv run python -m unittest discover -s tests 48 tests OK
 uv run python tools/params_doc.py --check   通过
 bash -n packaging/linux/install.sh          通过
@@ -135,7 +135,7 @@ Linux   run 1/2/3  success
 Windows run 1/2/3  success
 ```
 
-对应提交 `10428d3`、`a640bb6`、`b7b8ef6`。
+对应提交 `10428d3`、`a640bb6`、`b7b8ef6`、`a59b47d`、`912a0aa`。
 
 ### 2.2 wheel 内容
 
