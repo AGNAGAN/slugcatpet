@@ -333,6 +333,26 @@ _STR = {
     },
     "settings_kwin_no_script": {"zh": "KWin 脚本未加载", "en": "KWin script is not loaded"},
     "settings_kwin_reload": {"zh": "重新加载 KWin 脚本", "en": "Reload KWin script"},
+    "settings_kwin_persistent": {
+        "zh": "登录后自动加载 KWin 脚本",
+        "en": "Load KWin script at login",
+    },
+    "settings_kwin_persistent_hint": {
+        "zh": "安装到 ~/.local/share/kwin/scripts/slugcatpet，并写入 kwinrc。只会在你勾选后修改配置。",
+        "en": "Installs to ~/.local/share/kwin/scripts/slugcatpet and updates kwinrc. Configuration changes only when you enable this.",
+    },
+    "settings_kwin_persistent_on": {
+        "zh": "已安装并启用；下次登录仍会自动连接。",
+        "en": "Installed and enabled; it will reconnect after your next login.",
+    },
+    "settings_kwin_persistent_off": {
+        "zh": "已安装，但登录后不会自动加载。",
+        "en": "Installed, but it will not load automatically at login.",
+    },
+    "settings_kwin_persistent_missing": {
+        "zh": "尚未安装；当前会话仍使用运行时脚本。",
+        "en": "Not installed; this session still uses the runtime script.",
+    },
     "settings_kwin_conflicts": {
         "zh": "以下全局热键没有生效：{keys}",
         "en": "These global shortcuts are not active: {keys}",

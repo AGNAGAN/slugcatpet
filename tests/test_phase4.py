@@ -53,6 +53,21 @@ class AutostartTests(unittest.TestCase):
         autostart.sync_path()
         self.assertFalse(autostart.is_enabled())
 
+    def test_installed_console_script_is_used_outside_source_tree(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "site-packages"
+            root.mkdir()
+            launcher = Path(d) / "bin" / "slugcatpet"
+            launcher.parent.mkdir()
+            launcher.write_text("#!/bin/sh\n", encoding="utf-8")
+            launcher.chmod(0o755)
+            with (
+                mock.patch.object(autostart, "base_dir", return_value=root),
+                mock.patch.object(autostart.sys, "argv", [str(launcher)]),
+            ):
+                self.assertEqual(autostart._linux_launch_command(), f'"{launcher.resolve()}"')
+                self.assertEqual(autostart._workdir(), Path.home())
+
 
 if __name__ == "__main__":
     unittest.main()

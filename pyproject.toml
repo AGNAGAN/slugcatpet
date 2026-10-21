@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "slugcatpet"
 version = "1.3.0"
-description = "Slugcat desktop pet for Windows: Rain World slugcat companions, bilingual (zh/en)."
+description = "Slugcat desktop pet for Windows and Linux: Rain World slugcat companions, bilingual (zh/en)."
 readme = "README.md"
 license = "MIT"
 authors = [
@@ -17,6 +17,7 @@ classifiers = [
     "Environment :: Win32 (MS Windows)",
     "Operating System :: Microsoft :: Windows :: Windows 10",
     "Operating System :: Microsoft :: Windows :: Windows 11",
+    "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -47,6 +48,8 @@ slugcatpet = [
     "resources/layouts/*.json",
     "resources/characters/*.json",
     "resources/arcs.json.gz",
+    "platform/wayland/kwin_script/metadata.json",
+    "platform/wayland/kwin_script/contents/code/*.js",
 ]
 
 [tool.ruff]

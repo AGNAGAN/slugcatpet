@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -30,16 +31,36 @@ def _exec_quote(value) -> str:
     return f'"{text}"'
 
 
+def _source_launch_command() -> str:
+    return f"{_exec_quote(sys.executable)} {_exec_quote(base_dir() / 'run_slugcatpet.py')}"
+
+
+def _installed_launcher() -> str | None:
+    """打包/uv tool 安装后的 console script。"""
+    argv0 = Path(sys.argv[0]) if sys.argv and sys.argv[0] else None
+    if argv0 is not None and argv0.name == "slugcatpet" and argv0.is_file():
+        return str(argv0.resolve())
+    return shutil.which("slugcatpet")
+
+
 def _linux_launch_command() -> str:
     if _FROZEN:
         return _exec_quote(sys.executable)
-    return f"{_exec_quote(sys.executable)} {_exec_quote(base_dir() / 'run_slugcatpet.py')}"
+    if (base_dir() / "run_slugcatpet.py").is_file():
+        return _source_launch_command()
+    launcher = _installed_launcher()
+    if launcher:
+        return _exec_quote(launcher)
+    # 源码仓库不完整时仍保留可诊断的旧路径，而不是生成空 Exec。
+    return _source_launch_command()
 
 
 def _workdir() -> Path:
     if _FROZEN:
         return Path(sys.executable).resolve().parent
-    return base_dir()
+    if (base_dir() / "run_slugcatpet.py").is_file():
+        return base_dir()
+    return Path.home()
 
 
 def _launch_command() -> str:

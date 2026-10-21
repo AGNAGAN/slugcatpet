@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=SlugcatPet
+GenericName=Desktop Pet
+Comment=Rain World slugcat desktop companions
+Comment[zh_CN]=让 Rain World 的蛞蝓猫住在你的屏幕上
+Exec=slugcatpet
+TryExec=slugcatpet
+Icon=slugcatpet
+Terminal=false
+Categories=Game;
+Keywords=slugcat;rain world;desktop pet;
+StartupNotify=false
+StartupWMClass=org.slugcatpet.SlugcatPet

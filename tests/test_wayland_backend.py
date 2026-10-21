@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from PySide6.QtCore import QRect
 
 from slugcatpet.platform.backend import DesktopBackend
+from slugcatpet.platform.wayland import kwin_bridge, kwin_install
 from slugcatpet.platform.wayland.kwin_bridge import WaylandKWinBackend
 from slugcatpet.window import PetWindow
 
@@ -38,6 +39,10 @@ class _FakeWindow:
 
 
 class ScriptRenderTests(unittest.TestCase):
+    def test_runtime_and_persistent_scripts_have_distinct_ids(self):
+        self.assertEqual(kwin_install.PLUGIN_ID, kwin_bridge.PERSISTENT_PLUGIN_NAME)
+        self.assertNotEqual(kwin_bridge.PLUGIN_NAME, kwin_bridge.PERSISTENT_PLUGIN_NAME)
+
     def test_placeholders_are_replaced(self):
         backend = SimpleNamespace(
             _target_screen="eDP-1",

@@ -28,7 +28,10 @@ DBUS_INTERFACE = "org.slugcatpet.Bridge"
 KWIN_SERVICE = "org.kde.KWin"
 KWIN_PATH = "/Scripting"
 KWIN_INTERFACE = "org.kde.kwin.Scripting"
-PLUGIN_NAME = "slugcatpet"
+# 运行时脚本用独立名字，避免 KWin 的 reconfigure 按持久插件的启用状态
+# 把它一起卸载；持久插件名仍是 slugcatpet。
+PLUGIN_NAME = "slugcatpet-runtime"
+PERSISTENT_PLUGIN_NAME = "slugcatpet"
 _MIN_SIDE = 24
 _SCREEN_TOL = 2
 
@@ -390,8 +393,10 @@ class WaylandKWinBackend(QObject, DesktopBackend):
             self._script_loaded = False
             return False
 
-        # 上一次异常退出可能留下同名脚本；先卸载，避免重复的光标/几何回调。
+        # 上一次异常退出可能留下同名脚本；登录时 KWin 也可能已加载持久插件。
+        # 两者都先卸载，避免重复的光标/几何回调。
         self._call_scripting(iface, "unloadScript", PLUGIN_NAME, required=False)
+        self._call_scripting(iface, "unloadScript", PERSISTENT_PLUGIN_NAME, required=False)
         self._fullscreen = None
         self._fullscreen_rect = QRect()
         self._hotkey_status.clear()
@@ -408,6 +413,37 @@ class WaylandKWinBackend(QObject, DesktopBackend):
         if self._window is None or not self._service_registered or self._shutting_down:
             return False
         return self._load_script()
+
+    def render_script(self) -> str:
+        """当前输出/几何对应的 KWin 脚本，供持久安装使用。"""
+        return self._render_script()
+
+    def integration_state(self):
+        from . import kwin_install
+
+        return kwin_install.state()
+
+    def set_integration_enabled(self, on: bool) -> bool:
+        """安装/启用登录后自动加载的 KWin 脚本。
+
+        运行时脚本仍然由 ``loadScript()`` 管理；这里的开关只影响 KWin 启动时
+        是否从用户脚本目录自动加载。启用/停用后 reconfigure，并延迟重新加载
+        运行时脚本：KWin 可能异步加载持久插件，运行时脚本用独立插件名，
+        不会被它的启用状态带走。
+        """
+        from . import kwin_install
+
+        if on and not kwin_install.install(self._render_script()):
+            return False
+        if not kwin_install.set_enabled(bool(on)):
+            return False
+        if not kwin_install.reconfigure():
+            log.warning("KWin integration: saved, but reconfigure was not accepted")
+        if self._window is not None and self._service_registered and not self._shutting_down:
+            # 给 KWin 的 reconfigure 一点时间；reload 会同时清掉可能被加载的
+            # 持久插件，确保本次会话只有 slugcatpet-runtime 在运行。
+            QTimer.singleShot(700, self.reload)
+        return True
 
     def _render_script(self) -> str:
         template = Path(__file__).with_name("kwin_script") / "contents" / "code" / "main.js"

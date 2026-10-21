@@ -122,14 +122,14 @@ uv run python tools/params_doc.py --check   通过
 
 ## 3. 已知限制
 
-- 当前仍在运行时 `loadScript`，没有把脚本安装到 `~/.local/share/kwin/scripts/`，也没有写 `kwinrc` 或让用户在系统设置中显式启用。完整安装/启用属于 Phase 5 打包工作。
+- Phase 3 当时仍在运行时 `loadScript`；Phase 5 已增加 `kwin_install`、设置页显式开关和 `~/.local/share/kwin/scripts/slugcatpet` 持久安装，详见 `PHASE5_PACKAGING.md`。
 - 脚本是 KDE 专用；GNOME/Sway 降级为无置顶、无全局光标、无热键。
 - 热键冲突检测使用 KGlobalAccel 的兼容方法 `action(int)`；在当前 Plasma 6.8 可用，后续版本若删除该兼容接口需要改为解析 `shortcutKeys`。
 - 全屏测试使用临时 KWin 脚本强制窗口几何，尚未用 Rain World 实际全屏窗口验收。
 - 全屏检测只跟随**活动**窗口；全屏窗口失焦后不会继续隐藏 overlay。
-- overlay 首次显示仍可能抢焦点；QtWayland 退出偶发段错误仍在 Phase 2 遗留清单中。
-- 托盘雨循环卡片仍使用 overlay 右下角降级锚点，Phase 4 再改。
-- 设置/音乐内部的皮肤、尾巴、音量弹层仍是 `Qt.Popup + mapToGlobal`，Phase 4 再收尾。
+- overlay 首次显示抢焦点已由 Phase 5 的 KWin 脚本恢复逻辑处理；QtWayland 退出偶发段错误仍在 Phase 2 遗留清单中。
+- 托盘雨循环卡片已在 Phase 4 改为标签栏/光标/表盘/右下角锚点。
+- 设置/音乐内部的皮肤、尾巴、音量弹层仍是 `Qt.Popup + mapToGlobal`，仍待清理。
 
 ## 4. 涉及文件
 
@@ -154,4 +154,4 @@ uv run python tools/params_doc.py --check   通过
 4. 托盘雨循环卡片锚点。
 5. 清理 Phase 2 遗留的 `Qt.Popup` 弹层和 overlay 首次焦点问题。
 
-Phase 5 再完成 KWin 脚本安装、desktop 文件、图标、Linux CI 和 README/故障排查。
+Phase 5 的 KWin 脚本安装、desktop 文件、图标、Linux/Windows CI 和 README/故障排查已完成；剩余最终人工验收见 `REMAINING_WORK.md`。

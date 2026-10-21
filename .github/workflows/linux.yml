@@ -1,0 +1,55 @@
+name: Linux
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libxkbcommon0 libdbus-1-3
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.1"
+          enable-cache: true
+          python-version: "3.12"
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Format check
+        run: uv run ruff format --check .
+
+      - name: Unit tests
+        run: uv run python -m unittest discover -s tests -v
+
+      - name: Parameter docs check
+        run: uv run python tools/params_doc.py --check
+
+      - name: Import smoke test
+        run: uv run python -c "import slugcatpet.window, slugcatpet.main"
+
+      - name: Render KWin script syntax check
+        run: |
+          uv run python - <<'PY'
+          from types import SimpleNamespace
+          from PySide6.QtCore import QRect
+          from slugcatpet.platform.wayland.kwin_bridge import WaylandKWinBackend
+
+          backend = SimpleNamespace(_target_screen="HDMI-A-1", _rect=QRect(0, 900, 1707, 1067))
+          with open("/tmp/slugcatpet-kwin.js", "w", encoding="utf-8") as f:
+              f.write(WaylandKWinBackend._render_script(backend))
+          PY
+          node --check /tmp/slugcatpet-kwin.js

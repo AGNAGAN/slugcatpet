@@ -17,7 +17,8 @@
   ```text
   ~/.config/autostart/org.slugcatpet.SlugcatPet.desktop
   ```
-- `Exec` 指向当前 `.venv/bin/python` 和 `run_slugcatpet.py`。
+- 源码运行时 `Exec` 指向当前 `.venv/bin/python` 和 `run_slugcatpet.py`。
+- `uv tool` / wheel 安装后 `Exec` 指向 `slugcatpet` console script，`Path` 指向用户主目录。
 - 冻结/打包运行 `Exec` 指向当前可执行文件，`Path` 指向可执行文件目录。
 - 兼容 `XDG_CONFIG_HOME`，测试时不会污染真实配置。
 - 路径中的空格、反斜杠、双引号和 `%` 按 Desktop Entry `Exec` 规则转义。
@@ -33,7 +34,7 @@
 
 `setDesktopFileName()` 仍只在 `org.slugcatpet.SlugcatPet.desktop` 已安装时调用，避免源码运行时 portal 找不到应用。KWin 脚本继续以窗口标题识别 overlay。
 
-> `.desktop` 和图标安装、Linux 打包仍属于 Phase 5；Phase 4 只保证应用名和安装后的 app_id 路径就绪。
+> `.desktop`、图标安装和 Linux 打包已在 Phase 5 完成，见 `PHASE5_PACKAGING.md`；Phase 4 保证应用名和安装后的 app_id 路径就绪。
 
 ### 1.3 输出选择
 
@@ -139,7 +140,7 @@ ai-docs/PARAMS.md 是最新的
 
 ## 3. 已知限制
 
-- `.desktop` 应用条目和图标尚未安装，源码运行时 KWin 仍显示 `resourceClass python`；这是 Phase 5 打包工作。
+- `.desktop` 应用条目和图标已在 Phase 5 安装；源码运行时 KWin 仍可能显示 `resourceClass python`，安装版会使用 `org.slugcatpet.SlugcatPet` app_id。
 - 自启的“注销/重新登录后实际拉起”需要在 Phase 5 的完整桌面会话验收中再确认；当前已验证文件内容、路径和开关行为。
 - Wayland 光标写入已在 Phase 5 通过临时捕获面和 Qt pointer-warp 实现；仍不是系统级锁定，见 `PHASE5_CURSOR_WRITE.md`。
 - overlay 首次显示抢焦点已在 Phase 5 由 KWin 焦点恢复处理（其他合成器未验证）；QtWayland 退出偶发段错误、内部 `Qt.Popup` 层仍是遗留问题。

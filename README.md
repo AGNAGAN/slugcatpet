@@ -21,6 +21,20 @@ python run_slugcatpet.py
 
 第一次启动时选一下 Rain World 的安装目录，程序会把要用的图像和几首游戏配乐提取到 `~/.slugcatpet/assets`。
 
+## Linux（KDE Plasma / Wayland）
+
+需要 KDE Plasma 6 / KWin 6（已在 Plasma 6.8 测试）、Wayland 会话、Python 3.12+ 和 [uv](https://docs.astral.sh/uv/)。光标写入还需要 Qt 6.12+ 和合成器的 `wp_pointer_warp_v1`。
+
+```bash
+./packaging/linux/install.sh
+```
+
+安装后从应用菜单启动 **SlugcatPet**，或运行 `slugcatpet`。首次启动同样需要选择 Rain World 目录。
+
+KWin 集成（置顶、全屏检测、挡雨窗口、全局热键）在设置 → **Wayland / KWin** 中显式勾选「登录后自动加载 KWin 脚本」。勾选后才会把脚本装到 `~/.local/share/kwin/scripts/slugcatpet` 并修改 `kwinrc`；当前会话始终有运行时脚本。GNOME/Sway 可以使用，但上述能力会降级。
+
+Wayland 的光标抢取是 **best-effort**，不是系统级锁定；左/右键单击会解除，详细限制见 [`ai-docs/PHASE5_CURSOR_WRITE.md`](ai-docs/PHASE5_CURSOR_WRITE.md)。安装/卸载和故障排查见 [`packaging/linux/README.md`](packaging/linux/README.md)。
+
 ## 皮肤
 
 可以用 Dress My Slugcat 的皮肤。创意工坊里订阅的会自动出现，别人发给你的放进皮肤文件夹（设置 → 打开皮肤文件夹）就行。
@@ -63,6 +77,20 @@ python run_slugcatpet.py
 With uv: `uv sync`, then `uv run run_slugcatpet.py`.
 
 On first launch, pick your Rain World install folder. The images and a few game music tracks the app needs are extracted to `~/.slugcatpet/assets`.
+
+## Linux (KDE Plasma / Wayland)
+
+Requires KDE Plasma 6 / KWin 6 (tested on Plasma 6.8), a Wayland session, Python 3.12+, and [uv](https://docs.astral.sh/uv/). Cursor writing additionally needs Qt 6.12+ and `wp_pointer_warp_v1` from the compositor.
+
+```bash
+./packaging/linux/install.sh
+```
+
+Launch **SlugcatPet** from the application menu, or run `slugcatpet`. The first launch still asks for your Rain World directory.
+
+Enable the KWin integration explicitly in Settings → **Wayland / KWin** → **Load KWin script at login**. That installs the script to `~/.local/share/kwin/scripts/slugcatpet` and updates `kwinrc`; the current session always uses a runtime script. GNOME and Sway work in a degraded mode without topmost, fullscreen detection, rain shelters, or global hotkeys.
+
+Cursor grabbing on Wayland is **best-effort**, not a system-level pointer lock; left/right click releases it. See [`ai-docs/PHASE5_CURSOR_WRITE.md`](ai-docs/PHASE5_CURSOR_WRITE.md) for limitations and [`packaging/linux/README.md`](packaging/linux/README.md) for install/uninstall and troubleshooting.
 
 ## Skins
 

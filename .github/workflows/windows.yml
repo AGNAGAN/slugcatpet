@@ -1,0 +1,40 @@
+name: Windows
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: windows-2022
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.1"
+          enable-cache: true
+          python-version: "3.12"
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Format check
+        run: uv run ruff format --check .
+
+      - name: Unit tests
+        run: uv run python -m unittest discover -s tests -v
+
+      - name: Parameter docs check
+        run: uv run python tools/params_doc.py --check
+
+      - name: Import smoke test
+        run: uv run python -c "import slugcatpet.window, slugcatpet.main"
+
+# Full behavior regression needs Rain World assets imported from a local
+# installation, so it remains a manual `python tests/behavior_check.py check`.

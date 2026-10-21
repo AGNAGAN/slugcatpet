@@ -1,9 +1,9 @@
 # 原生 Wayland 迁移剩余工作
 
 - 日期：2026-10-20
-- 依据：`PHASE0_RESULTS.md`、`PHASE1_RESULTS.md`、`PHASE2_RESULTS.md`、`PHASE3_RESULTS.md`、`PHASE4_RESULTS.md`、`PHASE5_CURSOR_WRITE.md` 与当前代码审计
+- 依据：`PHASE0_RESULTS.md`、`PHASE1_RESULTS.md`、`PHASE2_RESULTS.md`、`PHASE3_RESULTS.md`、`PHASE4_RESULTS.md`、`PHASE5_CURSOR_WRITE.md`、`PHASE5_PACKAGING.md` 与当前代码审计
 - 用途：记录 Phase 0–4 之后仍未完成的工作，作为 Phase 5 的执行清单
-- 结论：**Phase 0–4 已完成（Phase 3 的脚本安装/启用、Phase 4 的 desktop/图标安装留到 Phase 5）；Phase 5 已开始，Wayland/KWin 光标写入、焦点保持和左/右键解除已实现并通过本机验收，打包/CI/最终验收仍待完成。**
+- 结论：**Phase 0–4 已完成；Phase 5 的 Wayland/KWin 光标写入、焦点保持、左/右键解除、Linux 打包、KWin 脚本持久安装/启用、desktop/图标、Linux CI 和 README 已完成。剩余最终验收（真实猫行为、Rain World 全屏、多输出逃逸、注销登录）和 Windows 完整行为回归。**
 
 ---
 
@@ -14,9 +14,9 @@
 | Phase 0 | 已完成 | 可行性闸门结论为 Go（有条件） |
 | Phase 1 | 已完成 | 单主表面、输入区域、KWin 几何/置顶、光标桥 |
 | Phase 2 | 已完成（第一版） | UI 嵌入 overlay、局部坐标、菜单/卡片/提示 |
-| Phase 3 | 已完成（开发期） | 全屏、窗口快照、热键、冲突提示、设置页状态与重载；脚本安装/启用留到 Phase 5 |
-| Phase 4 | 已完成（开发期） | XDG 自启、输出选择、光标只读/写入能力、托盘锚点、transient 设置/音乐窗；desktop/图标安装留到 Phase 5 |
-| Phase 5 | 进行中 | Wayland 光标写入已完成；Linux 打包、KWin 脚本安装、完整测试、README/故障排查、CI 待做 |
+| Phase 3 | 已完成 | 全屏、窗口快照、热键、冲突提示、设置页状态与重载；持久安装/启用在 Phase 5 完成 |
+| Phase 4 | 已完成 | XDG 自启、输出选择、光标只读/写入能力、托盘锚点、transient 设置/音乐窗；desktop/图标在 Phase 5 完成 |
+| Phase 5 | 接近完成 | 光标写入、焦点/点击、Linux 打包、KWin 持久安装、desktop/图标、CI、README 已完成；最终人工验收和 Windows 行为回归待做 |
 
 ---
 
@@ -75,13 +75,15 @@
 
 详细记录见 `ai-docs/PHASE3_RESULTS.md`。
 
-### 2.3 仍待完成（转入 Phase 5）
+### 2.3 Phase 5 已完成
 
-- [ ] KWin 脚本安装/启用
-  - 安装到 `~/.local/share/kwin/scripts/slugcatpet/`
-  - 写 `kwinrc`，调用 `org.kde.KWin.reconfigure`
-  - 设置页增加“启用 KWin 集成”开关
-  - 必须由用户明确启用，不能静默修改系统窗口行为
+- [x] KWin 脚本安装/启用
+  - 安装到 `$XDG_DATA_HOME/kwin/scripts/slugcatpet/`
+  - 写 `$XDG_CONFIG_HOME/kwinrc` 的 `[Plugins] slugcatpetEnabled=true/false`
+  - 调用 `org.kde.KWin.reconfigure`
+  - 设置页增加「登录后自动加载 KWin 脚本」开关；默认关闭，必须由用户勾选
+  - `metadata.json` 补上 `KPackageStructure: KWin/Script`
+  - 运行时插件改名 `slugcatpet-runtime`，避免停用持久插件时被 KWin 连带卸载
 - [x] 输出选择设置项（Phase 4）
 - [ ] 用 Rain World 实际全屏窗口做一次最终验收（Phase 5）
 
@@ -140,27 +142,30 @@
 
 ### 4.1 Linux 打包
 
-- [ ] 新增 `packaging/linux/`：
+- [x] 新增 `packaging/linux/`：
   - `org.slugcatpet.SlugcatPet.desktop`
   - `slugcatpet.svg`
   - `install.sh`
   - `uninstall.sh`
-  - 可选 `slugcatpet.spec`
-- [ ] 安装 KWin 脚本、desktop 文件、图标。
-- [ ] 不打包 Rain World 游戏素材，首次启动仍走 `gameassets` 导入。
-- [ ] 保留 `uv run slugcatpet` 源码运行方式。
-- [ ] `pyproject.toml` 增加 Linux classifier / 多平台描述。
+  - `README.md`
+- [x] 安装 KWin 脚本、desktop 文件、图标。
+- [x] 不打包 Rain World 游戏素材，首次启动仍走 `gameassets` 导入。
+- [x] 保留 `uv run slugcatpet` 源码运行方式。
+- [x] `pyproject.toml` 增加 Linux classifier / 多平台描述。
+- [x] wheel 包含 `kwin_script/metadata.json` 与 `contents/code/main.js`。
+- [ ] 在干净用户环境完整运行一次 `install.sh`（本机下载 PySide6 超时，未完成）。
 
 ### 4.2 测试
 
-- [ ] 输入区域测试：猫/面板/拖拽状态并集、空区域 1×1、clamp。
-- [ ] 坐标测试：全局 → overlay → canvas，DPR 1.5/2.0，多屏。
-- [ ] KWin 桥测试：DBus 参数、JSON 解析、服务注册失败降级。
-- [ ] overlay 布局测试：geometry、动画、持久化迁移。
-- [ ] KWin 集成测试：overlay 尺寸、keepAbove、光标、窗口快照、热键。
-- [ ] 现有 offscreen 行为回归保持通过；物理不受窗口层影响。
+- [x] 输入区域测试：猫/面板/拖拽状态并集、空区域 1×1、clamp（`test_wayland_regions.py`）。
+- [x] 坐标测试：全局 → overlay → canvas，DPR 1.5/2.0，多屏（`test_wayland_backend.py`、`test_wayland_overlay.py`）。
+- [x] KWin 桥测试：JSON 解析、全屏/输出过滤、热键 spec、服务注册失败降级。
+- [x] overlay 布局测试：geometry、持久化迁移、clamp。
+- [x] KWin 持久安装测试：kwinrc 文本、安装/卸载、metadata（`test_kwin_install.py`）。
+- [x] KWin 集成本机脚本：`tools/kwin_integration_check.py`（临时安装/启用、`isScriptLoaded`、恢复配置）。
+- [x] 现有 offscreen 单元回归保持通过（44 个测试）。
 - [ ] 手动验收：点击穿透、拖猫、右键菜单、HUD/标签栏、托盘、全屏隐藏、音频。
-- [ ] Windows 行为回归。
+- [ ] Windows 行为回归；`tests/behavior_check.py check` 需要本机 Rain World 素材，CI 只跑单元/静态检查。
 
 ### 4.3 光标写入（已完成本机验证）
 
@@ -179,16 +184,17 @@
 
 ### 4.4 文档与 CI
 
-- [ ] README 增加 Linux 安装、KWin 集成、降级模式、已知限制。
-- [ ] 更新 `PORTABILITY_ANALYSIS.md` 的最终结论。
-- [ ] 新增 Wayland 故障排查：
+- [x] README 增加 Linux 安装、KWin 集成、降级模式、已知限制。
+- [x] 更新 `PORTABILITY_ANALYSIS.md` 的最终结论。
+- [x] 新增 Wayland 故障排查（`packaging/linux/README.md`）：
   - KWin 脚本未加载
   - 光标不更新
   - 输入区域异常
   - 全屏检测失效
-- [ ] Linux CI：ruff、`params_doc --check`、offscreen 行为测试。
-- [ ] Windows CI：完整行为回归。
-- [ ] KWin 集成测试至少提供本地脚本，不要求 GitHub 托管 runner 有 Plasma 会话。
+- [x] Linux CI：ruff、格式、单元测试、`params_doc --check`、导入冒烟、KWin 脚本 `node --check`。
+- [x] Windows CI：ruff、格式、单元测试、`params_doc --check`、导入冒烟。
+- [ ] Windows 完整行为回归（需要本机素材，保持手动）。
+- [x] KWin 集成测试提供本地脚本 `tools/kwin_integration_check.py`，不要求 GitHub 托管 runner 有 Plasma 会话。
 
 ---
 
@@ -209,10 +215,10 @@
 
 ## 6. 建议执行顺序
 
-1. Phase 4 已完成（开发期）：XDG 自启、输出选择、光标只读/写入能力、托盘锚点。
-2. Phase 5：光标写入已完成本机验证；继续 KWin 脚本安装/启用、desktop 文件、图标、Linux CI、README/故障排查。
-3. 清理 Phase 2 遗留的 `Qt.Popup` 弹层和退出段错误；overlay 首次焦点已由 KWin 脚本处理。
-4. 用 Rain World 实际全屏窗口做最终验收。
+1. Phase 0–4 已完成；Phase 5 的光标写入、焦点/点击、Linux 打包、KWin 持久安装、desktop/图标、CI、README 已完成。
+2. 在干净用户环境跑一次完整安装，并注销/登录验证持久脚本与自启。
+3. 用 Rain World 实际全屏窗口、真实猫行为和多输出逃逸做最终验收。
+4. 清理 Phase 2 遗留的 `Qt.Popup` 弹层、`SetupPanel` transient parent 和退出段错误。
 5. 按阶段提交，`pyproject.toml` / `uv.lock` 的用户改动单独处理。
 
 ---
@@ -220,10 +226,12 @@
 ## 7. 当前仓库状态
 
 - 测试应用使用隔离配置 `/tmp/opencode/phase3-home`、`XDG_CONFIG_HOME=/tmp/opencode/phase4-config`；验收脚本会临时加载/卸载 KWin 脚本。
-- Phase 0–4 已提交；Wayland 光标写入的源码、测试和文档已作为 Phase 5 的一部分提交；`pyproject.toml`、`uv.lock` 的用户改动仍未提交。
+- Phase 0–4 已提交；Wayland 光标写入、焦点/点击、Linux 打包、KWin 持久安装、CI 和文档已作为 Phase 5 的一部分提交；`pyproject.toml` 的打包相关改动与 `uv.lock` 的用户改动分开处理。
 - 最近一次自动检查结果：
   - `uv run ruff check .`：通过
   - `uv run ruff format --check .`：通过
-  - `uv run python -m unittest discover -s tests`：35 个测试通过
+  - `uv run python -m unittest discover -s tests`：44 个测试通过
   - `uv run python tools/params_doc.py --check`：通过
+  - `uv run python tools/kwin_integration_check.py`：PASS
 - 本机 KWin 验收：临时捕获面 + `QCursor.setPos()` 已能把光标从 `(700,1500)` 移到 `(569,1256)`；忙碌样式状态为 true，释放后恢复。
+- 持久 KWin 脚本：`metadata.json` 的 `KPackageStructure: KWin/Script` 修复后，`reconfigure` 能在 Plasma 6.8 中加载 `slugcatpet`；运行时脚本使用 `slugcatpet-runtime`，停用持久插件不会卸载当前会话。

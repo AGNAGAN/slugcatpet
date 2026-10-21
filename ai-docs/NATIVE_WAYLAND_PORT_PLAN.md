@@ -1,16 +1,16 @@
 # 原生 Wayland 移植方案（KDE Plasma / KWin 6.8）
 
-- 日期：2026-10-20
+- 日期：2026-10-21
 - 依据：`ai-docs/PORTABILITY_ANALYSIS.md` 的路线 B
 - 决策：**采用原生 Wayland 客户端，不使用 XWayland**
 - 目标环境：当前机器上的 KDE Plasma 6.8 / KWin 6.8 / Qt 6.12 / PySide6 6.12
-- 性质：**方案与实施计划，不修改源码**；本文只新增文档
+- 性质：**方案与实施计划**；实际结果见各阶段 `PHASE*_RESULTS.md`
 - Phase 0 状态：**已完成，Go（有条件）**；实测记录见 `ai-docs/PHASE0_RESULTS.md`
 - Phase 1 状态：**已完成**；主表面、KWin 几何/置顶、输入区域和光标桥实测见 `ai-docs/PHASE1_RESULTS.md`
 - Phase 2 状态：**已完成（第一版）**；UI 嵌入、局部坐标、卡片/菜单/提示与坐标迁移见 `ai-docs/PHASE2_RESULTS.md`
-- Phase 3 状态：**已完成（开发期）**；全屏、窗口快照、全局热键、冲突提示和设置页状态已实测，脚本安装/启用留到 Phase 5；见 `ai-docs/PHASE3_RESULTS.md`
-- Phase 4 状态：**已完成（开发期）**；XDG 自启、输出选择、光标只读/写入能力、托盘锚点与 transient 设置/音乐窗已实测，desktop/图标安装留到 Phase 5；见 `ai-docs/PHASE4_RESULTS.md`
-- Phase 5 状态：**进行中**；Wayland/KWin 光标写入、焦点保持和左/右键解除已实现并通过本机验收，Linux 打包、KWin 脚本安装、完整测试、README/故障排查和 CI 待做；见 `ai-docs/PHASE5_CURSOR_WRITE.md`
+- Phase 3 状态：**已完成**；全屏、窗口快照、全局热键、冲突提示和设置页状态已实测，持久安装/启用在 Phase 5 完成；见 `ai-docs/PHASE3_RESULTS.md`
+- Phase 4 状态：**已完成**；XDG 自启、输出选择、光标只读/写入能力、托盘锚点与 transient 设置/音乐窗已实测，desktop/图标在 Phase 5 完成；见 `ai-docs/PHASE4_RESULTS.md`
+- Phase 5 状态：**接近完成**；Wayland/KWin 光标写入、焦点保持、左/右键解除、Linux 打包、KWin 持久安装/启用、desktop/图标、Linux/Windows CI 和 README 已完成；剩余最终人工验收；见 `ai-docs/PHASE5_CURSOR_WRITE.md`、`ai-docs/PHASE5_PACKAGING.md`
 - 剩余工作清单：`ai-docs/REMAINING_WORK.md`
 
 ---
@@ -452,27 +452,30 @@ slugcatpet/platform/wayland/kwin_script/
 
 #### 3.3 脚本加载/卸载
 
-开发期：
+运行时脚本（应用每次启动）：
 
 ```text
-qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript <abs path> slugcatpet
+qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript <abs path> slugcatpet-runtime
 qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.start
 ```
 
 退出时：
 
 ```text
-qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript slugcatpet
+qdbus6 org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript slugcatpet-runtime
 ```
 
-打包版：
+运行时脚本使用独立 ID `slugcatpet-runtime`；加载前还会卸载可能由登录加载的持久插件 `slugcatpet`，避免重复回调。
 
-- 安装到 `~/.local/share/kwin/scripts/slugcatpet/`；
-- 写 `kwinrc` 的 `[Plugins] slugcatpetEnabled=true`；
+持久安装（设置页显式启用）：
+
+- 安装到 `$XDG_DATA_HOME/kwin/scripts/slugcatpet/`；
+- `metadata.json` 必须包含 `KPackageStructure: "KWin/Script"`；
+- 写 `kwinrc` 的 `[Plugins] slugcatpetEnabled=true/false`；
 - 调 `org.kde.KWin.reconfigure`；
-- 设置页提供“启用 KWin 集成 / 查看状态 / 重新加载”。
+- 设置页提供「登录后自动加载 KWin 脚本」、状态显示和「重新加载 KWin 脚本」。
 
-**注意：** KWin 脚本是特权集成，必须由用户明确安装/启用；不要在未告知的情况下修改系统窗口行为。当前开发期用 `loadScript` 验证功能，安装/启用开关已列入 Phase 5。
+**注意：** KWin 脚本是特权集成，必须由用户明确安装/启用；应用不会在未告知的情况下修改 `kwinrc`。持久插件只影响下次登录，本次会话始终使用运行时脚本。实现与实测见 `ai-docs/PHASE5_PACKAGING.md`。
 
 #### 3.4 坐标换算
 

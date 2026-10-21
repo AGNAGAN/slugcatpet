@@ -1,10 +1,12 @@
 # Linux 移植可行性分析
 
-- 日期：2026-10-20
+- 日期：2026-10-20；最终结论更新于 2026-10-21
 - 范围：在**当前 Linux 环境**中评估 `slugcatpet` 是否能直接运行、作为桌面宠物使用，以及需要哪些修改。
-- 性质：静态分析 + 当前环境实测；**本次不修改源码**。
+- 性质：移植前静态分析 + 当时环境实测；**本文件保留历史判断，实际实施结果见文末“最终结论”**。
 
-## 1. 结论摘要
+> **最终结论（2026-10-21）：** 本项目已选择并完成**原生 Wayland**路线，而不是当时建议的 X11/XWayland 最短路线。单全屏 overlay + 动态输入区域、KWin JS/DBus 桥、全局光标读取、Qt 6.12 pointer-warp 光标写入、焦点恢复、Linux 打包、KWin 持久安装、desktop/图标和 Linux/Windows CI 均已实现。仍待完成的是真实猫行为、Rain World 全屏、多输出逃逸和注销登录等最终人工验收；详见 `REMAINING_WORK.md`、`PHASE5_CURSOR_WRITE.md` 和 `PHASE5_PACKAGING.md`。
+
+## 1. 当时的结论摘要
 
 **当前源码不能在 Linux 上“开箱即用”地作为桌面宠物使用。**
 
@@ -497,3 +499,24 @@ Linux 上报告“已过期”，但：
 - `QWindow.setFlag(Qt.WindowTransparentForInput, bool)` 存在。
 - 在 Wayland/XWayland 下切换 flag 不崩溃；实际穿透效果仍需完整 GUI 实测。
 - Qt Wayland 源码中，`setMask` 会更新 `wl_surface` 的 input region；X11 的 `setMask` 设置的是 bounding shape，二者语义不同。
+
+---
+
+## 11. 最终结论与实施结果
+
+| 层面 | 移植前判断 | 最终状态 |
+| --- | --- | --- |
+| 单全屏透明窗口 + 鼠标穿透 | P0 阻塞 | 已用单 overlay + 动态 `QWindow.setMask()` 输入区域解决 |
+| 窗口定位/置顶 | 原生 Wayland 不可用 | KWin JS 脚本固定到目标输出并 `keepAbove` |
+| 全局光标读取 | 不可用 | KWin `workspace.cursorPosChanged` → DBus → Python |
+| 全局光标写入 | 当时认为不可行 | Qt 6.12 `QCursor.setPos()` / `wp_pointer_warp_v1` + 临时捕获面，best-effort |
+| 全屏检测/挡雨窗口 | Windows 专用 | KWin 活动窗口/窗口快照 → DBus |
+| 全局热键 | Windows 专用 | KWin `registerShortcut`，KGlobalAccel 检查冲突 |
+| 开机自启 | 无 Linux 方案 | XDG autostart，支持源码和打包启动器 |
+| Linux 打包 | 无现成方案 | `packaging/linux/install.sh` + uv tool + desktop/图标 |
+| KWin 脚本持久安装 | 未实现 | 设置页显式启用，写入 `kwinrc`，`KPackageStructure` 修复 |
+| CI/文档 | 无 | Linux/Windows 单元/静态 CI，README 和 Linux 故障排查 |
+
+实际路线与当时建议不同：没有走 XWayland，而是直接实现原生 Wayland，并用 KWin 特权脚本补齐普通客户端缺失的能力。代价是 Plasma/KWin 之外的合成器会降级，且光标写入仍不是系统级 pointer lock。
+
+剩余最终人工验收和已知限制见 `REMAINING_WORK.md`；实现细节见 `PHASE5_CURSOR_WRITE.md`、`PHASE5_PACKAGING.md`。

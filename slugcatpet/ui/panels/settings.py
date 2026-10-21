@@ -541,6 +541,24 @@ class SettingsWindow(QWidget):
                 hint.setWordWrap(True)
                 hint.setStyleSheet("color: palette(mid);")
                 v.addWidget(hint)
+            if hasattr(backend, "integration_state"):
+                state = backend.integration_state()
+                chk = self._check(v, "settings_kwin_persistent", state.installed and state.enabled, None)
+                chk.toggled.connect(lambda on, c=chk: self._on_kwin_integration(c, on))
+                if not state.installed:
+                    status_key = "settings_kwin_persistent_missing"
+                elif state.enabled:
+                    status_key = "settings_kwin_persistent_on"
+                else:
+                    status_key = "settings_kwin_persistent_off"
+                status = QLabel(t(status_key))
+                status.setWordWrap(True)
+                status.setStyleSheet("color: palette(mid);")
+                v.addWidget(status)
+                persistent_hint = QLabel(t("settings_kwin_persistent_hint"))
+                persistent_hint.setWordWrap(True)
+                persistent_hint.setStyleSheet("color: palette(mid);")
+                v.addWidget(persistent_hint)
             btn = QPushButton(t("settings_kwin_reload"))
             btn.clicked.connect(self._reload_kwin)
             v.addWidget(btn)
@@ -549,6 +567,19 @@ class SettingsWindow(QWidget):
         backend = getattr(self._window, "desktop_backend", None)
         if backend is not None:
             backend.reload()
+        QTimer.singleShot(0, self._rebuild)
+
+    def _on_kwin_integration(self, chk, on):
+        backend = getattr(self._window, "desktop_backend", None)
+        if backend is None or not hasattr(backend, "set_integration_enabled"):
+            return
+        ok = backend.set_integration_enabled(bool(on))
+        state = backend.integration_state()
+        actual = state.installed and state.enabled if on else not state.enabled
+        if not ok or not actual:
+            chk.blockSignals(True)
+            chk.setChecked(not on)
+            chk.blockSignals(False)
         QTimer.singleShot(0, self._rebuild)
 
     @staticmethod
