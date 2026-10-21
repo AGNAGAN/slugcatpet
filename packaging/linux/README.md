@@ -55,7 +55,8 @@ startup.
 On Wayland the cursor grab uses a temporary fullscreen capture surface and
 Qt's `wp_pointer_warp_v1` support. It is **best-effort**, not a system-level
 pointer lock. Clicking left or right releases the grab; the release click is
-consumed and does not click through. See
+consumed and does not click through. Sustained movement to another output also
+ends the grab and leaves the pointer on that output. See
 [`ai-docs/PHASE5_CURSOR_WRITE.md`](../../ai-docs/PHASE5_CURSOR_WRITE.md) for
 the full architecture and known limits.
 

@@ -33,7 +33,7 @@ python run_slugcatpet.py
 
 KWin 集成（置顶、全屏检测、挡雨窗口、全局热键）在设置 → **Wayland / KWin** 中显式勾选「登录后自动加载 KWin 脚本」。勾选后才会把脚本装到 `~/.local/share/kwin/scripts/slugcatpet` 并修改 `kwinrc`；当前会话始终有运行时脚本。GNOME/Sway 可以使用，但上述能力会降级。
 
-Wayland 的光标抢取是 **best-effort**，不是系统级锁定；左/右键单击会解除，详细限制见 [`ai-docs/PHASE5_CURSOR_WRITE.md`](ai-docs/PHASE5_CURSOR_WRITE.md)。安装/卸载和故障排查见 [`packaging/linux/README.md`](packaging/linux/README.md)。
+Wayland 的光标抢取是 **best-effort**，不是系统级锁定；左/右键单击会解除，指针持续移到其他输出时也会结束抢取并留在新输出。详细限制见 [`ai-docs/PHASE5_CURSOR_WRITE.md`](ai-docs/PHASE5_CURSOR_WRITE.md)。安装/卸载和故障排查见 [`packaging/linux/README.md`](packaging/linux/README.md)。
 
 ## 皮肤
 
@@ -90,7 +90,7 @@ Launch **SlugcatPet** from the application menu, or run `slugcatpet`. The first 
 
 Enable the KWin integration explicitly in Settings → **Wayland / KWin** → **Load KWin script at login**. That installs the script to `~/.local/share/kwin/scripts/slugcatpet` and updates `kwinrc`; the current session always uses a runtime script. GNOME and Sway work in a degraded mode without topmost, fullscreen detection, rain shelters, or global hotkeys.
 
-Cursor grabbing on Wayland is **best-effort**, not a system-level pointer lock; left/right click releases it. See [`ai-docs/PHASE5_CURSOR_WRITE.md`](ai-docs/PHASE5_CURSOR_WRITE.md) for limitations and [`packaging/linux/README.md`](packaging/linux/README.md) for install/uninstall and troubleshooting.
+Cursor grabbing on Wayland is **best-effort**, not a system-level pointer lock; left/right click releases it, and sustained movement to another output ends the grab and leaves the pointer there. See [`ai-docs/PHASE5_CURSOR_WRITE.md`](ai-docs/PHASE5_CURSOR_WRITE.md) for limitations and [`packaging/linux/README.md`](packaging/linux/README.md) for install/uninstall and troubleshooting.
 
 ## Skins
 
