@@ -78,6 +78,48 @@ class CursorHijackDriverTests(unittest.TestCase):
         hijack.release()
         self.assertFalse(hijack.active)
 
+    def test_cursor_leaving_target_output_releases_before_setpos(self):
+        state = {"inside": True}
+        moves = []
+        hijack = CursorHijack(
+            1,
+            2,
+            10,
+            10,
+            mode="hold",
+            cursor_inside=lambda: state["inside"],
+            setpos=lambda x, y: moves.append((x, y)),
+            clip=lambda x, y: False,
+            unclip=lambda: None,
+            busy_cursor=lambda: None,
+            restore_cursor=lambda: None,
+        )
+        self.assertTrue(hijack.update())
+        state["inside"] = False
+        self.assertFalse(hijack.update())
+        self.assertFalse(hijack.active)
+        self.assertEqual(moves, [(1.0, 2.0)])
+
+    def test_cursor_starting_outside_gets_a_short_grace(self):
+        hijack = CursorHijack(
+            1,
+            2,
+            10,
+            10,
+            mode="hold",
+            cursor_inside=lambda: False,
+            setpos=lambda x, y: None,
+            clip=lambda x, y: False,
+            unclip=lambda: None,
+            busy_cursor=lambda: None,
+            restore_cursor=lambda: None,
+        )
+        for _ in range(20):
+            self.assertTrue(hijack.update())
+        self.assertTrue(hijack.active)
+        self.assertFalse(hijack.update())
+        self.assertFalse(hijack.active)
+
     def test_left_or_right_click_releases_after_initial_release(self):
         state = {"down": True}
         hijack = CursorHijack(

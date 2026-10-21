@@ -108,7 +108,8 @@ class CursorHijack:
 
     默认走 Win32 的 ``ClipCursor`` / ``SetCursorPos``。Wayland 下由调用方传入
     ``setpos`` 等回调，使用 Qt 的 pointer-warp 实现；此时 ``clip`` 返回 False，
-    状态机自动退化为逐 tick 重新定位。
+    状态机自动退化为逐 tick 重新定位。``cursor_inside`` 用于 Wayland 多输出
+    逃逸检测，返回 False 时释放劫持，避免把指针拉回目标输出。
     """
 
     def __init__(
@@ -132,6 +133,7 @@ class CursorHijack:
         busy_cursor=None,
         restore_cursor=None,
         button_down=None,
+        cursor_inside=None,
         on_release=None,
     ):
         custom_write = setpos is not None
@@ -141,6 +143,9 @@ class CursorHijack:
         self._busy_cursor = busy_cursor or _set_busy_cursor
         self._restore_cursor = restore_cursor or _restore_cursors
         self._button_down = button_down or _button_down
+        self._cursor_inside = cursor_inside
+        self._inside_seen = False
+        self._outside_ticks = 0
         self._on_release = on_release
         self.mock = bool(mock) or (not _IS_WIN and not custom_write)
         self.x = float(dev_x)
@@ -182,6 +187,22 @@ class CursorHijack:
     def update(self) -> bool:
         if not self.active:
             return False
+        if self._cursor_inside is not None:
+            # Wayland 的捕获面只覆盖目标输出；用户把指针移到其他输出后，
+            # 继续 setpos 会把他拉回来。检测到逃逸就立即释放；如果一开始
+            # 指针就在别的输出，给捕获面约 0.5 秒取得指针焦点，仍失败则放弃。
+            try:
+                inside = bool(self._cursor_inside())
+            except Exception:
+                inside = True
+            if inside:
+                self._inside_seen = True
+                self._outside_ticks = 0
+            else:
+                self._outside_ticks += 1
+                if self._inside_seen or self._outside_ticks > 20:
+                    self.release()
+                    return False
         if self._wait_buttons:
             if not self._button_down():
                 self._wait_buttons = False

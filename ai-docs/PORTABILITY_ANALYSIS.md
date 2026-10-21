@@ -4,7 +4,7 @@
 - 范围：在**当前 Linux 环境**中评估 `slugcatpet` 是否能直接运行、作为桌面宠物使用，以及需要哪些修改。
 - 性质：移植前静态分析 + 当时环境实测；**本文件保留历史判断，实际实施结果见文末“最终结论”**。
 
-> **最终结论（2026-10-21）：** 本项目已选择并完成**原生 Wayland**路线，而不是当时建议的 X11/XWayland 最短路线。单全屏 overlay + 动态输入区域、KWin JS/DBus 桥、全局光标读取、Qt 6.12 pointer-warp 光标写入、焦点恢复、Linux 打包、KWin 持久安装、desktop/图标和 Linux/Windows CI 均已实现。仍待完成的是真实猫行为、Rain World 全屏、多输出逃逸和注销登录等最终人工验收；详见 `REMAINING_WORK.md`、`PHASE5_CURSOR_WRITE.md` 和 `PHASE5_PACKAGING.md`。
+> **最终结论（2026-10-21）：** 本项目已选择并完成**原生 Wayland**路线，而不是当时建议的 X11/XWayland 最短路线。单全屏 overlay + 动态输入区域、KWin JS/DBus 桥、全局光标读取、Qt 6.12 pointer-warp 光标写入、焦点恢复、多输出逃逸、Linux 打包、KWin 持久安装、desktop/图标和 Linux/Windows CI 均已实现。仍待完成的是真实猫行为、Rain World 全屏和注销登录等最终人工验收；详见 `REMAINING_WORK.md`、`PHASE5_CURSOR_WRITE.md` 和 `PHASE5_PACKAGING.md`。
 
 ## 1. 当时的结论摘要
 

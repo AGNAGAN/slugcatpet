@@ -89,6 +89,7 @@ class CursorCaptureWindow(QWidget):
     """
 
     clicked = Signal()
+    pointer_left = Signal()
 
     def mousePressEvent(self, ev):
         if ev.button() in (Qt.MouseButton.LeftButton, Qt.MouseButton.RightButton):
@@ -96,6 +97,10 @@ class CursorCaptureWindow(QWidget):
             self.clicked.emit()
             return
         super().mousePressEvent(ev)
+
+    def leaveEvent(self, ev):
+        self.pointer_left.emit()
+        super().leaveEvent(ev)
 
 
 def _clamp_to_bounds(o, WL, HL, min_rad=0.0):
@@ -432,6 +437,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             win.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
             win.setWindowTitle(CURSOR_CAPTURE_TITLE)
             win.clicked.connect(self.stop_cursor_hijack)
+            win.pointer_left.connect(self.stop_cursor_hijack)
             self._cursor_capture_window = win
         try:
             win.setScreen(scr)

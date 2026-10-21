@@ -99,7 +99,16 @@ class EffectsMixin:
             "setpos": self._wayland_cursor_writer(dpr, target, origin),
             "busy_cursor": lambda: self._wayland_busy_cursor(True),
             "restore_cursor": lambda: self._wayland_busy_cursor(False),
+            "cursor_inside": self._cursor_inside_overlay,
         }
+
+    def _cursor_inside_overlay(self):
+        """指针是否仍在目标输出内；桥不可用时不要误判为逃逸。"""
+        get = getattr(self._backend, "cursor_global", None)
+        pos = get() if callable(get) else None
+        if pos is None:
+            return True
+        return self.overlay_rect().contains(QPoint(int(pos[0]), int(pos[1])))
 
     def _cursor_hijack_released(self, token):
         if getattr(self, "_cursor_capture_owner", None) is not token:

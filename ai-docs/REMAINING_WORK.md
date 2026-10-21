@@ -1,9 +1,9 @@
 # 原生 Wayland 迁移剩余工作
 
-- 日期：2026-10-20
+- 日期：2026-10-21
 - 依据：`PHASE0_RESULTS.md`、`PHASE1_RESULTS.md`、`PHASE2_RESULTS.md`、`PHASE3_RESULTS.md`、`PHASE4_RESULTS.md`、`PHASE5_CURSOR_WRITE.md`、`PHASE5_PACKAGING.md` 与当前代码审计
 - 用途：记录 Phase 0–4 之后仍未完成的工作，作为 Phase 5 的执行清单
-- 结论：**Phase 0–4 已完成；Phase 5 的 Wayland/KWin 光标写入、焦点保持、左/右键解除、Linux 打包、KWin 脚本持久安装/启用、desktop/图标、Linux CI 和 README 已完成。剩余最终验收（真实猫行为、Rain World 全屏、多输出逃逸、注销登录）和 Windows 完整行为回归。**
+- 结论：**Phase 0–4 已完成；Phase 5 的 Wayland/KWin 光标写入、焦点保持、左/右键解除、多输出逃逸、Linux 打包、KWin 脚本持久安装/启用、desktop/图标、Linux CI 和 README 已完成。剩余最终验收（真实猫行为、Rain World 全屏、注销登录）和 Windows 完整行为回归。**
 
 ---
 
@@ -16,7 +16,7 @@
 | Phase 2 | 已完成（第一版） | UI 嵌入 overlay、局部坐标、菜单/卡片/提示 |
 | Phase 3 | 已完成 | 全屏、窗口快照、热键、冲突提示、设置页状态与重载；持久安装/启用在 Phase 5 完成 |
 | Phase 4 | 已完成 | XDG 自启、输出选择、光标只读/写入能力、托盘锚点、transient 设置/音乐窗；desktop/图标在 Phase 5 完成 |
-| Phase 5 | 接近完成 | 光标写入、焦点/点击、Linux 打包、KWin 持久安装、desktop/图标、CI、README 已完成；最终人工验收和 Windows 行为回归待做 |
+| Phase 5 | 接近完成 | 光标写入、焦点/点击、多输出逃逸、Linux 打包、KWin 持久安装、desktop/图标、CI、README 已完成；最终人工验收和 Windows 行为回归待做 |
 
 ---
 
@@ -163,7 +163,7 @@
 - [x] overlay 布局测试：geometry、持久化迁移、clamp。
 - [x] KWin 持久安装测试：kwinrc 文本、安装/卸载、metadata（`test_kwin_install.py`）。
 - [x] KWin 集成本机脚本：`tools/kwin_integration_check.py`（临时安装/启用、`isScriptLoaded`、恢复配置）。
-- [x] 现有 offscreen 单元回归保持通过（44 个测试）。
+- [x] 现有 offscreen 单元回归保持通过（46 个测试）。
 - [ ] 手动验收：点击穿透、拖猫、右键菜单、HUD/标签栏、托盘、全屏隐藏、音频。
 - [ ] Windows 行为回归；`tests/behavior_check.py check` 需要本机 Rain World 素材，CI 只跑单元/静态检查。
 
@@ -179,7 +179,7 @@
 - [x] 焦点保持：overlay 首次映射和捕获面激活后，KWin 最终活动窗口恢复为原窗口。
 - [x] 真实左/右键解除：uinput 注入 `BTN_LEFT`/`BTN_RIGHT`，按下后捕获面隐藏、忙碌光标恢复、劫持清空。
 - [ ] 用真实猫行为（石头命中、升天、矛、Pyro/Riv 抓取）逐项验收。
-- [ ] 多输出逃逸验收：指针移到另一输出后确认降级不崩溃、不把光标拉回。
+- [x] 多输出逃逸验收：uinput 持续移动指针到 eDP-1，捕获面 `leaveEvent` 结束劫持，光标留在 `(569,354)`，没有被拉回。短促移动仍可能被 40 Hz 重定位抵消。
 - [ ] Rain World 全屏 + 光标劫持组合验收。
 
 ### 4.4 文档与 CI
@@ -217,7 +217,7 @@
 
 1. Phase 0–4 已完成；Phase 5 的光标写入、焦点/点击、Linux 打包、KWin 持久安装、desktop/图标、CI、README 已完成。
 2. 在干净用户环境跑一次完整安装，并注销/登录验证持久脚本与自启。
-3. 用 Rain World 实际全屏窗口、真实猫行为和多输出逃逸做最终验收。
+3. 用 Rain World 实际全屏窗口和真实猫行为做最终验收；多输出逃逸已用 uinput 验证。
 4. 清理 Phase 2 遗留的 `Qt.Popup` 弹层、`SetupPanel` transient parent 和退出段错误。
 5. 按阶段提交，`pyproject.toml` / `uv.lock` 的用户改动单独处理。
 
@@ -230,8 +230,8 @@
 - 最近一次自动检查结果：
   - `uv run ruff check .`：通过
   - `uv run ruff format --check .`：通过
-  - `uv run python -m unittest discover -s tests`：44 个测试通过
+  - `uv run python -m unittest discover -s tests`：46 个测试通过
   - `uv run python tools/params_doc.py --check`：通过
   - `uv run python tools/kwin_integration_check.py`：PASS
-- 本机 KWin 验收：临时捕获面 + `QCursor.setPos()` 已能把光标从 `(700,1500)` 移到 `(569,1256)`；忙碌样式状态为 true，释放后恢复。
+- 本机 KWin 验收：临时捕获面 + `QCursor.setPos()` 已能把光标从 `(700,1500)` 移到 `(569,1256)`；忙碌样式状态为 true，释放后恢复。uinput 持续移动到 eDP-1 时捕获面 `leaveEvent` 结束劫持，光标停在 `(569,354)`。
 - 持久 KWin 脚本：`metadata.json` 的 `KPackageStructure: KWin/Script` 修复后，`reconfigure` 能在 Plasma 6.8 中加载 `slugcatpet`；运行时脚本使用 `slugcatpet-runtime`，停用持久插件不会卸载当前会话。

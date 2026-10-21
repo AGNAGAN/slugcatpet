@@ -101,7 +101,7 @@ KPackageStructure ... does not match requested format "KWin/Script"
 
 新增：
 
-- `.github/workflows/linux.yml`：ruff、格式、44 个单元测试、`params_doc --check`、导入冒烟、KWin 脚本渲染后 `node --check`；
+- `.github/workflows/linux.yml`：ruff、格式、46 个单元测试、`params_doc --check`、导入冒烟、KWin 脚本渲染后 `node --check`；
 - `.github/workflows/windows.yml`：ruff、格式、单元测试、`params_doc --check`、导入冒烟；
 - README 增加 Linux 安装、KWin 集成、降级模式、光标限制和故障排查入口；
 - `packaging/linux/README.md` 给出安装/卸载、KWin 状态检查、光标/输入/全屏排查。
@@ -121,7 +121,7 @@ python tests/behavior_check.py check
 ```text
 uv run ruff check .                         通过
 uv run ruff format --check .                通过（292 files）
-uv run python -m unittest discover -s tests 44 tests OK
+uv run python -m unittest discover -s tests 46 tests OK
 uv run python tools/params_doc.py --check   通过
 bash -n packaging/linux/install.sh          通过
 bash -n packaging/linux/uninstall.sh        通过

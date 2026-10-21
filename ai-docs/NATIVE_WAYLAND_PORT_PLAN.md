@@ -10,7 +10,7 @@
 - Phase 2 状态：**已完成（第一版）**；UI 嵌入、局部坐标、卡片/菜单/提示与坐标迁移见 `ai-docs/PHASE2_RESULTS.md`
 - Phase 3 状态：**已完成**；全屏、窗口快照、全局热键、冲突提示和设置页状态已实测，持久安装/启用在 Phase 5 完成；见 `ai-docs/PHASE3_RESULTS.md`
 - Phase 4 状态：**已完成**；XDG 自启、输出选择、光标只读/写入能力、托盘锚点与 transient 设置/音乐窗已实测，desktop/图标在 Phase 5 完成；见 `ai-docs/PHASE4_RESULTS.md`
-- Phase 5 状态：**接近完成**；Wayland/KWin 光标写入、焦点保持、左/右键解除、Linux 打包、KWin 持久安装/启用、desktop/图标、Linux/Windows CI 和 README 已完成；剩余最终人工验收；见 `ai-docs/PHASE5_CURSOR_WRITE.md`、`ai-docs/PHASE5_PACKAGING.md`
+- Phase 5 状态：**接近完成**；Wayland/KWin 光标写入、焦点保持、左/右键解除、多输出逃逸、Linux 打包、KWin 持久安装/启用、desktop/图标、Linux/Windows CI 和 README 已完成；剩余真实猫行为、Rain World 全屏和注销登录验收；见 `ai-docs/PHASE5_CURSOR_WRITE.md`、`ai-docs/PHASE5_PACKAGING.md`
 - 剩余工作清单：`ai-docs/REMAINING_WORK.md`
 
 ---
