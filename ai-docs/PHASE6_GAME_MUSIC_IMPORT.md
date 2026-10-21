@@ -71,6 +71,7 @@
 - 本机提取 `RW_8 - Sundown`：输出 1,676,475 字节 `.ogg`。
 - 本机提取仅资源包曲目 `RWTW_WeaverAura`、`WMPA_Calcification`：分别输出约 15 MB、13 MB `.wav`，验证未知 setup 兜底。
 - offscreen 对话框冒烟：列表加载、全选、搜索过滤、后台导入信号、线程退出均正常。
+- GitHub Actions Linux / Windows：提交 `511fdc7` 成功。
 
 ## 6. 限制
 
