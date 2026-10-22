@@ -1,6 +1,6 @@
 # 原生 Wayland 迁移剩余工作
 
-- 日期：2026-10-21
+- 日期：2026-10-22
 - 依据：`PHASE0_RESULTS.md`、`PHASE1_RESULTS.md`、`PHASE2_RESULTS.md`、`PHASE3_RESULTS.md`、`PHASE4_RESULTS.md`、`PHASE5_CURSOR_WRITE.md`、`PHASE5_PACKAGING.md` 与当前代码审计
 - 用途：记录 Phase 0–4 之后仍未完成的工作，作为 Phase 5 及后续功能的执行清单
 - 结论：**Phase 0–4 已完成；Phase 5 的 Wayland/KWin 光标写入、焦点保持、左/右键解除、多输出逃逸、Linux 打包、KWin 脚本持久安装/启用、desktop/图标、Linux CI 和 README 已完成。后续新增的 Rain World 配乐选择性导入已实现并通过逻辑/提取测试。剩余最终验收（真实猫行为、Rain World 全屏、注销登录）和 Windows 完整行为回归。**
@@ -258,3 +258,4 @@
 - 输出切换实测：HDMI-A-1（DPR 1.5）→ eDP-1（DPR 2.0）→ HDMI-A-1（DPR 1.5），持久 KWin 脚本启用时仍能正确切换；自由长矛可在运行场景中生成并下落，不再触发输入区域 traceback。
 - 持久 KWin 脚本：`metadata.json` 的 `KPackageStructure: KWin/Script` 修复后，`reconfigure` 能在 Plasma 6.8 中加载 `slugcatpet`；运行时脚本使用 `slugcatpet-runtime`，停用持久插件不会卸载当前会话。
 - 2026-10-21 已合并上游 v1.3.1（`bd17e9f`，合并提交 `6055565`）：引入交通策略重构、携带/空间系统、果实再生、物品持久化、雨循环表盘提示与 `Ctrl+Alt+R` 快捷键。合并后 56 个单元测试、Ruff、格式检查和参数文档检查均通过；本机 `cursor_play` 的物理状态逐 tick 与上游基线一致，渲染帧哈希仍受平台差异影响。
+- 2026-10-22 已合并上游 v1.3.2（`d48f882`，合并提交 `10fc9d8`）：音效资源包读取缓存与内存回收、挡雨窗口判定、室内淡雨、猫携带逻辑修正。合并后 56 个单元测试、Ruff、格式检查和参数文档检查均通过；`items`、`env`、`cursor_play` 的物理状态逐 tick 与基线一致，渲染帧哈希仍受平台差异影响。
