@@ -1,6 +1,8 @@
 """从用户本机 Rain World 安装提取图集和场景曲到 ~/.slugcatpet/assets。"""
 
 from __future__ import annotations
+import functools
+import gc
 import re
 import sys
 from pathlib import Path
@@ -150,6 +152,20 @@ def extract_atlases(install: Path, dest: Path | None = None) -> Path:
     return dest
 
 
+def _frees_unity(fn):
+    """UnityPy 读出的对象互相成环，不立即回收的话整个资源包（音效包上 G）会一直占着内存。"""
+
+    @functools.wraps(fn)
+    def wrap(*a, **k):
+        try:
+            return fn(*a, **k)
+        finally:
+            gc.collect()
+
+    return wrap
+
+
+@_frees_unity
 def _extract_named(UnityPy, res: Path, names, dest: Path) -> dict[str, set[str]]:
     """从资源文件取出这些图集的贴图与帧表，返回 {名: {"png", "map"}}。"""
     dest.mkdir(parents=True, exist_ok=True)
@@ -184,27 +200,40 @@ RAIN_SOUNDS = (
     "click1A",
 )
 _SFX_BUNDLES = ("loadedsoundeffects",)
+_TRIED = ".tried"  # 读过资源包仍取不出的片名（首行是 ogg 格式版本），同一版本下不再重读整包
 
 
-def rain_sounds_dir() -> Path:
-    return assets_dir() / "rain"
+def _tried(d: Path) -> set[str]:
+    try:
+        ver, *names = (d / _TRIED).read_text(encoding="utf-8").splitlines()
+    except (OSError, ValueError):
+        return set()
+    return set(names) if ver == str(_ogg_format()) else set()
 
 
-def rain_sounds_missing() -> list[str]:
-    return [n for n in RAIN_SOUNDS if not (rain_sounds_dir() / f"{n}.wav").is_file()]
+def _mark_tried(d: Path, names) -> None:
+    names = _tried(d) | set(names)
+    try:
+        (d / _TRIED).write_text("\n".join([str(_ogg_format()), *sorted(names)]), encoding="utf-8")
+    except OSError:
+        pass
 
 
-def extract_rain_sounds(install: Path) -> list[str]:
-    """雨声循环从音效资源包取出、封装成 wav；返回这次写出的片名。"""
+def _sfx_missing(names, d: Path) -> list[str]:
+    tried = _tried(d)
+    return [n for n in names if n not in tried and not (d / f"{n}.wav").is_file()]
+
+
+def _extract_sfx(install: Path, todo, out: Path) -> list[str]:
+    """从音效资源包取出这些片段、封装成 wav；返回这次写出的片名。"""
     from .audio.fsbogg import fsb_to_wav
 
-    todo = rain_sounds_missing()
     if not todo:
         return []
-    out = rain_sounds_dir()
+    install = Path(install)
     out.mkdir(parents=True, exist_ok=True)
     done = []
-    for name, fsb in _bundle_clips(Path(install), todo, _SFX_BUNDLES).items():
+    for name, fsb in _bundle_clips(install, todo, _SFX_BUNDLES).items():
         try:
             data = fsb_to_wav(fsb)
         except ValueError:
@@ -213,7 +242,22 @@ def extract_rain_sounds(install: Path) -> list[str]:
         tmp.write_bytes(data)
         tmp.replace(out / f"{name}.wav")
         done.append(name)
+    if _bundles_present(install, _SFX_BUNDLES):
+        _mark_tried(out, set(todo) - set(done))
     return done
+
+
+def rain_sounds_dir() -> Path:
+    return assets_dir() / "rain"
+
+
+def rain_sounds_missing() -> list[str]:
+    return _sfx_missing(RAIN_SOUNDS, rain_sounds_dir())
+
+
+def extract_rain_sounds(install: Path) -> list[str]:
+    """雨声循环；返回这次写出的片名。"""
+    return _extract_sfx(install, rain_sounds_missing(), rain_sounds_dir())
 
 
 DIAL_SOUNDS = (
@@ -236,29 +280,12 @@ def dial_sounds_dir() -> Path:
 
 
 def dial_sounds_missing() -> list[str]:
-    return [n for n in DIAL_SOUNDS if not (dial_sounds_dir() / f"{n}.wav").is_file()]
+    return _sfx_missing(DIAL_SOUNDS, dial_sounds_dir())
 
 
 def extract_dial_sounds(install: Path) -> list[str]:
-    """表盘的音效从音效资源包取出、封装成 wav；返回这次写出的片名。"""
-    from .audio.fsbogg import fsb_to_wav
-
-    todo = dial_sounds_missing()
-    if not todo:
-        return []
-    out = dial_sounds_dir()
-    out.mkdir(parents=True, exist_ok=True)
-    done = []
-    for name, fsb in _bundle_clips(Path(install), todo, _SFX_BUNDLES).items():
-        try:
-            data = fsb_to_wav(fsb)
-        except ValueError:
-            continue
-        tmp = out / f"{name}.wav.part"
-        tmp.write_bytes(data)
-        tmp.replace(out / f"{name}.wav")
-        done.append(name)
-    return done
+    """表盘的音效；返回这次写出的片名。"""
+    return _extract_sfx(install, dial_sounds_missing(), dial_sounds_dir())
 
 
 def rain_atlas_missing() -> bool:
@@ -283,13 +310,22 @@ _AUDIO_BUNDLES = ("music_songs",)
 _LOOSE_AUDIO = (("music/songs", ".mp3"),)
 
 
+def _bundle_path(install: Path, bundle: str) -> Path:
+    return install / _STREAMING / "AssetBundles" / bundle
+
+
+def _bundles_present(install: Path, bundles) -> bool:
+    return any(_bundle_path(install, b).is_file() for b in bundles)
+
+
+@_frees_unity
 def _bundle_clips(install: Path, names, bundles=_AUDIO_BUNDLES) -> dict[str, bytes]:
     import UnityPy
     from UnityPy.helpers.ResourceReader import get_resource_data
 
     want, got = set(names), {}
     for bundle in bundles:
-        path = install / _STREAMING / "AssetBundles" / bundle
+        path = _bundle_path(install, bundle)
         if not path.is_file() or not want - got.keys():
             continue
         for obj in UnityPy.load(str(path)).objects:
@@ -319,6 +355,7 @@ def is_game_install(path: Path) -> bool:
     )
 
 
+@_frees_unity
 def _bundle_decoded(install: Path, names) -> dict[str, tuple[str, bytes]]:
     """少数配乐使用未知 Vorbis setup 时，退回 UnityPy 解码成 wav。"""
     import UnityPy
@@ -326,7 +363,7 @@ def _bundle_decoded(install: Path, names) -> dict[str, tuple[str, bytes]]:
     want = set(names)
     if not want:
         return {}
-    path = Path(install) / _STREAMING / "AssetBundles" / _AUDIO_BUNDLES[0]
+    path = _bundle_path(Path(install), _AUDIO_BUNDLES[0])
     if not path.is_file():
         return {}
     got: dict[str, tuple[str, bytes]] = {}
@@ -348,11 +385,12 @@ def _bundle_decoded(install: Path, names) -> dict[str, tuple[str, bytes]]:
     return got
 
 
+@_frees_unity
 def _bundle_clip_names(install: Path) -> set[str]:
     """只读取资源包里的 AudioClip 名称，供选择窗口列出全部配乐。"""
     import UnityPy
 
-    path = Path(install) / _STREAMING / "AssetBundles" / _AUDIO_BUNDLES[0]
+    path = _bundle_path(Path(install), _AUDIO_BUNDLES[0])
     if not path.is_file():
         return set()
     names: set[str] = set()
@@ -429,7 +467,12 @@ def _music_current(d: Path) -> bool:
 
 def music_missing(names, dirs=None) -> list[str]:
     dirs = [d for d in (music_asset_dirs() if dirs is None else dirs) if _music_current(d)]
-    return [n for n in names if not any((d / (n + ext)).is_file() for d in dirs for ext in (".ogg", ".mp3"))]
+    tried = set().union(*(_tried(d) for d in dirs))
+    return [
+        n
+        for n in names
+        if n not in tried and not any((d / (n + ext)).is_file() for d in dirs for ext in (".ogg", ".mp3"))
+    ]
 
 
 def prune_music(keep) -> None:
@@ -484,9 +527,11 @@ def extract_music(
             except OSError:
                 pass
     rest = [n for n in todo if n not in blobs]
+    read = False
     if rest:
         try:
             clips = _bundle_clips(install, rest)
+            read = _bundles_present(install, _AUDIO_BUNDLES)
         except Exception:
             clips = {}
         for name, fsb in clips.items():
@@ -523,6 +568,8 @@ def extract_music(
                 pass
     if out_dir is None:
         (out / _MUSIC_MARK).write_text(str(_ogg_format()), encoding="ascii")
+        if read:
+            _mark_tried(out, set(rest) - blobs.keys())
     return written
 
 

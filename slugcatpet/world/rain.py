@@ -58,9 +58,9 @@ BAKE_STRIP = 64  # 后台合成时每段的行数
 CURTAIN_W, CURTAIN_H = 256, 512  # 贴图大小（逻辑 px）
 CURTAIN_LEVELS = 12  # 按有效列占比分档
 # 普通、暴雨、急雨三层：暗、亮峰值不透明度，纵向模糊半径（逻辑 px）；
-# 暴雨那层屋檐下也画（打折），急雨只在露天，拉得更长，像糊住的瀑布
+# 急雨只在露天，拉得更长，像糊住的瀑布
 CURTAIN = ((80, 66, 10), (165, 130, 10), (235, 195, 24))
-SHELTER_K = 0.375  # 屋檐下雨幕的浓度比例
+SHELTER_K = 0.375  # 屋檐下和窗口里的淡雨：雨丝与普通、暴雨两层雨幕按这个比例打折
 VEIL_RGB = (128, 136, 148)  # 露天暴雨的水幕颜色，背景被雨糊成一片
 VEIL_MAX = 0.3
 DIM_RGB = (19, 19, 21)  # 暴雨时猫和物品压暗到的颜色
@@ -297,8 +297,8 @@ class Rain:
 
     @property
     def shows(self) -> bool:
-        """屏上有没有雨可画。"""
-        return self.intensity > 0.0 and bool(self.runs)
+        """屏上有没有雨可画；全被窗口挡住时也有淡雨。"""
+        return self.intensity > 0.0 and self._WL > 0.0
 
     def set_target(self, i):
         self.target = clampf(float(i), 0.0, I_MAX)
@@ -627,24 +627,29 @@ class Rain:
     def _parts_for(self, slot, g, bucket):
         """slot 在画面强度 g 下的各层清单：(种类, 层, 档, 不透明度档)。"""
         dim = _dim_alpha(g) / 255.0
-        heavy = (curtain_level(inv_lerp(0.4, 0.75, g)), inv_lerp(0.4, 0.85, g))  # 暴雨那层
+        fade = 1.0 - STREAK_FADE * inv_lerp(0.5, 0.95, g)
+        streaks = [("s", k, bucket, layer_opacity(k, g) * fade) for k in range(len(LAYERS))]
+        curtains = [
+            (
+                "c",
+                0,
+                curtain_level(inv_lerp(0.0, 0.5, g)),
+                smooth(inv_lerp(0.0, 0.5, g)) ** 0.6 * (1.0 - 0.7 * inv_lerp(0.5, 0.9, g)),
+            ),
+            ("c", 1, curtain_level(inv_lerp(0.4, 0.75, g)), inv_lerp(0.4, 0.85, g)),  # 暴雨那层
+        ]
         if slot == "shelter":
-            parts = [("g", 0, 1, dim), ("c", 1, heavy[0], heavy[1] * SHELTER_K)]
+            parts = [("g", 0, 1, dim)]
+        elif slot == "indoor":
+            parts = [(kind, k, lv, op * SHELTER_K) for kind, k, lv, op in curtains + streaks]
         elif slot == "streak":
-            fade = 1.0 - STREAK_FADE * inv_lerp(0.5, 0.95, g)
-            parts = [("s", k, bucket, layer_opacity(k, g) * fade) for k in range(len(LAYERS))]
+            parts = streaks
         else:
             torrent = inv_lerp(0.55, 1.0, g)
             parts = [
                 ("g", 0, 1, dim),
                 ("v", 0, 1, VEIL_MAX * torrent),
-                (
-                    "c",
-                    0,
-                    curtain_level(inv_lerp(0.0, 0.5, g)),
-                    smooth(inv_lerp(0.0, 0.5, g)) ** 0.6 * (1.0 - 0.7 * inv_lerp(0.5, 0.9, g)),
-                ),
-                ("c", 1, *heavy),
+                *curtains,
                 ("c", 2, curtain_level(inv_lerp(0.5, 1.0, g)), torrent),
             ]
         return tuple(
@@ -694,17 +699,12 @@ class Rain:
 
     def paint_rect(self, scale, margin=0.0) -> QRect:
         """本帧雨覆盖的范围（设备 px）。"""
-        if not self.active or not self.runs:
+        if not self.active:
             return QRect()
-        if storm(visual(self.intensity)) > 0:
-            return QRectF(0.0, -margin * scale, self._WL * scale, (self._HL + margin) * scale).toAlignedRect()
-        x0 = min(r[0] for r in self.runs) - margin
-        x1 = max(r[1] for r in self.runs) + margin
-        y1 = max(r[2] for r in self.runs) + margin + 2.0
-        return QRectF(x0 * scale, -margin * scale, (x1 - x0) * scale, (y1 + margin) * scale).toAlignedRect()
+        return QRectF(0.0, -margin * scale, self._WL * scale, (self._HL + margin) * scale).toAlignedRect()
 
     def _clip_regions(self, scale):
-        """露天、屋檐下、深灰盖不到（窗口里和地面以下）三块裁剪区（设备 px），几何不变时复用。"""
+        """露天、屋檐下、淡雨（屋檐下和窗口里）、深灰盖不到（窗口里和地面以下）四块裁剪区（设备 px），几何不变时复用。"""
         if self._regions is not None and self._regions[0] == scale:
             return self._regions[1:]
 
@@ -719,11 +719,12 @@ class Rain:
         open_air = QRegion()
         for x0, x1, y in self.runs:
             open_air = open_air.united(box(x0, 0.0, x1, y))
-        dim = QRegion(box(0.0, 0.0, self._WL, self._HL))
+        screen = QRegion(box(0.0, 0.0, self._WL, self._HL))
+        dim = screen
         for x0, y0, x1, y1 in self._rects:
             dim = dim.subtracted(QRegion(box(x0, y0, x1, y1)))
         lit = QRegion(box(-self._WL, -self._HL, self._WL * 2.0, self._HL * 3.0)).subtracted(dim)
-        self._regions = (scale, open_air, dim.subtracted(open_air), lit)
+        self._regions = (scale, open_air, dim.subtracted(open_air), screen.subtracted(open_air), lit)
         return self._regions[1:]
 
     def draw(self, p, scale, scene=None):
@@ -732,7 +733,7 @@ class Rain:
             return
         i, bucket, splashes, (fx, fy) = self._frame
         g = visual(i)
-        open_air, shelter, lit = self._clip_regions(scale)
+        open_air, shelter, indoor, lit = self._clip_regions(scale)
         p.save()
         xf = p.transform()
         full = QRectF(0.0, 0.0, self._WL, self._HL)
@@ -752,6 +753,7 @@ class Rain:
             (open_air, self._layers("open", scale, 0, g)),
             (open_air, self._layers("streak", scale, bucket, g)),
             (shelter, self._layers("shelter", scale, 0, g)),
+            (indoor, self._layers("indoor", scale, bucket, g)),
         ):
             if pm is None or region.isEmpty():
                 continue

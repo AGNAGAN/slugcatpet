@@ -88,15 +88,14 @@ class Carry:
             return BACK
         return HAND
 
-    def can_take(self, carrier, rider, mode, pick=True):
-        """carrier 能不能用 mode 带上 rider：只叠一层，双方都清醒、不在水里和失重里，背者不是猫崽；
-        pick 为拾取，成年猫只有趴着、躺着时才拿得起来。"""
+    def can_take(self, carrier, rider, mode):
+        """carrier 能不能用 mode 带上 rider：只叠一层，双方都清醒、不在水里和失重里，背者不是猫崽。"""
         if carrier is rider or rider in self.links or carrier in self.links:
             return False
         if self.carrying(rider) is not None or self.carrying(carrier, mode) is not None:
             return False
         cb, rb = carrier.body, rider.body
-        if is_pup(cb) or (pick and rb.standing and not is_pup(rb)):
+        if is_pup(cb):
             return False
         for p in (carrier, rider):
             b = p.body
@@ -113,8 +112,8 @@ class Carry:
 
     # 上下
 
-    def take(self, carrier, rider, mode, pick=True):
-        if not self.can_take(carrier, rider, mode, pick):
+    def take(self, carrier, rider, mode):
+        if not self.can_take(carrier, rider, mode):
             return False
         cb, rb = carrier.body, rider.body
         rider.release_organs()
