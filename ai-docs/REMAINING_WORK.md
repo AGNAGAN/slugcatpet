@@ -165,7 +165,7 @@
 - [x] overlay 布局测试：geometry、持久化迁移、clamp。
 - [x] KWin 持久安装测试：kwinrc 文本、安装/卸载、metadata（`test_kwin_install.py`）。
 - [x] KWin 集成本机脚本：`tools/kwin_integration_check.py`（临时安装/启用、`isScriptLoaded`、恢复配置）。
-- [x] 现有 offscreen 单元回归保持通过（当前全量 56 个测试）。
+- [x] 现有 offscreen 单元回归保持通过（当前全量 58 个测试）。
 - [x] 输出切换回归：HDMI 1.5 → eDP 2.0 → HDMI 1.5，overlay/KWin origin/输入区域一致；持久插件启用时同样通过。
 - [x] 物品输入区域回归：自由长矛不再因 `ax` property 触发输入区域异常（`test_wayland_regions.py`）。
 - [x] 手动验收（用户已确认）：设置、音乐、音频、托盘、雨循环卡片、拖猫、右键菜单、溪流猫抢夺光标/点击解除、overlay 收起/恢复。
@@ -235,7 +235,7 @@
 - [x] 二级窗口搜索、勾选、全选/全不选/只选未导入
 - [x] 从散文件或 `music_songs` 资源包提取；未知 Vorbis setup 解码为 wav
 - [x] 导入到 `~/.slugcatpet/music/Rain World`，不修改游戏文件
-- [x] 8 个单元测试、全量 56 个测试、本机 266 首扫描与 3 首实际提取通过
+- [x] 8 个配乐导入单元测试、全量 58 个测试、本机 266 首扫描与 3 首实际提取通过
 - [ ] 人工验收：真实游戏目录选择、全选/部分导入、重启后列表保留、播放导入的 wav/ogg 曲目
 
 详细记录见 `ai-docs/PHASE6_GAME_MUSIC_IMPORT.md`。
@@ -250,7 +250,7 @@
 - 最近一次自动检查结果：
   - `uv run ruff check .`：通过
   - `uv run ruff format --check .`：通过
-  - `uv run python -m unittest discover -s tests`：56 个测试通过
+  - `uv run python -m unittest discover -s tests`：58 个测试通过
   - `uv run python tools/params_doc.py --check`：通过
   - `uv run python tools/kwin_integration_check.py`：PASS
   - GitHub Actions Linux/Windows：`511fdc7`、`4ce782f`、`912a0aa` 以及此前 `10428d3`、`a640bb6`、`b7b8ef6`、`a59b47d` 全部 success
@@ -259,3 +259,4 @@
 - 持久 KWin 脚本：`metadata.json` 的 `KPackageStructure: KWin/Script` 修复后，`reconfigure` 能在 Plasma 6.8 中加载 `slugcatpet`；运行时脚本使用 `slugcatpet-runtime`，停用持久插件不会卸载当前会话。
 - 2026-10-21 已合并上游 v1.3.1（`bd17e9f`，合并提交 `6055565`）：引入交通策略重构、携带/空间系统、果实再生、物品持久化、雨循环表盘提示与 `Ctrl+Alt+R` 快捷键。合并后 56 个单元测试、Ruff、格式检查和参数文档检查均通过；本机 `cursor_play` 的物理状态逐 tick 与上游基线一致，渲染帧哈希仍受平台差异影响。
 - 2026-10-22 已合并上游 v1.3.2（`d48f882`，合并提交 `10fc9d8`）：音效资源包读取缓存与内存回收、挡雨窗口判定、室内淡雨、猫携带逻辑修正。合并后 56 个单元测试、Ruff、格式检查和参数文档检查均通过；`items`、`env`、`cursor_play` 的物理状态逐 tick 与基线一致，渲染帧哈希仍受平台差异影响。
+- 2026-10-22 音乐列表改为按目录和文件名自然排序（`1, 2, …, 10, 11, …, 100`），新增 2 个回归测试，全量 58 个测试通过。

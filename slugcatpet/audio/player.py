@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import random
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -44,6 +45,24 @@ class Track:
         return self.path.parent.name
 
 
+def _natural_key(text: str) -> tuple[tuple[int, int | str], ...]:
+    """自然排序键：数字段按整数比较，文本段按大小写不敏感比较。"""
+    return tuple(
+        (0, int(part)) if part.isascii() and part.isdigit() else (1, part.casefold())
+        for part in re.split(r"(\d+)", text)
+    )
+
+
+def _track_sort_key(track: Track):
+    """先按目录、再按文件名自然排序；名称完全相同时用完整路径兜底。"""
+    return (
+        _natural_key(str(track.path.parent)),
+        _natural_key(track.path.name),
+        track.path.name.casefold(),
+        str(track.path),
+    )
+
+
 def _norm(path) -> str:
     """规范化的小写路径，用于去重和比对隐藏曲目。"""
     try:
@@ -69,7 +88,7 @@ def scan_tracks(dirs, recursive: bool = True) -> list[Track]:
             except OSError:
                 continue
     tracks = [Track(p) for p in found.values()]
-    tracks.sort(key=lambda t: (str(t.path.parent).lower(), t.path.name.lower()))
+    tracks.sort(key=_track_sort_key)
     return tracks
 
 
@@ -343,7 +362,7 @@ class MusicPlayer(QObject):
                 self._tracks.append(Track(f))
                 added += 1
         if added:
-            self._tracks.sort(key=lambda t: (str(t.path.parent).lower(), t.path.name.lower()))
+            self._tracks.sort(key=_track_sort_key)
             self._index = self._reindex_after_sort()
             self._rebuild_order()
             self.list_changed.emit()
@@ -401,7 +420,7 @@ class MusicPlayer(QObject):
             if f.suffix.lower() in AUDIO_EXTS:
                 found.append(Track(f))
         kept = [t for t in found if _norm(t.path) not in self._hidden]
-        kept.sort(key=lambda t: (str(t.path.parent).lower(), t.path.name.lower()))
+        kept.sort(key=_track_sort_key)
         cur = self.current()
         cur_key = _norm(cur.path) if cur is not None else None
         self._tracks = kept

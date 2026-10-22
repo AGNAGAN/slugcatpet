@@ -65,7 +65,7 @@
 ## 5. 验证记录
 
 - `uv run python -m unittest tests.test_game_music -v`：8 个测试通过。
-- 全量单元测试：56 个通过（含新增 8 个）。
+- 全量单元测试：58 个通过（含配乐导入 8 个、音乐自然排序 2 个）。
 - `ruff check` / `ruff format --check`：通过。
 - 本机游戏扫描：266 首，自然排序正常。
 - 本机提取 `RW_8 - Sundown`：输出 1,676,475 字节 `.ogg`。
