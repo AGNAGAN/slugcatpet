@@ -253,14 +253,11 @@ KEYBINDS = (
     f"#kbAction{{color:{TEXT};font-size:12px;background:transparent;}}"
     f"#keyCap{{background:{INPUT_BG};color:{ACCENT};border:1px solid {BORDER};"
     f"border-bottom:3px solid {BORDER};border-radius:6px;padding:4px 10px;"
-    "font-size:12px;font-weight:600;min-width:84px;}"
+    "font-size:12px;font-weight:600;min-width:104px;}"
     f"#keyCap:hover{{border-color:{RADIO_BORDER_HOVER};}}"
     f'#keyCap[listening="true"]{{color:{WARN};border-color:{WARN};background:{TRACK_BG};}}'
     f'#keyCap[flash="true"]{{border-color:{ACCENT};}}'
-    f"#keyCapFixed{{background:{TRACK_BG};color:{TEXT_SOFT};border:1px solid {BORDER};"
-    f"border-bottom:3px solid {BORDER};border-radius:6px;padding:4px 6px;"
-    "font-size:12px;font-weight:600;min-width:92px;}"
-    f'#keyCapFixed[taken="true"]{{color:{WARN};border-color:{WARN};text-decoration:line-through;}}'
+    f'#keyCap[taken="true"]{{color:{WARN};border-color:{WARN};text-decoration:line-through;}}'
     "#kbReset{background:transparent;border:none;padding:2px;border-radius:4px;}"
     f"#kbReset:hover{{background:{HOVER_TINT};}}"
     f"#kbStatus{{color:{TEXT_DIM};font-size:11px;background:transparent;}}"

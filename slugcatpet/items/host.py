@@ -11,7 +11,7 @@ from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
 
 from ..control.hotkey import HK_PLACE_ESC, VK_ESCAPE
 from ..i18n import t
-from . import get as _kind, kinds
+from . import app as _app, get as _kind, kinds
 from .base import GHOST_OPACITY
 from .state import ItemState
 
@@ -24,12 +24,14 @@ REMOVE_MARK_RAD = 11.0
 
 
 _groups = None
+_groups_app = None
 
 
 def _g():
-    """按用途分好的物品类型表；竖杆横杆共用 poles。"""
-    global _groups
-    if _groups is None:
+    """按用途分好的物品类型表（随当前 app）；竖杆横杆共用 poles。"""
+    global _groups, _groups_app
+    if _groups is None or _groups_app != _app():
+        _groups_app = _app()
         seen, stores = set(), []
         for k in kinds():
             if k.store not in seen:

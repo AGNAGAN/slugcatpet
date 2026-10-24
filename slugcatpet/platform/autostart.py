@@ -8,7 +8,19 @@ from .._paths import base_dir
 
 _FROZEN = getattr(sys, "frozen", False)
 _RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
-_VALUE = "SlugcatPet" if _FROZEN else "SlugcatPet (source)"  # 源码运行不覆盖打包版的登记
+_NAME = "SlugcatPet"
+_SCRIPT = "run_slugcatpet.py"
+_VALUE = ""  # 登记名：源码运行不覆盖打包版的登记
+
+
+def configure(name: str, script: str) -> None:
+    """别的 app 用自己的登记名和源码入口。"""
+    global _NAME, _SCRIPT, _VALUE
+    _NAME, _SCRIPT = name, script
+    _VALUE = _NAME if _FROZEN else f"{_NAME} (source)"
+
+
+configure(_NAME, _SCRIPT)
 
 
 def _launch_command() -> str:
@@ -16,7 +28,7 @@ def _launch_command() -> str:
         return f'"{sys.executable}"'
     exe = Path(sys.executable)
     pyw = exe.with_name("pythonw.exe")
-    return f'"{pyw if pyw.exists() else exe}" "{base_dir() / "run_slugcatpet.py"}"'
+    return f'"{pyw if pyw.exists() else exe}" "{base_dir() / _SCRIPT}"'
 
 
 def is_enabled() -> bool:

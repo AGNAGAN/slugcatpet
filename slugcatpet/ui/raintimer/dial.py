@@ -112,6 +112,7 @@ class RainDial(QWidget):
 
         self._anim = QTimer(self)
         self._anim.setInterval(TICK_MS)
+        self._anim.setTimerType(Qt.TimerType.PreciseTimer)
         self._anim.timeout.connect(self._step)
         self._poll = QTimer(self)
         self._poll.setInterval(POLL_MS)
@@ -252,14 +253,15 @@ class RainDial(QWidget):
             self._anim.stop()
 
     def _step_tick(self):
-        """晴天 pip 显示时每半个周期脉动一下；弹出或悬停时还响一声。"""
+        """晴天 pip 显示时每半个周期脉动一下；弹出或有人在看（悬停、快捷键读数、卡片）时还响一声。"""
         if self.timer.phase != DRY or self.ring.fade <= 0.0:
             return
         self._ticks += 1
         if self._ticks % (TICK_TOCK // 2):
             return
         self.ring.tick_pulse = 1.0
-        if self._now_ms() < self._pop_until or self._hover:
+        now = self._now_ms()
+        if now < self._pop_until or now < self._tip_until or self._hover or self._menu_open:
             self._sounds.play("tick" if self._ticks % TICK_TOCK == 0 else "tock")
 
     def _step_ladder(self):

@@ -10,6 +10,7 @@ FADE_OUT = 0.1
 PLOP_RATE = 0.05
 BLINK_TICKS = 220  # 半程闪烁时长
 RING_GAP = 8.5  # pip 环在业力符号外的距离
+TICK_PUSH = 2.0  # 滴答时外扩多少
 
 DRAIN, HOLLOW = "drain", "hollow"
 
@@ -57,6 +58,6 @@ class PipRing:
             if rad <= 0.05:
                 continue
             ang = math.radians((1.0 - i / n) * 360.0 * s_curve(fade ** (1.5 - num), 0.6))
-            r = radius + RING_GAP + hollow + 4.0 * self.tick_pulse
+            r = radius + RING_GAP + hollow + TICK_PUSH * self.tick_pulse
             out.append((math.sin(ang) * r, math.cos(ang) * r, rad, thick))
         return out

@@ -80,8 +80,12 @@ def _clamp_to_bounds(o, WL, HL, min_rad=0.0):
 
 
 class PetWindow(EffectsMixin, ItemHost, QWidget):
-    def __init__(self, layout: Layout | None = None, debug: bool | None = None, params=None):
+    def __init__(
+        self, layout: Layout | None = None, debug: bool | None = None, params=None, catless: bool = False
+    ):
+        """catless：不放猫，也不带天气（雪、雨、水、失重）；给没有猫的 app 用。"""
         super().__init__()
+        self._catless = catless
         self._params = params or {}
         self._seed = self._params.get("seed")
         self.atlas = AtlasSet()
@@ -134,6 +138,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self._open_rain_cb = None
         self.env_listeners = []  # fn(kind, on)：kind 为 "blizzard" / "zerog" / "water" / "rain"
         self._hotkey_filter = None
+        self._hotkeys_cb = None  # 全局热键改键后由 main 重挂
         self._control_hud = None  # 非 None 即受控中
         self._freeze = set()  # 冻结原因："env" 全屏收起、"user" 定格
         self._freeze_cb = None  # fn(on)：定格开关后由 main 处理热键、托盘、界面
@@ -148,7 +153,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         self.cold_cycle_prog = 0.0
         from .world.snow import Snowfall
 
-        self.snow_on = tuning.SNOW_ENABLED
+        self.snow_on = tuning.SNOW_ENABLED and not catless
         self._snow = Snowfall(tuning.SNOW_MAX_FLAKES, tuning.SNOW_VIGNETTE_MAX, seed=0x5)
 
         self.room_gravity = 1.0
@@ -236,6 +241,8 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             scene.restore(self, self._params.get("scene_last"))
 
     def _build_pets(self):
+        if self._catless:
+            return
         saved = self._params.get("pets")
         saved = list(saved) if isinstance(saved, list) and saved else None
         n = len(saved) if saved else 1
@@ -355,7 +362,9 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             # 啃食、换手等只动手的动作也要保持高帧率
             if any(abs(h.vx) + abs(h.vy) > self._MOTION_STILL for h in pet.gfx.hands):
                 return True
-        return any(abs(o.vx) + abs(o.vy) > self._MOTION_STILL for o in self._items())
+        return any(
+            abs(o.vx) + abs(o.vy) > self._MOTION_STILL or getattr(o, "animating", False) for o in self._items()
+        )
 
     def _on_timer(self):
         if self._mode == "vsync":
@@ -514,7 +523,7 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
     def freeze(self, reason):
         self._freeze.add(reason)
         self._set_mode(False)
-        if reason == "env":
+        if reason == "env" and not self._catless:
             self._env_rain.start()
 
     def _advance_env_rain(self):
@@ -1458,8 +1467,6 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
             elif e.button() == Qt.MouseButton.RightButton:
                 self._exit_place_mode()
             return
-        if not self.pets:
-            return
         if self._freeze and e.button() != Qt.MouseButton.RightButton:
             return
         if e.button() == Qt.MouseButton.RightButton:
@@ -1500,8 +1507,6 @@ class PetWindow(EffectsMixin, ItemHost, QWidget):
         super().keyPressEvent(e)
 
     def mouseReleaseEvent(self, e):
-        if not self.pets:
-            return
         if e.button() == Qt.MouseButton.LeftButton:
             for pet in self.pets:
                 if pet.behavior is not None:

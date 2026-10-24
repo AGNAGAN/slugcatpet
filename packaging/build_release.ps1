@@ -1,29 +1,36 @@
 ﻿<#
   打包发布版（不含游戏素材）→ dist\SlugcatPet-v<版本>-win64.zip，中英文同一个 exe。
+  加 -Lizard 打蜥蜴桌宠：入口 run_lizardpet.py → dist\LizardPet-v<版本>-win64.zip。
 
   用法:
     powershell -ExecutionPolicy Bypass -File packaging\build_release.ps1
     可选: -Version 0.1.0   -Console(保留控制台)   -Python E:\Python312\python.exe
-          -Test(打包前跑行为检查 + 参数文档检查)
+          -Test(打包前跑行为检查 + 参数文档检查)   -Lizard(打蜥蜴桌宠)
   解释器优先级：-Python > .venv > py -3.12 > PATH 上的 python
 #>
 param(
   [string]$Version,
   [switch]$Console,
   [string]$Python,
-  [switch]$Test
+  [switch]$Test,
+  [switch]$Lizard
 )
 $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path "$PSScriptRoot\..").Path
 $MinPy = [version]"3.12"
 Set-Location $repo
 
+$App = if ($Lizard) { "LizardPet" } else { "SlugcatPet" }
+$Entry = if ($Lizard) { "run_lizardpet.py" } else { "run_slugcatpet.py" }
+$DocDir = if ($Lizard) { "$repo\packaging\lizard" } else { "$repo\packaging" }
+
 # 结束残留进程，避免占用 dist 文件
-Get-Process SlugcatPet, SlugcatPet-bundled -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Get-Process $App, SlugcatPet-bundled -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 
 if (-not $Version) {
-  $pp = "$repo\pyproject.toml"
-  $Version = if ((Test-Path $pp) -and ((Get-Content $pp -Raw) -match 'version\s*=\s*"([^"]+)"')) { $Matches[1] } else { "0.0.0" }
+  # 蜥蜴桌宠的版本号单独记在 lizardpet/__init__.py，蛞蝓猫的在 pyproject.toml
+  $vf, $pat = if ($Lizard) { "$repo\lizardpet\__init__.py", '__version__\s*=\s*"([^"]+)"' } else { "$repo\pyproject.toml", 'version\s*=\s*"([^"]+)"' }
+  $Version = if ((Test-Path $vf) -and ((Get-Content $vf -Raw) -match $pat)) { $Matches[1] } else { "0.0.0" }
 }
 
 # ── 选解释器 ──
@@ -54,7 +61,7 @@ if (-not $py) {
 $pyExe = $py[0]; $pyPre = @($py | Select-Object -Skip 1)
 function Invoke-Py { $ErrorActionPreference = "Continue"; & $pyExe @pyPre @args }
 function Invoke-Native { $ErrorActionPreference = "Continue"; $exe, $rest = $args; & $exe @rest }
-Write-Host "==> 打包发布版 v$Version (无素材)，解释器: $($py -join ' ') (Python $pyVer)" -ForegroundColor Cyan
+Write-Host "==> 打包发布版 $App v$Version (无素材)，解释器: $($py -join ' ') (Python $pyVer)" -ForegroundColor Cyan
 
 # ── 依赖检查 ──
 Invoke-Py -c "import PySide6, UnityPy, numpy, PIL" 2>$null
@@ -83,7 +90,7 @@ if ($Test) {
   if ($LASTEXITCODE -ne 0) { throw "ai-docs/PARAMS.md 已过期，先运行 tools/params_doc.py 重新生成。" }
 }
 
-Remove-Item "$repo\dist\SlugcatPet", "$repo\build" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$repo\dist\$App", "$repo\build" -Recurse -Force -ErrorAction SilentlyContinue
 
 $windowMode = if ($Console) { "--console" } else { "--windowed" }
 
@@ -99,12 +106,12 @@ VSVersionInfo(
                     fileType=0x1, subtype=0x0, date=(0, 0)),
   kids=[
     StringFileInfo([StringTable('040904B0', [
-      StringStruct('CompanyName', 'SlugcatPet'),
-      StringStruct('FileDescription', 'SlugcatPet'),
+      StringStruct('CompanyName', '$App'),
+      StringStruct('FileDescription', '$App'),
       StringStruct('FileVersion', '$Version'),
-      StringStruct('InternalName', 'SlugcatPet'),
-      StringStruct('OriginalFilename', 'SlugcatPet.exe'),
-      StringStruct('ProductName', 'SlugcatPet'),
+      StringStruct('InternalName', '$App'),
+      StringStruct('OriginalFilename', '$App.exe'),
+      StringStruct('ProductName', '$App'),
       StringStruct('ProductVersion', '$Version')])]),
     VarFileInfo([VarStruct('Translation', [1033, 1200])])
   ]
@@ -113,7 +120,7 @@ VSVersionInfo(
 [IO.File]::WriteAllText($verFile, $verText, (New-Object System.Text.UTF8Encoding $false))
 $pyi = @(
   "--noconfirm", "--clean", $windowMode,
-  "--name", "SlugcatPet",
+  "--name", $App,
   "--version-file", $verFile,
   "--paths", $repo,
   "--distpath", "$repo\dist",
@@ -137,11 +144,15 @@ foreach ($m in @("fmod_toolkit","pyfmodex",
                  "openpyxl","numba","sympy","bokeh","PyQt5","PyQt6","wx")) {
   $pyi += @("--exclude-module", $m)
 }
-Invoke-Py -m PyInstaller @pyi "$repo\run_slugcatpet.py"
+# 蛞蝓猫包不带蜥蜴的代码（蜥蜴只在切到蜥蜴 app 时才导入）
+if (-not $Lizard) {
+  foreach ($m in @("slugcatpet.items.lizard", "lizardpet")) { $pyi += @("--exclude-module", $m) }
+}
+Invoke-Py -m PyInstaller @pyi "$repo\$Entry"
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller 失败" }
 
 # 安全闸：产物里绝不能出现任何游戏素材
-$leak = Get-ChildItem "$repo\dist\SlugcatPet" -Recurse -File |
+$leak = Get-ChildItem "$repo\dist\$App" -Recurse -File |
         Where-Object { $_.Name -in @("rainWorld", "rainWorld.png", "rainworldmsc", "rainworldmsc.png") -or
                        $_.Extension -in @(".ogg", ".mp3", ".wav", ".fsb") }
 if ($leak) {
@@ -150,8 +161,18 @@ if ($leak) {
 }
 Write-Host "==> 安全闸通过：零游戏素材" -ForegroundColor Green
 
+# 安全闸 1.5：蛞蝓猫包里不能有蜥蜴模块（看 PyInstaller 打进 PYZ 的模块表）
+if (-not $Lizard) {
+  $toc = Get-ChildItem "$repo\build\$App" -Filter "PYZ-*.toc" -ErrorAction SilentlyContinue
+  if (-not $toc) { throw "找不到 PYZ 模块表，无法确认蜥蜴代码已排除" }
+  if (Select-String -Path $toc.FullName -Pattern "'(slugcatpet\.items\.lizard|lizardpet)[.']" -Quiet) {
+    throw "蛞蝓猫包里混进了蜥蜴模块，已中止！"
+  }
+  Write-Host "==> 安全闸通过：无蜥蜴模块" -ForegroundColor Green
+}
+
 # 安全闸 2：发布版绝不能夹带仓库外的彩蛋包 surprises
-$egg = Get-ChildItem "$repo\dist\SlugcatPet" -Recurse -File |
+$egg = Get-ChildItem "$repo\dist\$App" -Recurse -File |
        Where-Object { $_.FullName -match '[\\/]surprises[\\/]' -or $_.Name -eq 'surprises' }
 if ($egg) {
   $egg | ForEach-Object { Write-Host "  彩蛋泄漏: $($_.FullName)" -ForegroundColor Red }
@@ -174,10 +195,10 @@ function Compress-WithRetry($src, $dst) {
   }
 }
 
-$out = "$repo\dist\SlugcatPet"
-Copy-Item "$repo\packaging\使用说明.txt" "$out\使用说明.txt" -Force
-Copy-Item "$repo\packaging\README.txt" "$out\README.txt" -Force
-$zip = "$repo\dist\SlugcatPet-v$Version-win64.zip"
+$out = "$repo\dist\$App"
+Copy-Item "$DocDir\使用说明.txt" "$out\使用说明.txt" -Force
+Copy-Item "$DocDir\README.txt" "$out\README.txt" -Force
+$zip = "$repo\dist\$App-v$Version-win64.zip"
 Compress-WithRetry $out $zip
 
 Write-Host "==> 完成: $zip" -ForegroundColor Green

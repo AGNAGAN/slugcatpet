@@ -7,12 +7,12 @@ import sys
 APP_USER_MODEL_ID = "SlugcatPet"
 
 
-def set_app_id() -> None:
+def set_app_id(app_id: str = APP_USER_MODEL_ID) -> None:
     if sys.platform != "win32":
         return
     try:
         import ctypes
 
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_USER_MODEL_ID)
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
     except Exception:
         pass

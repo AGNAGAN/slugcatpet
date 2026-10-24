@@ -11,7 +11,7 @@ from ...core.units import clampf, lerp
 from ...core.vecmath import _ang_from_up
 from ...rendering.primitives import blit
 from ...world.liquid_drip import draw_drips
-from ..base import CARRYABLE, EDIBLE, THROWABLE, ItemKind
+from ..base import CARRYABLE, EDIBLE, THROWABLE, ItemKind, alive_creature, creatures
 from ..state import ItemState
 from .palette import colors, mix as _mix
 from .gfx import ANT_SEGS, EGG_PER_ROW, SHIN, THIGH, dist_to_line, ik
@@ -36,6 +36,7 @@ ICON_COLOR = QColor(0, 255, 120)
 class EggBugKind(ItemKind):
     key = "eggbug"
     store = "eggbugs"
+    apps = ("slugcat", "lizard")
     affords = frozenset({EDIBLE, CARRYABLE})
     varies = True
     cap = None
@@ -174,13 +175,16 @@ def _burst(win, b):
 
 
 def _threats(win):
-    """猫（活着、没藏起来）和光标；正在被光标拖的蛋虫不怕光标。"""
+    """猫（活着、没藏起来）、场上活着的捕食者和光标；正在被光标拖的蛋虫不怕光标。"""
     out = []
     for pet in win.pets:
         b = pet.body
         if pet.behavior is None or b.dead:
             continue
         out.append((id(pet), (b.chunk0.x + b.chunk1.x) * 0.5, (b.chunk0.y + b.chunk1.y) * 0.5))
+    for o in creatures(win):
+        if getattr(o, "predator", False) and alive_creature(o):
+            out.append((id(o), o.x, o.y))
     drag = getattr(win, "_drag", None)
     if drag is None or drag[0] is not KIND:
         cur = win.cursor_logical()

@@ -26,12 +26,16 @@ from .control.hotkey import (
     GLOBAL_KEYS,
     HK_FREEZE,
     HK_HUD,
+    HK_MEOW,
     HK_PLACE_ESC,
     HK_QUIT,
     HK_RAIN,
     HK_STEP,
     HK_STEP10,
     HotkeyFilter,
+    combo_text,
+    key_down,
+    load_hotkeys,
 )
 from .platform import cursorfx
 from .platform.topmost import own_by
@@ -301,6 +305,11 @@ def main():
     rain_cfg = params.setdefault("rain_timer", {})
     rain_timer = RainTimer(rain_cfg)
     tray = QSystemTrayIcon(_tray_icon(timer=rain_timer))
+    keys = load_hotkeys()
+
+    def _kt(action):
+        return combo_text(*keys[action])
+
     menu = QMenu()
 
     # 音乐：播放列表 = 音乐目录 + 导入的歌
@@ -340,6 +349,9 @@ def main():
     from .audio.ambience import RainAmbience
 
     pet._rain_ambience = RainAmbience(pet, player, params)
+    from .meow import MeowService
+
+    pet._meow = MeowService(pet, params, muted=lambda: player.muted)
     app._music = (player, director, music)
 
     def _dial_context():
@@ -373,7 +385,7 @@ def main():
             tray_look[:] = look
             tray.setIcon(_tray_icon(pet.frozen, rain_timer))
         if pet.frozen:
-            tray.setToolTip(t("tray_frozen_tip"))
+            tray.setToolTip(t("tray_frozen_tip", combo=_kt("freeze")))
         elif rain_timer.phase != IDLE:
             tray.setToolTip(status_line(rain_timer))
         else:
@@ -413,13 +425,13 @@ def main():
         menu.addAction(t("btn_rain_cycle"), _open_rain)
         menu.addAction(t("tray_settings"), settings.open)
         menu.addAction(t("tray_music"), music.open)
-        freeze_act = menu.addAction(t("tray_freeze"))
+        freeze_act = menu.addAction(t("tray_freeze", combo=_kt("freeze")))
         freeze_act.setCheckable(True)
         freeze_act.setChecked(pet.frozen)
         freeze_act.triggered.connect(lambda on: pet.set_frozen(on))
-        menu.addAction(t("tray_hud"), hud.toggle_visible)
+        menu.addAction(t("tray_hud", combo=_kt("hud")), hud.toggle_visible)
         menu.addAction(t("refresh_top"), pet.refresh_top)
-        menu.addAction(t("tray_abort"), cursorfx.abort_all)
+        menu.addAction(t("tray_abort", combo=_kt("abort")), cursorfx.abort_all)
         menu.addSeparator()
         other = "en" if i18n.LANG == "zh" else "zh"
         menu.addAction(i18n.lang_name(other), lambda: _set_lang(other))
@@ -450,7 +462,8 @@ def main():
         lambda reason: _open_rain() if reason == QSystemTrayIcon.ActivationReason.Trigger else None
     )
     tray.show()
-    tray.showMessage(t("app_title"), t("tray_started"), QSystemTrayIcon.MessageIcon.Information, 4000)
+    started = t("tray_started", freeze=_kt("freeze"), abort=_kt("abort"), quit=_kt("quit"))
+    tray.showMessage(t("app_title"), started, QSystemTrayIcon.MessageIcon.Information, 4000)
 
     si.on_secondary_attempt = lambda: tray.showMessage(
         t("app_title"), t("already_running"), QSystemTrayIcon.MessageIcon.Information, 4000
@@ -458,9 +471,27 @@ def main():
 
     hotkey = HotkeyFilter()
     hotkey.install(app)
-    for hk_id, (mods, vk, _) in GLOBAL_KEYS.items():
-        hotkey.register(hk_id, mods, vk)
+
+    def _register(table):
+        for hk_id, action in table.items():
+            hotkey.register(hk_id, *keys[action])
+
+    _register(GLOBAL_KEYS)
     pet._hotkey_filter = hotkey  # 放置模式临时挂/摘 Esc
+
+    def _reload_hotkeys():
+        """键位弹窗保存后按新表重挂；先全摘再挂，互换的组合键才不会撞上。"""
+        keys.update(load_hotkeys())
+        tables = [GLOBAL_KEYS, FROZEN_KEYS] if pet.frozen else [GLOBAL_KEYS]
+        for table in tables:
+            for hk_id in table:
+                hotkey.unregister(hk_id)
+        for table in tables:
+            _register(table)
+        _build_tray_menu()
+        _refresh_tray()
+
+    pet._hotkeys_cb = _reload_hotkeys
 
     def _on_hotkey(hk_id):
         if hk_id == HK_QUIT:
@@ -477,6 +508,9 @@ def main():
             pet.step_frozen(1)
         elif hk_id == HK_STEP10:
             pet.step_frozen(10)
+        elif hk_id == HK_MEOW:
+            vk = keys["meow_hover"][1]
+            pet._meow.press(pet._meow.target(), lambda: key_down(vk))
         else:
             cursorfx.abort_all()
 
@@ -502,8 +536,7 @@ def main():
     def _on_freeze(on):
         """定格开关：挂摘单步热键、换托盘图标、收起或放回界面。"""
         if on:
-            for hk_id, (mods, vk, _) in FROZEN_KEYS.items():
-                hotkey.register(hk_id, mods, vk)
+            _register(FROZEN_KEYS)
             if pet.cfg_freeze_hide_ui:
                 hidden_ui[:] = [w for w in (tab, hud, pet._control_hud) if w is not None and w.isVisible()]
                 for w in hidden_ui:
@@ -511,7 +544,10 @@ def main():
             if not params.get("freeze_tip_shown"):
                 params["freeze_tip_shown"] = True
                 tray.showMessage(
-                    t("app_title"), t("freeze_tip"), QSystemTrayIcon.MessageIcon.Information, 4000
+                    t("app_title"),
+                    t("freeze_tip", step=_kt("step"), combo=_kt("freeze")),
+                    QSystemTrayIcon.MessageIcon.Information,
+                    4000,
                 )
         else:
             for hk_id in FROZEN_KEYS:
@@ -536,6 +572,9 @@ def main():
         except Exception:
             pass
         envwatch.stop()
+        from .audio import sfx
+
+        sfx.shutdown()
         autosave.stop()
         _write_state()
         hotkey.unregister_all()

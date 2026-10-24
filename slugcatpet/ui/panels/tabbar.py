@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QRect, QRectF, QPointF, QSize, QEvent
 from PySide6.QtGui import QGuiApplication, QColor, QPainter, QPixmap, QIcon
 from ...i18n import t
-from ...items import kinds as item_kinds
+from ...items import app as item_app, kinds as item_kinds
 from ..widgets.iconkit import ICON_GREY, ICON_RED, pen
 from ..widgets.tips import install as install_tip
 from ..theme import qss
@@ -138,7 +138,7 @@ class TabBar(QWidget):
                 lambda _=False, k=k: self._place(k),
             )
             for k in item_kinds()
-            if k.placeable
+            if k.is_placeable(item_app())
         ]
         place_items += [
             (lambda p, r: _paint_tool_icon(p, "remove", r), t("tip_remove"), self._remove_one),
@@ -170,11 +170,7 @@ class TabBar(QWidget):
             lay.addWidget(b)
             return b
 
-        rain = btn(t("btn_rain_cycle"), True, None)
-        rain.clicked.connect(lambda: self.pet.open_rain(rain))
-        btn(t("btn_music"), True, lambda: self.pet.open_music())
-        btn(t("btn_open_settings"), True, self._open_settings)
-        btn(t("btn_quit_app"), True, self._quit)
+        self._build_actions(btn)
         self._panel.setStyleSheet(qss.TABBAR_PANEL)
 
         # 箭头：eventFilter 区分拖动和点击
@@ -196,6 +192,14 @@ class TabBar(QWidget):
         self._toast_timer = QTimer(self)
         self._toast_timer.setSingleShot(True)
         self._toast_timer.timeout.connect(self._toast_lbl.hide)
+
+    def _build_actions(self, btn):
+        """物品按钮下面的操作按钮；别的 app 重写这里。"""
+        rain = btn(t("btn_rain_cycle"), True, None)
+        rain.clicked.connect(lambda: self.pet.open_rain(rain))
+        btn(t("btn_music"), True, lambda: self.pet.open_music())
+        btn(t("btn_open_settings"), True, self._open_settings)
+        btn(t("btn_quit_app"), True, self._quit)
 
     def rebuild_ui(self):
         expanded = self.expanded

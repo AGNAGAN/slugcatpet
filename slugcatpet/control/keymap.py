@@ -18,6 +18,7 @@ DEFAULT_KEYBINDS = {
     "grab": "K",
     "throw": "J",
     "hold": "F",
+    "meow": "M",
 }
 ACTIONS = tuple(DEFAULT_KEYBINDS)
 RESERVED = frozenset({"Escape", "Meta"})  # Esc 退出控制，Win 键被系统截走

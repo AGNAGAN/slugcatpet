@@ -529,6 +529,22 @@ class SettingsWindow(QWidget):
             vol.setSingleStep(5)
             vol.setPageStep(10)
             v.addLayout(row)
+        meow = getattr(w, "_meow", None)
+        if meow is not None:
+            row = QHBoxLayout()
+            row.addWidget(QLabel(t("settings_meow_volume")))
+            row.addStretch(1)
+            vol = self._range(
+                row, 0, 100, round(meow.volume * 100), lambda n: f"{n}%", lambda n: meow.set_volume(n / 100.0)
+            )
+            vol.setSingleStep(5)
+            vol.setPageStep(10)
+            v.addLayout(row)
+            if not meow.has_sounds:
+                note = QLabel(t("settings_meow_missing"))
+                note.setObjectName("rangeEnd")
+                note.setWordWrap(True)
+                v.addWidget(note)
         director = getattr(w, "_music_director", None)
         if director is not None:
             btn = QPushButton(t("settings_scene_music_btn"))
@@ -572,6 +588,8 @@ class SettingsWindow(QWidget):
         hud = getattr(self._window, "_control_hud", None)
         if hud is not None:
             hud.reload_keys()
+        if self._window._hotkeys_cb is not None:
+            self._window._hotkeys_cb()
 
     # 各弹窗都用卡片弹窗的 open()，不走 exec
     def _on_look(self, pet):

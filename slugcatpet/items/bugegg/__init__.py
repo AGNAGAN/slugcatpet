@@ -1,4 +1,5 @@
-"""蛋虫蛋：蛋虫死时从背上爆出来，谁都能吃、肉食的猫也得满格；不能手动放，太多时最早的先消解。"""
+"""蛋虫蛋：蛋虫死时从背上爆出来，谁都能吃、肉食的猫也得满格；不能手动放，太多时最早的先消解。
+蜥蜴 app 里没人吃，放久了也消解。"""
 
 from __future__ import annotations
 
@@ -17,11 +18,13 @@ from .model import BITES, BugEgg
 EGG_SX, EGG_SY = 0.7, 0.75
 EGG_DOT = 0.45
 STALK_W = 1.0
+LIZARD_LINGER_TICKS = 1200  # 蜥蜴 app 里没有猫来吃：没人碰地躺这么久就消解
 
 
 class BugEggKind(ItemKind):
     key = "bugegg"
     store = "bugeggs"
+    apps = ("slugcat", "lizard")
     placeable = False
     affords = frozenset({EDIBLE, CARRYABLE})
     varies = True
@@ -55,6 +58,17 @@ class BugEggKind(ItemKind):
             return False
         self.dissolve(win, old)
         return True
+
+    def tick(self, win):
+        from .. import LIZARD, app
+
+        if app() == LIZARD:
+            for e in win.bugeggs:
+                if e.dissolve < 0 and e.state == ItemState.FREE and e.held_by_hand is None:
+                    e.age += 1
+                    if e.age >= LIZARD_LINGER_TICKS:
+                        self.dissolve(win, e)
+        super().tick(win)
 
     def drop(self, win, e):
         for pet in win.pets:
