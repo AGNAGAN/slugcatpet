@@ -210,6 +210,7 @@ class _FakeHotkeyBackend(QObject):
 
 
 class HotkeyFilterTests(unittest.TestCase):
+    @patch("slugcatpet.control.hotkey._IS_WIN", False)
     def test_press_release_suspend_and_apply(self):
         backend = _FakeHotkeyBackend()
         hotkeys = HotkeyFilter(backend)
