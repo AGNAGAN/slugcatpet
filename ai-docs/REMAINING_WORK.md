@@ -254,7 +254,7 @@
   - `uv run python tools/params_doc.py --check`：通过
   - `node --check`：几何脚本和快捷键脚本均通过
   - `uv run python tools/kwin_integration_check.py`：PASS
-  - GitHub Actions Linux/Windows：`511fdc7`、`4ce782f`、`912a0aa` 以及此前 `10428d3`、`a640bb6`、`b7b8ef6`、`a59b47d` 全部 success
+  - GitHub Actions Linux/Windows：`d08c076`、`363024d` success；此前 `511fdc7`、`4ce782f`、`912a0aa`、`10428d3`、`a640bb6`、`b7b8ef6`、`a59b47d` 也全部 success
 - 本机 KWin 验收：临时捕获面 + `QCursor.setPos()` 已能把光标从 `(700,1500)` 移到 `(569,1256)`；忙碌样式状态为 true，释放后恢复。uinput 持续移动到 eDP-1 时捕获面 `leaveEvent` 结束劫持，光标停在 `(569,354)`。
 - 输出切换实测：HDMI-A-1（DPR 1.5）→ eDP-1（DPR 2.0）→ HDMI-A-1（DPR 1.5），持久 KWin 脚本启用时仍能正确切换；自由长矛可在运行场景中生成并下落，不再触发输入区域 traceback。
 - 持久 KWin 脚本：`metadata.json` 的 `KPackageStructure: KWin/Script` 修复后，`reconfigure` 能在 Plasma 6.8 中加载 `slugcatpet`；运行时脚本使用 `slugcatpet-runtime`，停用持久插件不会卸载当前会话。
