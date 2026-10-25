@@ -65,6 +65,7 @@ class BugEgg:
         "liquid",
         "liquid_ticks",
         "dissolve",
+        "age",
         "drips",
         "stalk_pts",
         "_id",
@@ -102,6 +103,7 @@ class BugEgg:
         self.liquid = 1.0 if fresh else 0.0
         self.liquid_ticks = rng.randint(*LIQUID_TICKS)
         self.dissolve = -1
+        self.age = 0  # 没人碰地躺着的 tick 数
         self.drips = []
         self.stalk_pts = []  # 软柄各节 [x, y, 上帧 x, 上帧 y, vx, vy]
         self.reset_stalk()

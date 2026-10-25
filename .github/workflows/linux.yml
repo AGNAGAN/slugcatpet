@@ -41,7 +41,7 @@ jobs:
       - name: Import smoke test
         run: uv run python -c "import slugcatpet.window, slugcatpet.main"
 
-      - name: Render KWin script syntax check
+      - name: Render KWin scripts syntax check
         run: |
           uv run python - <<'PY'
           from types import SimpleNamespace
@@ -51,5 +51,20 @@ jobs:
           backend = SimpleNamespace(_target_screen="HDMI-A-1", _rect=QRect(0, 900, 1707, 1067))
           with open("/tmp/slugcatpet-kwin.js", "w", encoding="utf-8") as f:
               f.write(WaylandKWinBackend._render_script(backend))
+
+          hotkey_backend = SimpleNamespace(
+              _hotkey_specs=[
+                  {
+                      "id": 3,
+                      "action": "slugcatpet_1234abcd_3",
+                      "text": "SlugcatPet: HUD (Ctrl+Alt+J)",
+                      "key": "Ctrl+Alt+J",
+                      "code": 201326666,
+                  }
+              ]
+          )
+          with open("/tmp/slugcatpet-hotkeys.js", "w", encoding="utf-8") as f:
+              f.write(WaylandKWinBackend._render_hotkey_script(hotkey_backend))
           PY
           node --check /tmp/slugcatpet-kwin.js
+          node --check /tmp/slugcatpet-hotkeys.js

@@ -1,6 +1,6 @@
 # SlugcatPet 仓库分析报告
 
-> 本文件是对仓库的整体分析，不属于项目运行文档。分析基于 2026-10-20 的 `main` 分支（版本 1.3.0）；2026-10-22 已合并上游 v1.3.2，除版本号外未重新统计。
+> 本文件是对仓库的整体分析，不属于项目运行文档。分析基于 2026-10-20 的 `main` 分支（版本 1.3.0）；2026-10-22 已合并上游 v1.3.2，2026-10-25 已合并 v1.3.3，除版本号和第 5.5 节外未重新统计。
 > 验证方式：Git 历史与结构统计、逐模块静态阅读、`ruff check`、`ruff format --check`，以及在本机实际导入 Rain World 素材、启动应用、运行行为回归。实测环境与结果见第 5 节。
 
 ---
@@ -20,7 +20,7 @@
 | 定位 | Windows 10/11 桌面宠物，Rain World 粉丝项目 |
 | 技术栈 | Python 3.12+、PySide6、numpy、Pillow、UnityPy |
 | 入口 | `run_slugcatpet.py` → `slugcatpet.main:main` |
-| 版本/许可 | 1.3.2，MIT（仅代码，不含游戏素材） |
+| 版本/许可 | 1.3.3，MIT（仅代码，不含游戏素材） |
 | 规模 | 261 个 Python 文件，约 4.77 万行，其中有效代码约 4.1 万行 |
 | 内容量 | 10 个角色、7 种能力、11 种物品、28 个行为、3 种配件 |
 | 素材策略 | 仓库不含游戏素材，首次启动从用户本机正版游戏提取到 `~/.slugcatpet/assets` |
@@ -119,7 +119,7 @@ main.py
 | 检查 | 结果 |
 |---|---|
 | `uv run ruff check .` | 通过 |
-| `uv run ruff format --check .` | 通过，266 个文件已格式化 |
+| `uv run ruff format --check .` | 通过，329 个文件已格式化 |
 | `uv run python tools/params_doc.py --check` | 通过，`ai-docs/PARAMS.md` 是最新的 |
 | `uv run python tools/gen_arcs.py --check` | **失败**，但解压后的 JSON 与仓库内容完全一致 |
 
@@ -146,6 +146,14 @@ main.py
 - 代码质量门禁里 Ruff 和参数文档通过；弧线校验需要修成“解压后比较”。
 - 行为回归的物理部分在 4 个场景中 3 个完全一致，1 个出现单点数值分歧；渲染部分在非 Windows 环境不可用。测试设计本身有效，但当前基线不具备跨平台可重复性。
 - 由于没有 Windows 环境和真实桌面会话，托盘、置顶、全局热键、透明窗口等平台相关功能仍未做最终验证。
+
+### 5.5 v1.3.3 合并后复查（2026-10-25，真实 KWin Wayland 会话）
+
+- 全量 61 个单元测试、Ruff、格式检查、`params_doc --check` 均通过；`node --check` 同时检查几何脚本和快捷键脚本。
+- `items`、`env`、`cursor_play` 的物理状态逐 tick 与基线一致，仍只有平台相关的渲染帧哈希差异；`trouble` 的已知绘制边界误报未变。
+- 全局快捷键在 KWin 6.8 Wayland 真机验证：meow、HUD、freeze、quit 均能触发；改键后旧键位释放、新键位生效，应用重启后回调仍正常。
+- Lizard Pet 可在本机 Wayland 会话启动，KWin 几何/快捷键脚本加载成功，蜥蜴音效素材已存在；视觉和首次启动素材提取 UI 仍待人工验收。
+- 尚未完成：注销/登录后的 KWin 持久脚本验证、Rain World 全屏与光标劫持组合、真实猫行为逐项验收、配乐导入 UI 人工验收、干净用户 `install.sh` 和 Windows 回归。
 
 ---
 

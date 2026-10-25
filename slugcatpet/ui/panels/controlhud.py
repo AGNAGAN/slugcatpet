@@ -93,7 +93,13 @@ class ControlHud(QWidget):
         arrows = [k[a] for a in ("up", "left", "down", "right")]
         move = "".join(arrows) if all(len(x) == 1 for x in arrows) else "/".join(arrows)
         self._keys_text = t(
-            "ctrlhud_keys", move=move, jump=k["jump"], grab=k["grab"], throw=k["throw"], hold=k["hold"]
+            "ctrlhud_keys",
+            move=move,
+            jump=k["jump"],
+            grab=k["grab"],
+            throw=k["throw"],
+            meow=k["meow"],
+            hold=k["hold"],
         )
         if not self._paused:
             self._keys.setText(self._keys_text)
@@ -188,7 +194,11 @@ class ControlHud(QWidget):
         if normalize_key(e.key()) == self._keymap.get("hold"):
             self._window.hold_controlled()
             return
-        self._held.add(normalize_key(e.key()))
+        key = normalize_key(e.key())
+        self._held.add(key)
+        meow = getattr(self._window, "_meow", None)
+        if meow is not None and key == self._keymap.get("meow"):
+            meow.press(self.pet, lambda: key in self._held)
 
     def keyReleaseEvent(self, e):
         if e.isAutoRepeat():

@@ -384,7 +384,7 @@ function registerHotkeys() {
         var h = HOTKEYS[i];
         var ok = false;
         try {
-            ok = registerShortcut("slugcatpet_" + h.id, h.text, h.key,
+            ok = registerShortcut(h.action, h.text, h.key,
                                   hotkeyCallback(h.id)) !== false;
         } catch (e) {
             print("slugcatpet shortcut failed", h.id, h.key, String(e));
@@ -469,6 +469,8 @@ lastExternalActive = isRestorableWindow(lastActive) && !isOverlay(lastActive)
     ? lastActive
     : findRestorableWindow(true);
 scan();
-registerHotkeys();
+if (HOTKEYS.length > 0) {
+    registerHotkeys();
+}
 print("slugcatpet target", TARGET_SCREEN, "overlay", OVERLAY_W + "x" + OVERLAY_H);
 callDBus(SERVICE, PATH, IFACE, "Log", "script loaded");

@@ -12,7 +12,22 @@ from .appid import DESKTOP_FILE_NAME
 
 _FROZEN = getattr(sys, "frozen", False)
 _RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
-_VALUE = "SlugcatPet" if _FROZEN else "SlugcatPet (source)"  # 源码运行不覆盖打包版的登记
+_NAME = "SlugcatPet"
+_SCRIPT = "run_slugcatpet.py"
+_LAUNCHER = "slugcatpet"
+_VALUE = ""  # 登记名：源码运行不覆盖打包版的登记
+
+
+def configure(name: str, script: str) -> None:
+    """别的 app 用自己的登记名和源码入口。"""
+    global _NAME, _SCRIPT, _LAUNCHER, _VALUE
+    _NAME, _SCRIPT = name, script
+    stem = Path(script).stem
+    _LAUNCHER = stem[4:] if stem.startswith("run_") else stem
+    _VALUE = _NAME if _FROZEN else f"{_NAME} (source)"
+
+
+configure(_NAME, _SCRIPT)
 
 
 def _autostart_dir() -> Path:
@@ -21,8 +36,13 @@ def _autostart_dir() -> Path:
     return (Path(root) if root else Path.home() / ".config") / "autostart"
 
 
+def _desktop_file_name() -> str:
+    """蛞蝓猫沿用已安装的 desktop id；别的 app 用独立文件。"""
+    return DESKTOP_FILE_NAME if _NAME == "SlugcatPet" else f"org.slugcatpet.{_NAME}"
+
+
 def _autostart_file() -> Path:
-    return _autostart_dir() / f"{DESKTOP_FILE_NAME}.desktop"
+    return _autostart_dir() / f"{_desktop_file_name()}.desktop"
 
 
 def _exec_quote(value) -> str:
@@ -32,21 +52,21 @@ def _exec_quote(value) -> str:
 
 
 def _source_launch_command() -> str:
-    return f"{_exec_quote(sys.executable)} {_exec_quote(base_dir() / 'run_slugcatpet.py')}"
+    return f"{_exec_quote(sys.executable)} {_exec_quote(base_dir() / _SCRIPT)}"
 
 
 def _installed_launcher() -> str | None:
     """打包/uv tool 安装后的 console script。"""
     argv0 = Path(sys.argv[0]) if sys.argv and sys.argv[0] else None
-    if argv0 is not None and argv0.name == "slugcatpet" and argv0.is_file():
+    if argv0 is not None and argv0.name == _LAUNCHER and argv0.is_file():
         return str(argv0.resolve())
-    return shutil.which("slugcatpet")
+    return shutil.which(_LAUNCHER)
 
 
 def _linux_launch_command() -> str:
     if _FROZEN:
         return _exec_quote(sys.executable)
-    if (base_dir() / "run_slugcatpet.py").is_file():
+    if (base_dir() / _SCRIPT).is_file():
         return _source_launch_command()
     launcher = _installed_launcher()
     if launcher:
@@ -58,7 +78,7 @@ def _linux_launch_command() -> str:
 def _workdir() -> Path:
     if _FROZEN:
         return Path(sys.executable).resolve().parent
-    if (base_dir() / "run_slugcatpet.py").is_file():
+    if (base_dir() / _SCRIPT).is_file():
         return base_dir()
     return Path.home()
 
@@ -69,7 +89,7 @@ def _launch_command() -> str:
     if sys.platform == "win32":
         exe = Path(sys.executable)
         pyw = exe.with_name("pythonw.exe")
-        return f'"{pyw if pyw.exists() else exe}" "{base_dir() / "run_slugcatpet.py"}"'
+        return f'"{pyw if pyw.exists() else exe}" "{base_dir() / _SCRIPT}"'
     return _linux_launch_command()
 
 
@@ -77,7 +97,7 @@ def _desktop_text() -> str:
     return (
         "[Desktop Entry]\n"
         "Type=Application\n"
-        "Name=SlugcatPet\n"
+        f"Name={_NAME}\n"
         "Comment=Desktop pet on Rain World assets\n"
         f"Exec={_linux_launch_command()}\n"
         f"Path={_workdir()}\n"

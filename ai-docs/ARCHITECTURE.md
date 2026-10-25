@@ -20,9 +20,10 @@ slugcatpet/
   appearance.py 一只猫的外观 `Look`（整套皮肤、分部位皮肤与颜色、尾巴形状、配件）和取色优先级
   skins/        DMS 皮肤读取与解析；resolver 按部位组查找图集
   rendering/    绘制：图集、身体各部件、尾巴贴图、绘制录制回放
-  audio/        音乐播放器、场景配乐、雨声、从游戏资源包重建 ogg / wav
+  audio/        音乐播放器、场景配乐、雨声、音效混音器 sfx（可调音高）、从游戏资源包重建 ogg / wav
   platform/     系统相关：光标、置顶、单实例、全屏检测、挡雨窗口、开机自启、AppID、垂直同步
   control/      手动控制（键盘操控一只猫）
+  meow/         按键喵（照 Push to Meow）：声音表、素材导入、按键判定和喵带的动作
   ui/           界面：theme/（配色与样式表）、panels/（各面板）、widgets/（通用小部件）
   resources/    characters/*.json（内置角色）、layouts/（部件摆位）、icons/
   tuning.py     几处共用的常量
@@ -295,11 +296,13 @@ window._do_tick
 冻结按原因记在 `window._freeze`，有任何一个就不推进：
 
 - `env`：别的程序全屏、桌宠收起时（`envwatch`），定时器整个停掉。
-- `user`：定格（Ctrl+Alt+P，`set_frozen`），画面停在这一帧。粗定时器照跑，只更新点击穿透，好让右键菜单能解除定格；左键不响应。定格前解除光标劫持、退出放置模式。
+- `user`：定格（定格热键，`set_frozen`），画面停在这一帧。粗定时器照跑，只更新点击穿透，好让右键菜单能解除定格；左键不响应。定格前解除光标劫持、退出放置模式。
 - 定格时 `step_frozen(n)` 前进 n 个 tick，画出那一 tick 的位置（不插值）；单步热键只在定格期间注册。
 - 定格时收起侧边栏、状态面板、控制面板（设置项 `freeze_hide_ui`），解除时经 `envwatch.reveal` 放回，全屏收起中就等退出全屏再显示。
 
-全局热键的 id、组合键、文案都登记在 `control/hotkey.py` 的 `GLOBAL_KEYS` / `FROZEN_KEYS`，键位弹窗按它列出，并标出被别的程序占用的组合键。
+全局热键的 id 和动作登记在 `control/hotkey.py` 的 `GLOBAL_KEYS` / `FROZEN_KEYS`，默认组合键在 `DEFAULT_HOTKEYS`，用户改的存在 `~/.slugcatpet/hotkeys.json`。组合键必须带 Ctrl、Alt 或 Win，否则会把这个键从所有程序里抢走。键位弹窗录键时先 `suspend` 摘掉自己的热键，免得按下去直接触发；保存后 main 全摘再重挂，互换的组合键才不会撞上。
+
+KDE Wayland 下，全局热键走独立的 KWin 脚本 `slugcatpet-hotkeys`；几何/光标脚本 `slugcatpet-runtime` 只负责 overlay、窗口快照和光标，不注册快捷键。几何脚本会随输出或窗口尺寸反复重载，而 KGlobalAccel 对已经存在的动作不会重新绑定回调，所以不能把热键注册混在里面。动作名由当前键位表加版本盐做哈希得到（`slugcatpet_<8hex>_<id>`），改键后自然换一组新动作；只有当前键位被别的 SlugcatPet 动作占着时，才清理一次 KGlobalAccel 里的旧动作。KWin 集成默认关闭，用户显式启用后才安装持久脚本；快捷键脚本只在应用启动和键位保存时重载。
 
 ### 优先级
 
@@ -331,6 +334,16 @@ window._do_tick
 部件之间有四个槽位给能力和配件用：`over_tail`（尾巴斑点，尾巴、腿、臀之上，近侧臂之下）、`under_face`（鳃）、`behind_face`（疤）、`over_face`（舌头）。
 贴在尾巴上的东西用各段的位置和半径现算（见 `accessories/tail_specks` 的 `spine_at`），段数、粗细随皮肤变也贴得上。
 物品各层都只画到地面线（`items/host.py` 的 `_draw_kinds`），窗口下延盖住任务栏时地面以下的部分不露出来；猫的腿同理。
+
+### 喵
+
+`meow/`，照 Push to Meow 的按键喵，由 `MeowService`（`window._meow`）管：
+
+- 入口：全局热键 `meow_hover` 喵光标下的猫，没有就喵控制中的猫；控制面板的喵键（键位表 `meow`）喵控制中的猫。喵谁在按下时定下。
+- 按下后 `LONG_S` 内松开是短喵，按住过了 `LONG_S` 当场长喵。全局热键只报按下，松开靠轮询 `key_down`。
+- 声音由 `voice.choose` 按猫种、幼崽、被光标拎着、水下选 SoundID 和音高，经 `audio/sfx.Bank` 播放。
+- 动作挂在 `pet.meow_fx`，在状态机之后、物理之前推进，所以抬头能盖过东张西望和操控。
+- 素材是玩家本机 Push to Meow 的录音，启动时复制到 `assets/meow`，找不到就只做动作不出声。
 
 ### 东张西望
 

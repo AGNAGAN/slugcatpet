@@ -21,14 +21,15 @@ from ..theme import qss
 
 
 class _ImportWorker(QObject):
-    """后台导入：install 为 None 走自动定位，否则从指定目录提取。"""
+    """后台导入：install 为 None 走自动定位，否则从指定目录提取；图集之后依次跑 extras。"""
 
     done = Signal()
     failed = Signal(str)
 
-    def __init__(self, install: Path | None):
+    def __init__(self, install: Path | None, extras):
         super().__init__()
         self._install = install
+        self._extras = extras
 
     def run(self):
         try:
@@ -36,28 +37,36 @@ class _ImportWorker(QObject):
                 ensure_atlases()
             else:
                 extract_atlases(self._install)
-            self._music()
+            self._run_extras()
             self.done.emit()
         except SetupError as e:
             self.failed.emit(str(e))
         except Exception as e:
             self.failed.emit(t("setup_unexpected", e=e))
 
-    def _music(self):
-        """游戏配乐顺带提取，失败不算导入失败。"""
-        from ...audio.director import GAME_TRACKS
+    def _run_extras(self):
+        """图集之外的素材顺带提取，失败不算导入失败。"""
+        install = self._install or detect_install()
+        if install is None:
+            return
+        for fn in self._extras:
+            try:
+                fn(install)
+            except Exception:
+                pass
 
-        try:
-            install = self._install or detect_install()
-            if install is not None:
-                extract_music(install, GAME_TRACKS)
-        except Exception:
-            pass
+
+def _extract_game_music(install: Path) -> None:
+    from ...audio.director import GAME_TRACKS
+
+    extract_music(install, GAME_TRACKS)
 
 
 class SetupPanel(QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, extras=(_extract_game_music,), parent=None):
+        """extras：图集之后要提取的素材，每个是 fn(游戏目录)。"""
         super().__init__(parent)
+        self._extras = extras
         self._result = False
         self._loop: QEventLoop | None = None
         self._thread: QThread | None = None
@@ -139,7 +148,7 @@ class SetupPanel(QDialog):
     def _start_import(self, install: Path | None):
         self._set_busy()
         self._thread = QThread(self)
-        self._worker = _ImportWorker(install)
+        self._worker = _ImportWorker(install, self._extras)
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.run)
         self._worker.done.connect(self._on_done)

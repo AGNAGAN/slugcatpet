@@ -31,7 +31,7 @@ def release_hold(win, ctx):
 
 
 def hold_lost(win, ctx) -> bool:
-    """光标劫持被外部解除（Ctrl+Alt+Q 或被别的顶替）。"""
+    """光标劫持被外部解除（中止热键或被别的顶替）。"""
     return ctx.hj is not None and (win.cursor_hijack is not ctx.hj or not ctx.hj.active)
 
 

@@ -39,6 +39,7 @@ HELD_KICK = 2.0  # 被拎着时每节乱蹬
 HELD_DAMP = 0.8
 MEAT = 1  # 尸体能啃几口
 EGGS = 6
+MOUTH = "mouth"  # held_by_hand 取这个值：被捕食者叼着，发软不蹬
 
 FLEE_FLAIL = 5.0  # 逃跑中腾空时乱蹬
 
@@ -377,7 +378,7 @@ class EggBug:
         """被猫拿着：腹部那一节由手定位，头垂下来晃；活着的会挣扎。"""
         c0, c1 = self.c0, self.c1
         c0.last_x, c0.last_y = c0.x, c0.y
-        if not self.dead:
+        if not self.dead and self.held_by_hand != MOUTH:
             self._kick(c0, HELD_KICK)
         c0.vy += GRAVITY * self.room_gravity
         c0.vx *= HELD_DAMP

@@ -243,8 +243,8 @@ _STR = {
     "ctrlhud_paused": {"zh": "已暂停 · 点击继续", "en": "Paused · click to resume"},
     "ctrlhud_exit": {"zh": "退出控制 (Esc)", "en": "Exit control (Esc)"},
     "ctrlhud_keys": {
-        "zh": "{move} 移动，{jump} 跳跃\n{grab} 拾取，{throw} 投掷\n{hold} 原地定身并退出控制",
-        "en": "{move} to move, {jump} to jump\n{grab} to pick up, {throw} to throw\n{hold} to hold still here and exit control",
+        "zh": "{move} 移动，{jump} 跳跃\n{grab} 拾取，{throw} 投掷，{meow} 喵\n{hold} 原地定身并退出控制",
+        "en": "{move} to move, {jump} to jump\n{grab} to pick up, {throw} to throw, {meow} to meow\n{hold} to hold still here and exit control",
     },
     "settings_keybinds": {"zh": "键位", "en": "Keys"},
     "settings_keybinds_btn": {"zh": "查看 / 修改…", "en": "View / edit…"},
@@ -262,14 +262,18 @@ _STR = {
     "kb_quit": {"zh": "退出程序", "en": "Quit program"},
     "kb_step": {"zh": "前进一帧", "en": "Step one frame"},
     "kb_step10": {"zh": "前进 10 帧", "en": "Step 10 frames"},
-    "kb_fixed": {"zh": "固定按键", "en": "Fixed key"},
     "kb_taken": {
         "zh": "被其他程序占用，这个快捷键无效",
         "en": "Taken by another program; this shortcut won't work",
     },
     "kb_hint": {
-        "zh": "点击按键框后按下新键，Esc 取消。",
-        "en": "Click a key box, then press the new key. Esc cancels.",
+        "zh": "点击按键框后按下新键，Esc 取消。全局热键要带 Ctrl、Alt 或 Win；按下没反应多半是被别的程序占了。",
+        "en": "Click a key box, then press the new key. Esc cancels. Global shortcuts need Ctrl, Alt or Win; "
+        "if nothing happens, another program probably owns that combo.",
+    },
+    "kb_need_mod": {
+        "zh": "全局热键要带 Ctrl、Alt 或 Win，不然这个键在别的程序里会失灵",
+        "en": "Global shortcuts need Ctrl, Alt or Win, or the key would stop working in other programs",
     },
     "kb_up": {"zh": "上", "en": "Up"},
     "kb_down": {"zh": "下", "en": "Down"},
@@ -279,6 +283,8 @@ _STR = {
     "kb_grab": {"zh": "拾取 / 吃 / 换手", "en": "Grab / eat / switch hands"},
     "kb_hold": {"zh": "定身并退出控制", "en": "Hold still & exit"},
     "kb_throw": {"zh": "投掷", "en": "Throw"},
+    "kb_meow": {"zh": "喵（按住长喵）", "en": "Meow (hold for a long meow)"},
+    "kb_meow_hover": {"zh": "喵：光标悬停在猫身上", "en": "Meow: cursor over a cat"},
     "kb_listening": {"zh": "按下按键…", "en": "Press a key…"},
     "kb_reset_one": {"zh": "恢复默认：{name}", "en": "Reset to default: {name}"},
     "kb_reset_all": {"zh": "全部恢复默认", "en": "Reset all"},
@@ -308,6 +314,11 @@ _STR = {
     "settings_rain": {"zh": "下雨", "en": "Rain"},
     "settings_rain_amount": {"zh": "雨量", "en": "Rainfall"},
     "settings_rain_volume": {"zh": "雨声", "en": "Rain sound"},
+    "settings_meow_volume": {"zh": "喵声", "en": "Meows"},
+    "settings_meow_missing": {
+        "zh": "喵声取自 Push to Meow：在 Steam 创意工坊订阅它后重启本程序",
+        "en": "Meow sounds come from Push to Meow: subscribe to it on the Steam Workshop, then restart",
+    },
     "settings_show_hud": {"zh": "显示状态面板", "en": "Show status panel"},
     "settings_interact_section": {"zh": "交互", "en": "Interaction"},
     "settings_perf_section": {"zh": "性能", "en": "Performance"},
@@ -501,18 +512,18 @@ _STR = {
     "btn_open_settings": {"zh": "打开设置", "en": "Open settings"},
     "already_running": {"zh": "蛞蝓猫桌宠已在运行", "en": "Slugcat Pet is already running"},
     "tray_settings": {"zh": "设置", "en": "Settings"},
-    "tray_hud": {"zh": "显示/隐藏状态面板 (Ctrl+Alt+H)", "en": "Show/Hide status panel (Ctrl+Alt+H)"},
+    "tray_hud": {"zh": "显示/隐藏状态面板 ({combo})", "en": "Show/Hide status panel ({combo})"},
     "tray_quit": {"zh": "退出程序", "en": "Quit program"},
-    "tray_freeze": {"zh": "定格 (Ctrl+Alt+P)", "en": "Freeze (Ctrl+Alt+P)"},
-    "tray_frozen_tip": {"zh": "已定格 · Ctrl+Alt+P 解除", "en": "Frozen · Ctrl+Alt+P to resume"},
+    "tray_freeze": {"zh": "定格 ({combo})", "en": "Freeze ({combo})"},
+    "tray_frozen_tip": {"zh": "已定格 · {combo} 解除", "en": "Frozen · {combo} to resume"},
     "freeze_tip": {
-        "zh": "已定格。Ctrl+Alt+→ 前进一帧，再按 Ctrl+Alt+P 解除。",
-        "en": "Frozen. Ctrl+Alt+→ steps one frame; press Ctrl+Alt+P again to resume.",
+        "zh": "已定格。{step} 前进一帧，再按 {combo} 解除。",
+        "en": "Frozen. {step} steps one frame; press {combo} again to resume.",
     },
-    "tray_abort": {"zh": "中止光标劫持 (Ctrl+Alt+Q)", "en": "Abort cursor hijack (Ctrl+Alt+Q)"},
+    "tray_abort": {"zh": "中止光标劫持 ({combo})", "en": "Abort cursor hijack ({combo})"},
     "tray_started": {
-        "zh": "已启动。Ctrl+Alt+P 定格画面；被超度的光标按 Ctrl+Alt+Q 解除；Ctrl+Alt+X 退出程序。",
-        "en": "Launched. Ctrl+Alt+P freezes the scene; Ctrl+Alt+Q releases a salvaged cursor; Ctrl+Alt+X quits the program.",
+        "zh": "已启动。{freeze} 定格画面；被超度的光标按 {abort} 解除；{quit} 退出程序。键位可在设置里改。",
+        "en": "Launched. {freeze} freezes the scene; {abort} releases a salvaged cursor; {quit} quits the program. Keys can be changed in Settings.",
     },
     "btn_rain_cycle": {"zh": "雨循环", "en": "Rain cycle"},
     "settings_show_dial": {"zh": "显示雨循环表盘", "en": "Show rain cycle dial"},
@@ -567,7 +578,37 @@ _STR = {
         "zh": "未能自动定位 Rain World 安装。\n请点下方按钮，手动选择你的 RainWorld 文件夹。",
         "en": "Could not automatically locate the Rain World installation.\nPlease click the button below to manually select your RainWorld folder.",
     },
+    # 蜥蜴桌宠
+    "lz_app_title": {"zh": "蜥蜴桌宠", "en": "Lizard Pet"},
+    "lz_already_running": {"zh": "蜥蜴桌宠已在运行", "en": "Lizard Pet is already running"},
+    "lz_tray_started": {
+        "zh": "蜥蜴桌宠已启动。点托盘图标显示 / 隐藏侧边栏，右键菜单可退出。",
+        "en": "Lizard Pet is running. Click the tray icon to show / hide the sidebar; right-click for the menu.",
+    },
+    "lz_tray_sidebar": {"zh": "显示 / 隐藏侧边栏", "en": "Show / hide sidebar"},
+    "lz_tray_clear": {"zh": "清空场上物品", "en": "Clear all items"},
+    "lz_tray_sound": {"zh": "声音", "en": "Sound"},
+    "lz_tray_autostart": {"zh": "开机自动启动", "en": "Launch at startup"},
+    "tip_lizard_green": {"zh": "放绿蜥蜴", "en": "Place green lizard"},
+    "tip_lizard_pink": {"zh": "放粉蜥蜴", "en": "Place pink lizard"},
+    "tip_lizard_cyan": {"zh": "放青蜥蜴", "en": "Place cyan lizard"},
+    "tip_lizard_blue": {"zh": "放蓝蜥蜴", "en": "Place blue lizard"},
+    "tip_lizard_white": {"zh": "放白蜥蜴", "en": "Place white lizard"},
+    "tip_lizard_red": {"zh": "放红蜥蜴", "en": "Place red lizard"},
+    "toast_max_lizard_green": {"zh": "场上最多 {n} 只蜥蜴", "en": "At most {n} lizards on the field"},
+    "toast_max_lizard_pink": {"zh": "场上最多 {n} 只蜥蜴", "en": "At most {n} lizards on the field"},
+    "toast_max_lizard_cyan": {"zh": "场上最多 {n} 只蜥蜴", "en": "At most {n} lizards on the field"},
+    "toast_max_lizard_blue": {"zh": "场上最多 {n} 只蜥蜴", "en": "At most {n} lizards on the field"},
+    "toast_max_lizard_white": {"zh": "场上最多 {n} 只蜥蜴", "en": "At most {n} lizards on the field"},
+    "toast_max_lizard_red": {"zh": "场上最多 {n} 只蜥蜴", "en": "At most {n} lizards on the field"},
 }
+
+_ALIAS: dict[str, str] = {}
+
+
+def alias(key: str, to: str) -> None:
+    """让 t(key) 取 to 的文案；别的 app 用它换掉标题等共用串。"""
+    _ALIAS[key] = to
 
 
 def lang_name(code: str) -> str:
@@ -575,7 +616,7 @@ def lang_name(code: str) -> str:
 
 
 def t(key: str, **kw) -> str:
-    e = _STR.get(key)
+    e = _STR.get(_ALIAS.get(key, key))
     if e is None:
         return key
     s = e.get(LANG) or e.get("zh") or key

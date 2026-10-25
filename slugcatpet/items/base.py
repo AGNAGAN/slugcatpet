@@ -44,7 +44,9 @@ class ItemKind:
     key = ""
     store = ""
     single = False
+    apps = ("slugcat",)  # 出现在哪些 app（见 items/__init__.py）
     placeable = True  # 侧边栏有放置按钮
+    placeable_apps = None  # 只在这些 app 里可放置；None 为 apps 全部
     cap = 12  # 上限；None 不限
     affords = frozenset()
     seed_key = None
@@ -64,6 +66,9 @@ class ItemKind:
     dissolve_ticks = 40  # 消解（淡出）用的帧数
     blueprint = False  # 归布局蓝图管
     secondary = False  # 右键点中会调 on_secondary
+
+    def is_placeable(self, app: str) -> bool:
+        return self.placeable and (self.placeable_apps is None or app in self.placeable_apps)
 
     def dump(self, obj):
         """存档用的字典（坐标为当时的逻辑坐标）；None 不存。"""

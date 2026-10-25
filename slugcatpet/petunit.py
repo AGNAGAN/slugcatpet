@@ -64,6 +64,7 @@ class PetUnit:
         self._kill_dismiss_silent = False  # 静默关闭，不扣好感
         self.controlled = False
         self.grasp_ctrl = None  # 操控态的手部输入，进入操控时新建
+        self.meow_fx = None  # 喵的抬头、眨眼、甩尾，见 meow/
         self.behavior = None
         self._build(init_state, spawn_x)
         self._attach_behavior()
@@ -339,6 +340,8 @@ class PetUnit:
             self.behavior.update(cursor)
         elif w.follow_cursor:
             g.look_at = cursor
+        if self.meow_fx is not None and not self.meow_fx.tick(self):
+            self.meow_fx = None
 
         b.suspended = False  # 舌头能力会按吊挂状态改写
         for ab in self.abilities.values():

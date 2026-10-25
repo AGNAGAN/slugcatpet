@@ -42,6 +42,8 @@ class ScriptRenderTests(unittest.TestCase):
     def test_runtime_and_persistent_scripts_have_distinct_ids(self):
         self.assertEqual(kwin_install.PLUGIN_ID, kwin_bridge.PERSISTENT_PLUGIN_NAME)
         self.assertNotEqual(kwin_bridge.PLUGIN_NAME, kwin_bridge.PERSISTENT_PLUGIN_NAME)
+        self.assertNotEqual(kwin_bridge.HOTKEY_PLUGIN_NAME, kwin_bridge.PLUGIN_NAME)
+        self.assertNotEqual(kwin_bridge.HOTKEY_PLUGIN_NAME, kwin_bridge.PERSISTENT_PLUGIN_NAME)
 
     def test_placeholders_are_replaced(self):
         backend = SimpleNamespace(
@@ -63,6 +65,26 @@ class ScriptRenderTests(unittest.TestCase):
         self.assertIn("var OVERLAY_H = 932;", text)
         self.assertIn('var SERVICE = "org.slugcatpet.Bridge";', text)
         self.assertIn("function applyCapture(w)", text)
+        self.assertIn("var HOTKEYS = [];", text)
+
+    def test_hotkey_script_is_rendered_separately(self):
+        backend = SimpleNamespace(
+            _hotkey_specs=[
+                {
+                    "id": 3,
+                    "action": "slugcatpet_1234abcd_3",
+                    "text": "SlugcatPet: HUD (Ctrl+Alt+J)",
+                    "key": "Ctrl+Alt+J",
+                    "code": 201326666,
+                }
+            ]
+        )
+        text = WaylandKWinBackend._render_hotkey_script(backend)
+        for token in ("@HOTKEYS_JSON@", "@DBUS_SERVICE@", "@DBUS_PATH@", "@DBUS_INTERFACE@"):
+            self.assertNotIn(token, text)
+        self.assertIn('"action": "slugcatpet_1234abcd_3"', text)
+        self.assertIn("registerShortcut", text)
+        self.assertIn('var SERVICE = "org.slugcatpet.Bridge";', text)
 
 
 class CursorTests(unittest.TestCase):

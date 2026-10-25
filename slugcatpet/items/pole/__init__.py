@@ -47,6 +47,7 @@ def _rod(p, ax, ay, bx, by, color=POLE_COLOR):
 class PoleKind(ItemKind):
     store = "poles"
     seed_key = "pole"
+    apps = ("slugcat", "lizard")
     cap = 6
     affords = frozenset({CLIMBABLE})
     layer = "mid"

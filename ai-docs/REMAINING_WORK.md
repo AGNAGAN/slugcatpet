@@ -1,9 +1,9 @@
 # 原生 Wayland 迁移剩余工作
 
-- 日期：2026-10-22
+- 日期：2026-10-25
 - 依据：`PHASE0_RESULTS.md`、`PHASE1_RESULTS.md`、`PHASE2_RESULTS.md`、`PHASE3_RESULTS.md`、`PHASE4_RESULTS.md`、`PHASE5_CURSOR_WRITE.md`、`PHASE5_PACKAGING.md` 与当前代码审计
 - 用途：记录 Phase 0–4 之后仍未完成的工作，作为 Phase 5 及后续功能的执行清单
-- 结论：**Phase 0–4 已完成；Phase 5 的 Wayland/KWin 光标写入、焦点保持、左/右键解除、多输出逃逸、Linux 打包、KWin 脚本持久安装/启用、desktop/图标、Linux CI 和 README 已完成。后续新增的 Rain World 配乐选择性导入已实现并通过逻辑/提取测试。剩余最终验收（真实猫行为、Rain World 全屏、注销登录）和 Windows 完整行为回归。**
+- 结论：**Phase 0–4 已完成；Phase 5 的 Wayland/KWin 光标写入、焦点保持、左/右键解除、多输出逃逸、Linux 打包、KWin 脚本持久安装/启用、desktop/图标、Linux CI 和 README 已完成。Rain World 配乐选择性导入、上游 v1.3.1–v1.3.3 合并、Lizard Pet 和自定义全局热键已实现。剩余最终验收（Lizard Pet 视觉/首次启动、注销登录、真实猫行为、Rain World 全屏、配乐导入 UI）和 Windows 完整行为回归。**
 
 ---
 
@@ -17,7 +17,7 @@
 | Phase 3 | 已完成 | 全屏、窗口快照、热键、冲突提示、设置页状态与重载；持久安装/启用在 Phase 5 完成 |
 | Phase 4 | 已完成 | XDG 自启、输出选择、光标只读/写入能力、托盘锚点、transient 设置/音乐窗；desktop/图标在 Phase 5 完成 |
 | Phase 5 | 接近完成 | 光标写入、焦点/点击、多输出逃逸、Linux 打包、KWin 持久安装、desktop/图标、CI、README 已完成；最终人工验收和 Windows 行为回归待做 |
-| 后续功能 | 已完成 | Rain World 配乐选择性导入；人工验收待做 |
+| 后续功能 | 已完成 | Rain World 配乐选择性导入、自然排序、v1.3.1–v1.3.3、Lizard Pet、自定义全局热键；人工验收待做 |
 
 ---
 
@@ -165,7 +165,7 @@
 - [x] overlay 布局测试：geometry、持久化迁移、clamp。
 - [x] KWin 持久安装测试：kwinrc 文本、安装/卸载、metadata（`test_kwin_install.py`）。
 - [x] KWin 集成本机脚本：`tools/kwin_integration_check.py`（临时安装/启用、`isScriptLoaded`、恢复配置）。
-- [x] 现有 offscreen 单元回归保持通过（当前全量 58 个测试）。
+- [x] 现有 offscreen 单元回归保持通过（当前全量 61 个测试）。
 - [x] 输出切换回归：HDMI 1.5 → eDP 2.0 → HDMI 1.5，overlay/KWin origin/输入区域一致；持久插件启用时同样通过。
 - [x] 物品输入区域回归：自由长矛不再因 `ax` property 触发输入区域异常（`test_wayland_regions.py`）。
 - [x] 手动验收（用户已确认）：设置、音乐、音频、托盘、雨循环卡片、拖猫、右键菜单、溪流猫抢夺光标/点击解除、overlay 收起/恢复。
@@ -196,7 +196,7 @@
   - 光标不更新
   - 输入区域异常
   - 全屏检测失效
-- [x] Linux CI：ruff、格式、单元测试、`params_doc --check`、导入冒烟、KWin 脚本 `node --check`。
+- [x] Linux CI：ruff、格式、单元测试、`params_doc --check`、导入冒烟、几何/快捷键两个 KWin 脚本 `node --check`。
 - [x] Windows CI：ruff、格式、单元测试、`params_doc --check`、导入冒烟。
 - [ ] Windows 完整行为回归（需要本机素材，保持手动）。
 - [x] KWin 集成测试提供本地脚本 `tools/kwin_integration_check.py`，不要求 GitHub 托管 runner 有 Plasma 会话。
@@ -235,7 +235,7 @@
 - [x] 二级窗口搜索、勾选、全选/全不选/只选未导入
 - [x] 从散文件或 `music_songs` 资源包提取；未知 Vorbis setup 解码为 wav
 - [x] 导入到 `~/.slugcatpet/music/Rain World`，不修改游戏文件
-- [x] 8 个配乐导入单元测试、全量 58 个测试、本机 266 首扫描与 3 首实际提取通过
+- [x] 8 个配乐导入单元测试、全量 61 个测试、本机 266 首扫描与 3 首实际提取通过
 - [ ] 人工验收：真实游戏目录选择、全选/部分导入、重启后列表保留、播放导入的 wav/ogg 曲目
 
 详细记录见 `ai-docs/PHASE6_GAME_MUSIC_IMPORT.md`。
@@ -250,8 +250,9 @@
 - 最近一次自动检查结果：
   - `uv run ruff check .`：通过
   - `uv run ruff format --check .`：通过
-  - `uv run python -m unittest discover -s tests`：58 个测试通过
+  - `uv run python -m unittest discover -s tests`：61 个测试通过
   - `uv run python tools/params_doc.py --check`：通过
+  - `node --check`：几何脚本和快捷键脚本均通过
   - `uv run python tools/kwin_integration_check.py`：PASS
   - GitHub Actions Linux/Windows：`511fdc7`、`4ce782f`、`912a0aa` 以及此前 `10428d3`、`a640bb6`、`b7b8ef6`、`a59b47d` 全部 success
 - 本机 KWin 验收：临时捕获面 + `QCursor.setPos()` 已能把光标从 `(700,1500)` 移到 `(569,1256)`；忙碌样式状态为 true，释放后恢复。uinput 持续移动到 eDP-1 时捕获面 `leaveEvent` 结束劫持，光标停在 `(569,354)`。
@@ -259,4 +260,6 @@
 - 持久 KWin 脚本：`metadata.json` 的 `KPackageStructure: KWin/Script` 修复后，`reconfigure` 能在 Plasma 6.8 中加载 `slugcatpet`；运行时脚本使用 `slugcatpet-runtime`，停用持久插件不会卸载当前会话。
 - 2026-10-21 已合并上游 v1.3.1（`bd17e9f`，合并提交 `6055565`）：引入交通策略重构、携带/空间系统、果实再生、物品持久化、雨循环表盘提示与 `Ctrl+Alt+R` 快捷键。合并后 56 个单元测试、Ruff、格式检查和参数文档检查均通过；本机 `cursor_play` 的物理状态逐 tick 与上游基线一致，渲染帧哈希仍受平台差异影响。
 - 2026-10-22 已合并上游 v1.3.2（`d48f882`，合并提交 `10fc9d8`）：音效资源包读取缓存与内存回收、挡雨窗口判定、室内淡雨、猫携带逻辑修正。合并后 56 个单元测试、Ruff、格式检查和参数文档检查均通过；`items`、`env`、`cursor_play` 的物理状态逐 tick 与基线一致，渲染帧哈希仍受平台差异影响。
-- 2026-10-22 音乐列表改为按目录和文件名自然排序（`1, 2, …, 10, 11, …, 100`），新增 2 个回归测试，全量 58 个测试通过。
+- 2026-10-25 合并上游 v1.3.3（`e21099d`）：引入自定义全局热键、喵叫、catless 模式和 Lizard Pet；保留本分支的 native Wayland/KWin 适配、Rain World 配乐导入与自然排序。全量 61 个测试、Ruff、格式、参数文档和两份 KWin 脚本 `node --check` 通过。
+- 2026-10-25 真机 KWin 验证：把几何/光标脚本和快捷键脚本拆成 `slugcatpet-runtime` 与 `slugcatpet-hotkeys`；动作名按键位哈希。实测 meow、HUD、freeze、quit 按下/松开；把 freeze 改到 `Ctrl+Alt+0` 后旧 `Ctrl+Alt+2` 绑定被清除，重启应用后同一组键仍能触发。Lizard Pet 在本机 Wayland 会话启动，KWin 脚本加载成功且无报错。
+- 2026-10-22 音乐列表改为按目录和文件名自然排序（`1, 2, …, 10, 11, …, 100`），新增 2 个回归测试，全量 61 个测试通过。

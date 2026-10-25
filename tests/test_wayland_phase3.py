@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import json
 import unittest
+from unittest.mock import patch
 
-from PySide6.QtCore import QCoreApplication, QRect
+from PySide6.QtCore import QCoreApplication, QObject, QRect, Signal
 
+from slugcatpet.control.hotkey import DEFAULT_HOTKEYS, HK_MEOW, MOD_ALT, HotkeyFilter
 from slugcatpet.platform.envwatch import EnvironmentWatcher
 from slugcatpet.platform.wayland.kwin_bridge import WaylandKWinBackend, _shortcut_specs
 
@@ -144,16 +146,94 @@ class EnvwatchProviderTests(unittest.TestCase):
 
 class ShortcutSpecTests(unittest.TestCase):
     def test_specs_cover_global_and_frozen_keys(self):
-        specs = _shortcut_specs()
+        with patch(
+            "slugcatpet.platform.wayland.kwin_bridge.load_hotkeys", return_value=dict(DEFAULT_HOTKEYS)
+        ):
+            specs = _shortcut_specs()
         ids = {spec["id"] for spec in specs}
-        self.assertEqual(ids, {1, 2, 3, 5, 6, 7, 8})
+        self.assertEqual(ids, {1, 2, 3, 5, 6, 7, 8, 9})
         keys = {spec["id"]: spec["key"] for spec in specs}
         self.assertEqual(keys[5], "Ctrl+Alt+P")
         self.assertEqual(keys[7], "Ctrl+Alt+Shift+Right")
         self.assertEqual(keys[8], "Ctrl+Alt+R")
+        self.assertEqual(keys[9], "Alt+M")
         codes = {spec["id"]: spec["code"] for spec in specs}
         self.assertEqual(codes[5], 201326672)
         self.assertEqual(codes[7], 251658260)
+        self.assertEqual(codes[9], 134217805)
+        actions = {spec["id"]: spec["action"] for spec in specs}
+        self.assertEqual(len(set(actions.values())), len(actions))
+        for hotkey_id, action in actions.items():
+            self.assertTrue(action.startswith("slugcatpet_"))
+            self.assertTrue(action.endswith(f"_{hotkey_id}"))
+
+    def test_specs_follow_custom_hotkeys(self):
+        keys = dict(DEFAULT_HOTKEYS)
+        keys["freeze"] = (MOD_ALT, 0x4B)  # Alt+K
+        with patch("slugcatpet.platform.wayland.kwin_bridge.load_hotkeys", return_value=keys):
+            specs = _shortcut_specs()
+        by_id = {spec["id"]: spec for spec in specs}
+        self.assertEqual(by_id[5]["key"], "Alt+K")
+        with patch(
+            "slugcatpet.platform.wayland.kwin_bridge.load_hotkeys", return_value=dict(DEFAULT_HOTKEYS)
+        ):
+            defaults = _shortcut_specs()
+        self.assertNotEqual(by_id[5]["action"], {s["id"]: s for s in defaults}[5]["action"])
+
+
+class _FakeHotkeyBackend(QObject):
+    hotkey_pressed = Signal(int)
+    hotkey_released = Signal(int)
+
+    def __init__(self):
+        super().__init__()
+        self.suspended = False
+        self.refreshed = 0
+
+    def register_hotkey(self, hotkey_id, mods, vk):
+        return True
+
+    def hotkey_available(self, mods, vk):
+        return True
+
+    def suspend_hotkeys(self):
+        self.suspended = True
+        return True
+
+    def resume_hotkeys(self):
+        self.suspended = False
+        return True
+
+    def refresh_hotkeys(self):
+        self.refreshed += 1
+        return True
+
+
+class HotkeyFilterTests(unittest.TestCase):
+    def test_press_release_suspend_and_apply(self):
+        backend = _FakeHotkeyBackend()
+        hotkeys = HotkeyFilter(backend)
+        seen = []
+        hotkeys.triggered.connect(seen.append)
+        self.assertTrue(hotkeys.register(HK_MEOW, MOD_ALT, 0x4D))
+        backend.hotkey_pressed.emit(HK_MEOW)
+        self.assertEqual(seen, [HK_MEOW])
+        self.assertTrue(hotkeys.is_down(HK_MEOW))
+        backend.hotkey_released.emit(HK_MEOW)
+        self.assertFalse(hotkeys.is_down(HK_MEOW))
+
+        hotkeys.suspend()
+        self.assertTrue(backend.suspended)
+        self.assertTrue(hotkeys.owns(MOD_ALT, 0x4D))
+        backend.hotkey_pressed.emit(HK_MEOW)
+        self.assertEqual(seen, [HK_MEOW])
+
+        hotkeys.resume()
+        self.assertFalse(backend.suspended)
+        backend.hotkey_pressed.emit(HK_MEOW)
+        self.assertEqual(seen, [HK_MEOW, HK_MEOW])
+        self.assertTrue(hotkeys.apply())
+        self.assertEqual(backend.refreshed, 1)
 
 
 if __name__ == "__main__":

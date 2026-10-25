@@ -7,16 +7,23 @@ bus 服务；脚本不可用时应用继续运行，``supports_*`` 会变为 Fal
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QRect, QTimer, Signal, Slot, ClassInfo
+from PySide6.QtCore import SLOT, QObject, QRect, QTimer, Signal, Slot, ClassInfo
 from PySide6.QtDBus import QDBusConnection, QDBusInterface, QDBusMessage
 from PySide6.QtGui import QGuiApplication, QRegion
 
 from ..._paths import user_dir
-from ...control.hotkey import FROZEN_KEYS, GLOBAL_KEYS, qt_key_code, shortcut_sequence
+from ...control.hotkey import (
+    FROZEN_KEYS,
+    GLOBAL_KEYS,
+    load_hotkeys,
+    qt_key_code,
+    shortcut_sequence,
+)
 from ..appid import DESKTOP_FILE_NAME
 from ..backend import CURSOR_CAPTURE_TITLE, DesktopBackend, OVERLAY_TITLE
 
@@ -31,9 +38,13 @@ KWIN_INTERFACE = "org.kde.kwin.Scripting"
 # 运行时脚本用独立名字，避免 KWin 的 reconfigure 按持久插件的启用状态
 # 把它一起卸载；持久插件名仍是 slugcatpet。
 PLUGIN_NAME = "slugcatpet-runtime"
+HOTKEY_PLUGIN_NAME = "slugcatpet-hotkeys"
 PERSISTENT_PLUGIN_NAME = "slugcatpet"
 _MIN_SIDE = 24
 _SCREEN_TOL = 2
+# 改键动作名还需要一个版本盐：旧版本的 KGlobalAccel 配置里可能残留同名动作，
+# 清理后同名动作未必能重新绑定回调。升级这个盐会得到一组全新的动作名。
+_HOTKEY_ACTION_SALT = "v1.3.3"
 
 _HOTKEY_NAMES = {
     1: "abort",
@@ -44,6 +55,7 @@ _HOTKEY_NAMES = {
     6: "step",
     7: "step x10",
     8: "rain timer",
+    9: "meow",
 }
 
 
@@ -58,15 +70,38 @@ def _qt_supports_pointer_warp() -> bool:
     return (major, minor) >= (6, 12)
 
 
-def _shortcut_specs() -> list[dict]:
+def _action_prefix(keys) -> str:
+    """按当前键位生成 KGlobalAccel 动作名前缀。
+
+    KGlobalAccel 会保留已经注册过的动作；只改 registerShortcut 的默认键不会
+    改掉内存里的旧绑定。给每组键位配一个独立动作名，改键后会得到全新的
+    动作和绑定，不再受上一次运行残留的同名动作影响。
+    """
+    material = (
+        _HOTKEY_ACTION_SALT
+        + "|"
+        + "|".join(
+            f"{hotkey_id}:{action}:{keys[action][0]}:{keys[action][1]}"
+            for table in (GLOBAL_KEYS, FROZEN_KEYS)
+            for hotkey_id, action in table.items()
+        )
+    )
+    return "slugcatpet_" + hashlib.sha1(material.encode("utf-8")).hexdigest()[:8]
+
+
+def _shortcut_specs(keys=None) -> list[dict]:
     """生成 KWin 脚本需要的快捷键定义；Windows 的 mods/vk 映射到这里。"""
+    keys = load_hotkeys() if keys is None else keys
+    prefix = _action_prefix(keys)
     specs = []
     for table in (GLOBAL_KEYS, FROZEN_KEYS):
-        for hotkey_id, (mods, vk, _label) in table.items():
+        for hotkey_id, action in table.items():
+            mods, vk = keys[action]
             key = shortcut_sequence(mods, vk)
             specs.append(
                 {
                     "id": int(hotkey_id),
+                    "action": f"{prefix}_{hotkey_id}",
                     "text": f"SlugcatPet: {_HOTKEY_NAMES.get(hotkey_id, hotkey_id)} ({key})",
                     "key": key,
                     "code": qt_key_code(mods, vk),
@@ -123,6 +158,7 @@ class WaylandKWinBackend(QObject, DesktopBackend):
     fullscreen_changed = Signal(bool, int, int, int, int)
     window_list_changed = Signal(str)
     hotkey_pressed = Signal(int)
+    hotkey_released = Signal(int)
     hotkey_status_changed = Signal(str)
 
     def __init__(self):
@@ -143,7 +179,11 @@ class WaylandKWinBackend(QObject, DesktopBackend):
         self._window_rects: list[QRect] = []
         self._hotkey_specs = _shortcut_specs()
         self._hotkey_by_id = {int(spec["id"]): spec for spec in self._hotkey_specs}
+        self._hotkey_actions = {str(spec["action"]): int(spec["id"]) for spec in self._hotkey_specs}
         self._hotkey_status: dict[int, bool] = {}
+        self._hotkey_release_conn = False
+        self._hotkey_script_loaded = False
+        self._hotkey_script_path: Path | None = None
 
         self._service = _BridgeService(self)
         self._service.cursor_moved.connect(self._on_cursor)
@@ -153,6 +193,7 @@ class WaylandKWinBackend(QObject, DesktopBackend):
         self._service.hotkey_pressed.connect(self.hotkey_pressed.emit)
         self._service.hotkey_status_changed.connect(self._on_hotkey_status)
         self._service.log_message.connect(self._on_log)
+        self._connect_hotkey_release()
         self._register_service()
 
     # ---- 能力开关 -----------------------------------------------------
@@ -188,7 +229,12 @@ class WaylandKWinBackend(QObject, DesktopBackend):
 
     @property
     def supports_hotkeys(self) -> bool:
-        return self._service_registered and self._script_loaded and bool(self._hotkey_specs)
+        return (
+            self._service_registered
+            and self._script_loaded
+            and self._hotkey_script_loaded
+            and bool(self._hotkey_specs)
+        )
 
     def hotkey_conflicts(self) -> list[str]:
         """返回未注册成功的组合键文本，供设置页提示。"""
@@ -203,6 +249,73 @@ class WaylandKWinBackend(QObject, DesktopBackend):
 
     def hotkey_registered(self, hotkey_id: int) -> bool | None:
         return self._hotkey_status.get(int(hotkey_id))
+
+    def hotkey_available(self, mods: int, vk: int) -> bool:
+        """KWin 没有提供任意组合键的同步试注册接口；录键时由 KGlobalAccel 暂停。"""
+        return True
+
+    def suspend_hotkeys(self) -> bool:
+        """录键期间暂停 KGlobalAccel，避免自己的快捷键被 KWin 吞掉。"""
+        iface = self._kglobalaccel()
+        if iface is None:
+            return False
+        reply = iface.call("blockGlobalShortcuts", True)
+        return reply.type() != QDBusMessage.MessageType.ErrorMessage
+
+    def resume_hotkeys(self) -> bool:
+        iface = self._kglobalaccel()
+        if iface is None:
+            return False
+        reply = iface.call("blockGlobalShortcuts", False)
+        return reply.type() != QDBusMessage.MessageType.ErrorMessage
+
+    def refresh_hotkeys(self) -> bool:
+        """键位弹窗保存后只重载快捷键脚本，不碰几何/光标脚本。"""
+        self._refresh_hotkey_specs()
+        if self._window is not None and self._service_registered and not self._shutting_down:
+            return self._load_hotkey_script()
+        return True
+
+    def _refresh_hotkey_specs(self) -> None:
+        self._hotkey_specs = _shortcut_specs()
+        self._hotkey_by_id = {int(spec["id"]): spec for spec in self._hotkey_specs}
+        self._hotkey_actions = {str(spec["action"]): int(spec["id"]) for spec in self._hotkey_specs}
+        self._hotkey_status.clear()
+
+    @staticmethod
+    def _kglobalaccel() -> QDBusInterface | None:
+        bus = QDBusConnection.sessionBus()
+        if not bus.isConnected():
+            return None
+        iface = QDBusInterface(
+            "org.kde.kglobalaccel",
+            "/kglobalaccel",
+            "org.kde.KGlobalAccel",
+            bus,
+        )
+        return iface if iface.isValid() else None
+
+    def _connect_hotkey_release(self) -> None:
+        """KGlobalAccel 的松开信号用于按住喵键这类长按动作。"""
+        bus = QDBusConnection.sessionBus()
+        if not bus.isConnected():
+            return
+        self._hotkey_release_conn = bus.connect(
+            "org.kde.kglobalaccel",
+            "/component/kwin",
+            "org.kde.kglobalaccel.Component",
+            "globalShortcutReleased",
+            self,
+            SLOT("_on_global_shortcut_released(QString,QString,qlonglong)"),
+        )
+
+    @Slot(str, str, "qlonglong")
+    def _on_global_shortcut_released(self, component: str, action: str, _timestamp: int) -> None:
+        if component != "kwin":
+            return
+        hotkey_id = self._hotkey_actions.get(str(action))
+        if hotkey_id is not None:
+            self.hotkey_released.emit(hotkey_id)
 
     # ---- 服务注册 -----------------------------------------------------
 
@@ -235,7 +348,10 @@ class WaylandKWinBackend(QObject, DesktopBackend):
         self._read_window_config()
         if not self._service_registered:
             return False
-        return self._load_script()
+        ok = self._load_script()
+        if not self._load_hotkey_script():
+            ok = False
+        return ok
 
     def configure_overlay(self, screen_name: str, rect: QRect) -> None:
         if self._shutting_down or rect is None or rect.isEmpty():
@@ -365,11 +481,42 @@ class WaylandKWinBackend(QObject, DesktopBackend):
     # ---- 热键 ---------------------------------------------------------
 
     def register_hotkey(self, hotkey_id: int, mods: int, vk: int) -> bool:
-        """KWin 脚本在加载时统一注册固定快捷键；这里只报告可用性。"""
-        if not self.supports_hotkeys or int(hotkey_id) not in self._hotkey_by_id:
+        """KWin 脚本在加载时统一注册快捷键；这里只报告这个 id 是否受支持。"""
+        return self.supports_hotkeys and int(hotkey_id) in self._hotkey_by_id
+
+    def _has_stale_hotkeys(self) -> bool:
+        """当前键位是否被另一个 SlugcatPet 动作占着。"""
+        iface = self._kglobalaccel()
+        if iface is None:
             return False
-        status = self._hotkey_status.get(int(hotkey_id))
-        return status is not False
+        wanted = {str(spec["action"]) for spec in self._hotkey_specs}
+        for spec in self._hotkey_specs:
+            reply = iface.call("action", int(spec["code"]))
+            if reply.type() == QDBusMessage.MessageType.ErrorMessage:
+                continue
+            args = reply.arguments()
+            action = args[0] if args and isinstance(args[0], list) else []
+            name = str(action[1]) if len(action) > 1 else ""
+            if name.startswith("slugcatpet_") and name not in wanted:
+                return True
+        return False
+
+    @staticmethod
+    def _cleanup_stale_hotkeys() -> bool:
+        """清理已卸载 KWin 脚本遗留的快捷键动作。"""
+        bus = QDBusConnection.sessionBus()
+        if not bus.isConnected():
+            return False
+        iface = QDBusInterface(
+            "org.kde.kglobalaccel",
+            "/component/kwin",
+            "org.kde.kglobalaccel.Component",
+            bus,
+        )
+        if not iface.isValid():
+            return False
+        reply = iface.call("cleanUp")
+        return reply.type() != QDBusMessage.MessageType.ErrorMessage
 
     # ---- KWin 脚本 ----------------------------------------------------
 
@@ -411,7 +558,6 @@ class WaylandKWinBackend(QObject, DesktopBackend):
         self._call_scripting(iface, "unloadScript", PERSISTENT_PLUGIN_NAME, required=False)
         self._fullscreen = None
         self._fullscreen_rect = QRect()
-        self._hotkey_status.clear()
         reply = self._call_scripting(iface, "loadScript", str(path), PLUGIN_NAME)
         if reply is None:
             self._script_loaded = False
@@ -437,7 +583,10 @@ class WaylandKWinBackend(QObject, DesktopBackend):
     def reload(self) -> bool:
         if self._window is None or not self._service_registered or self._shutting_down:
             return False
-        return self._load_script()
+        ok = self._load_script()
+        if not self._hotkey_script_loaded and not self._load_hotkey_script():
+            ok = False
+        return ok
 
     def render_script(self) -> str:
         """当前输出/几何对应的 KWin 脚本，供持久安装使用。"""
@@ -474,7 +623,6 @@ class WaylandKWinBackend(QObject, DesktopBackend):
         template = Path(__file__).with_name("kwin_script") / "contents" / "code" / "main.js"
         text = template.read_text(encoding="utf-8")
         rect = self._rect
-        specs = getattr(self, "_hotkey_specs", None) or _shortcut_specs()
         values = {
             "@APP_ID@": DESKTOP_FILE_NAME,
             "@OVERLAY_CAPTION@": OVERLAY_TITLE,
@@ -484,7 +632,10 @@ class WaylandKWinBackend(QObject, DesktopBackend):
             "@OVERLAY_Y@": str(rect.y()),
             "@OVERLAY_W@": str(rect.width()),
             "@OVERLAY_H@": str(rect.height()),
-            "@HOTKEYS_JSON@": json.dumps(specs, ensure_ascii=False),
+            # 快捷键单独放在 slugcatpet-hotkeys 脚本里。几何脚本会随输出/
+            # overlay 尺寸反复重载，不能让重载顺手把 KGlobalAccel 动作注册
+            # 第二遍——KWin 对已存在动作不会重新绑定回调。
+            "@HOTKEYS_JSON@": "[]",
             "@DBUS_SERVICE@": DBUS_SERVICE,
             "@DBUS_PATH@": DBUS_PATH,
             "@DBUS_INTERFACE@": DBUS_INTERFACE,
@@ -492,6 +643,54 @@ class WaylandKWinBackend(QObject, DesktopBackend):
         for key, value in values.items():
             text = text.replace(key, value)
         return text
+
+    def _render_hotkey_script(self) -> str:
+        template = Path(__file__).with_name("kwin_script") / "contents" / "code" / "hotkeys.js"
+        text = template.read_text(encoding="utf-8")
+        values = {
+            "@HOTKEYS_JSON@": json.dumps(self._hotkey_specs, ensure_ascii=False),
+            "@DBUS_SERVICE@": DBUS_SERVICE,
+            "@DBUS_PATH@": DBUS_PATH,
+            "@DBUS_INTERFACE@": DBUS_INTERFACE,
+        }
+        for key, value in values.items():
+            text = text.replace(key, value)
+        return text
+
+    def _load_hotkey_script(self) -> bool:
+        if self._shutting_down:
+            return False
+        try:
+            source = self._render_hotkey_script()
+            path = user_dir() / "kwin" / "slugcatpet-hotkeys.js"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(source, encoding="utf-8")
+            self._hotkey_script_path = path
+        except Exception as exc:
+            log.warning("KWin bridge: cannot write hotkey script: %s", exc)
+            self._hotkey_script_loaded = False
+            return False
+
+        bus = QDBusConnection.sessionBus()
+        iface = QDBusInterface(KWIN_SERVICE, KWIN_PATH, KWIN_INTERFACE, bus)
+        if not iface.isValid():
+            log.warning("KWin bridge: %s%s is unavailable", KWIN_SERVICE, KWIN_PATH)
+            self._hotkey_script_loaded = False
+            return False
+        self._call_scripting(iface, "unloadScript", HOTKEY_PLUGIN_NAME, required=False)
+        self._hotkey_status.clear()
+        # 旧版本/旧键位有可能在 KGlobalAccel 留下同名或同键动作；清理后再
+        # 注册，避免 registerShortcut 拿到没有回调的旧动作。
+        if self._has_stale_hotkeys():
+            self._cleanup_stale_hotkeys()
+        reply = self._call_scripting(iface, "loadScript", str(path), HOTKEY_PLUGIN_NAME)
+        if reply is None:
+            self._hotkey_script_loaded = False
+            return False
+        self._call_scripting(iface, "start", required=False)
+        self._hotkey_script_loaded = True
+        log.info("KWin bridge: hotkey script loaded (%d shortcuts)", len(self._hotkey_specs))
+        return True
 
     def _call_scripting(self, iface: QDBusInterface, method: str, *args, required=True):
         try:
@@ -507,13 +706,15 @@ class WaylandKWinBackend(QObject, DesktopBackend):
         return reply
 
     def _unload_script(self) -> None:
-        if not self._script_loaded:
-            return
         bus = QDBusConnection.sessionBus()
         iface = QDBusInterface(KWIN_SERVICE, KWIN_PATH, KWIN_INTERFACE, bus)
         if iface.isValid():
-            self._call_scripting(iface, "unloadScript", PLUGIN_NAME, required=False)
+            if self._script_loaded:
+                self._call_scripting(iface, "unloadScript", PLUGIN_NAME, required=False)
+            if self._hotkey_script_loaded:
+                self._call_scripting(iface, "unloadScript", HOTKEY_PLUGIN_NAME, required=False)
         self._script_loaded = False
+        self._hotkey_script_loaded = False
 
     # ---- 回调 ---------------------------------------------------------
 
@@ -586,7 +787,7 @@ class WaylandKWinBackend(QObject, DesktopBackend):
             args = reply.arguments()
             action = args[0] if args and isinstance(args[0], list) else []
             owner = action[1] if len(action) > 1 else ""
-            status[int(spec["id"])] = owner == f"slugcatpet_{spec['id']}"
+            status[int(spec["id"])] = owner == spec["action"]
         if not status:
             return
         self._hotkey_status.update(status)
